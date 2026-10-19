@@ -27,13 +27,14 @@ export function assignRole(state: WorkflowState, item: WorkItem): Role {
   }
   if (item.status === "review") {
     const author = authorOf(state, item);
-    const reviewers = rolesWith(state, "review").filter((r) => r.id !== author);
-    const r = reviewers[0];
+    const reviewers = rolesWith(state, "review");
+    const other = reviewers.find((r) => r.id !== author);
+    const r = other ?? (reviewers.length === 1 ? reviewers[0] : undefined);
     if (!r)
       fail(
         "missing-capability",
-        `no role other than "${author ?? "?"}" has capability "review" for item "${item.id}"`,
-        "register a second role with capability review",
+        `no role has capability "review" for item "${item.id}"`,
+        "register a role with capability review",
         { items: [item.id] },
       );
     return r;

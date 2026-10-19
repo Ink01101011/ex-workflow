@@ -89,6 +89,9 @@ test("assignRole prefers the item's role, else deliver/review by status, never t
     () => assignRole(noReviewer, getItem(noReviewer, "A")),
     (e: unknown) => e instanceof WorkflowError && e.code === "missing-capability",
   );
+  const devrev = r("devrev", ["deliver", "review"]);
+  const lone = { ...s, roles: { devrev } };
+  assert.equal(assignRole(lone, getItem(lone, "A")).id, "devrev");
 });
 
 test("plan never dispatches an item whose dependency is not done", () => {

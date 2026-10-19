@@ -3,12 +3,15 @@ import { moveItem } from "../items.ts";
 import { openIteration } from "../planner.ts";
 import { appendEvent } from "../state.ts";
 import type { CoreTerm, Methodology, PlannerOptions, WorkItem, WorkflowState } from "../types.ts";
+import { scrumCeremonies } from "./ceremonies.ts";
 import { validateScrumConfig, type ScrumConfig } from "./config.ts";
 import { scrumRoles } from "./roles.ts";
 import { scrumStages } from "./stages.ts";
 
 export { validateScrumConfig, scrumRoles, scrumStages };
 export type { ScrumConfig };
+export { scrumCeremonies, dailyReport, canDo } from "./ceremonies.ts";
+export type { DailyReport } from "./ceremonies.ts";
 
 export const SCRUM_VOCABULARY: Record<CoreTerm, string> = {
   backlog: "Product Backlog",
@@ -42,7 +45,7 @@ export function closeSprint(
     const item = s.items[id]!;
     if (item.stage !== "backlog" || item.status !== "todo")
       s = moveItem(s, id, { stage: "backlog", status: "todo" }, "system", now);
-    const { iteration: _i, ...rest } = s.items[id]!;
+    const { iteration: _i, role: _r, ...rest } = s.items[id]!;
     s = { ...s, items: { ...s.items, [id]: rest as WorkItem } };
   }
   const weightOf = (ids: string[]) =>
@@ -115,7 +118,7 @@ export function scrum(): Methodology<ScrumConfig> {
         `Do not change the scope of "${item.id}" or its acceptance criteria; raise open_questions instead`,
       ];
     },
-    ceremonies: {},
+    ceremonies: scrumCeremonies(scrum),
     rules: [],
     metrics: () => ({}),
     humanDefaults: { gates: ["sprint-review"] },
