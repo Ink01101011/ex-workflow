@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../methodology.ts";
 import { addItem, getItem } from "../items.ts";
+import { raisePending } from "../gates.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
 import { WorkflowError } from "../errors.ts";
@@ -83,7 +84,7 @@ test("afterComplete closes the sprint when the budget is exhausted and carries u
     config: { ...config, sprintBudget: { tokens: 100 } },
     now: T0,
   });
-  state = addItem(state, { id: "A", title: "a", weight: 1 }, "product-owner", T0);
+  state = addItem(state, { id: "A", title: "a", weight: 1, priority: 2 }, "product-owner", T0);
   state = addItem(state, { id: "B", title: "b", weight: 1 }, "product-owner", T0);
   state = {
     ...state,
@@ -104,8 +105,9 @@ test("afterComplete closes the sprint when the budget is exhausted and carries u
       B: { ...state.items["B"]!, stage: "sprint", iteration: "S1" },
     },
   };
-  state = next(state, scrum(), { now: T0, fallbackTokensPerWeight: 10 }).state;
+  state = next(state, scrum(), { now: T0, fallbackTokensPerWeight: 10, max: 1 }).state;
   assert.equal(getItem(state, "A").stage, "in_progress");
+  assert.equal(getItem(state, "B").stage, "sprint"); // only A is in flight
   const h: Handoff = {
     item: "A",
     role: "developer",
@@ -185,4 +187,132 @@ test("closeSprint never moves dropped items and reports them separately", () => 
   const ev = s.events.at(-1)!;
   assert.equal(ev.type, "sprint.closed");
   assert.deepEqual((ev.payload as { dropped: string[] }).dropped, ["B"]);
+});
+
+const acct = (item: string, tokens: number, role = "developer"): Accounting => ({
+  item,
+  role,
+  model: "haiku",
+  tokensIn: tokens / 2,
+  tokensOut: tokens / 2,
+  durationMs: 1,
+  startedAt: T0,
+  endedAt: T0,
+});
+const hand = (item: string, over: Partial<Handoff> = {}): Handoff => ({
+  item,
+  role: "developer",
+  produced: [{ kind: "code", ref: "x.ts" }],
+  notes: "",
+  do_not: [],
+  open_questions: [],
+  ...over,
+});
+function twoItemSprint(budget = 1000) {
+  const m = scrum();
+  let { state } = init({
+    methodology: m,
+    config: { ...config, sprintBudget: { tokens: budget } },
+    now: T0,
+  });
+  state = addItem(
+    state,
+    { id: "A", title: "a", weight: 1, priority: 2, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = addItem(
+    state,
+    { id: "B", title: "b", weight: 1, priority: 1, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = m.ceremonies["plan"]!(state, {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A", "B"],
+  }).state;
+  state = next(state, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  return { m, state };
+}
+
+test("closeSprint releases blocked and awaiting_human items so they can be dispatched again", () => {
+  const { m, state: dispatched } = twoItemSprint();
+  assert.equal(getItem(dispatched, "A").status, "in_progress");
+  assert.equal(getItem(dispatched, "B").status, "in_progress");
+  let s = complete(
+    dispatched,
+    m,
+    hand("A", { verdict: "blocked", notes: "waiting" }),
+    acct("A", 10),
+    T0,
+  ).state;
+  s = raisePending(s, { kind: "gate", item: "B", gate: "sprint-review", question: "ok?" }, T0);
+  assert.equal(getItem(s, "B").status, "awaiting_human");
+  s = m.ceremonies["cancel"]!(s, { by: "product-owner", now: T0, reason: "x" }).state;
+  for (const id of ["A", "B"]) {
+    const it = getItem(s, id);
+    assert.equal(it.stage, "backlog");
+    assert.equal(it.status, "todo");
+    assert.equal(it.iteration, undefined);
+    assert.equal(it.role, undefined);
+    assert.equal(it.blockers.filter((b) => !b.clearedAt).length, 0);
+  }
+  assert.deepEqual(s.pending, []);
+  const cleared = s.events.filter((e) => e.type === "blocker.cleared");
+  assert.deepEqual(
+    cleared.map((e) => e.payload),
+    [{ id: "A", blocker: "A-b1", reason: "sprint closed" }],
+  );
+  assert.deepEqual(
+    s.events.filter((e) => e.type === "pending.dropped").map((e) => e.payload),
+    [{ id: "p1", item: "B", reason: "sprint closed" }],
+  );
+  s = m.ceremonies["retro"]!(s, { by: "scrum-master", now: T0, lessons: [] }).state;
+  s = m.ceremonies["refine"]!(s, {
+    by: "developer",
+    now: T0,
+    items: [
+      { id: "A", patch: { weight: 2 } },
+      { id: "B", patch: { weight: 2 } },
+    ],
+  }).state;
+  s = m.ceremonies["plan"]!(s, {
+    by: "scrum-master",
+    now: T0,
+    goal: "g2",
+    items: ["A", "B"],
+  }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  assert.equal(getItem(s, "A").status, "in_progress");
+  assert.equal(getItem(s, "B").status, "in_progress");
+});
+
+test("closeSprint reports an unknown committed id as unknown-item", () => {
+  const { state } = twoItemSprint();
+  const broken = { ...state, items: { ...state.items } };
+  delete (broken.items as Record<string, unknown>)["A"];
+  assert.throws(
+    () => closeSprint(broken, "review", T0),
+    (e: unknown) => e instanceof WorkflowError && e.code === "unknown-item",
+  );
+});
+
+test("budget exhaustion with work in flight marks the sprint closing and lets the rest finish", () => {
+  const { m, state } = twoItemSprint(100);
+  let s = complete(state, m, hand("A"), acct("A", 120), T0).state;
+  const it = s.iterations[0]!;
+  assert.equal(it.endedAt, undefined);
+  assert.equal(it.closing, true);
+  assert.ok(s.events.some((e) => e.type === "sprint.closing"));
+  assert.deepEqual(m.candidates(s), []);
+  assert.equal(getItem(s, "B").status, "in_progress");
+  s = complete(s, m, hand("B"), acct("B", 30), T0).state;
+  const closed = s.iterations[0]!;
+  assert.equal(closed.outcome, "completed");
+  assert.equal(closed.closing, undefined);
+  assert.equal(closed.spent.tokens, 150);
+  assert.equal(s.events.at(-1)!.type, "sprint.closed");
+  assert.equal(s.accounting.length, 2);
 });

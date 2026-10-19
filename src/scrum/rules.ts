@@ -1,7 +1,7 @@
 import { openIteration } from "../planner.ts";
 import type { Budget, Iteration, Rule, Violation, WorkflowState } from "../types.ts";
 import type { ItemPatch } from "../items.ts";
-import { canDo } from "./ceremonies.ts";
+import { canDo, closedSeq } from "./ceremonies.ts";
 import { configOf } from "./index.ts";
 
 const v = (
@@ -19,13 +19,6 @@ function lastClosed(state: WorkflowState): Iteration | undefined {
   }
   return undefined;
 }
-function closedSeq(state: WorkflowState, id: string): number {
-  return (
-    state.events.find((e) => e.type === "sprint.closed" && (e.payload as { id: string }).id === id)
-      ?.seq ?? 0
-  );
-}
-
 export function scrumRules(): Rule[] {
   const oneOpen: Rule = {
     id: "one-open-sprint",

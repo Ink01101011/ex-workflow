@@ -332,3 +332,65 @@ test("commit rejects items already in the sprint or not in the backlog; uncommit
     (e) => code(e) === "invalid-input",
   );
 });
+
+test("an escalation across a sprint boundary does not deadlock the parent", () => {
+  const opts = { now: T0, fallbackTokensPerWeight: 10 };
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, opts).state;
+  s = complete(
+    s,
+    m,
+    h("A", "developer", { verdict: "escalate", open_questions: ["which DB?"] }),
+    a("A", 20),
+    T0,
+  ).state;
+  assert.equal(getItem(s, "A-q1").iteration, "S1");
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  const closed = s.events.at(-1)!.payload as { carryover: string[]; carriedQuestions: string[] };
+  assert.deepEqual(closed.carryover, ["A"]);
+  assert.deepEqual(closed.carriedQuestions, ["A-q1"]);
+  assert.equal(getItem(s, "A-q1").stage, "backlog");
+  assert.equal(getItem(s, "A-q1").iteration, undefined);
+  s = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+  s = c["refine"]!(s, {
+    by: "developer",
+    now: T1,
+    items: [{ id: "A", patch: { weight: 2 } }],
+  }).state;
+  s = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] }).state;
+  assert.equal(getItem(s, "A-q1").stage, "sprint");
+  assert.equal(getItem(s, "A-q1").iteration, "S2");
+  assert.deepEqual(s.iterations[1]!.committed, ["A"]);
+  s = next(s, m, opts).state;
+  assert.equal(getItem(s, "A-q1").status, "in_progress");
+  assert.equal(getItem(s, "A").status, "todo");
+  s = complete(
+    s,
+    m,
+    h("A-q1", "product-owner", { produced: [], notes: "use sqlite" }),
+    a("A-q1", 10, "product-owner"),
+    T1,
+  ).state;
+  s = next(s, m, opts).state;
+  assert.equal(getItem(s, "A").status, "in_progress");
+});
+
+test("commit brings the open questions of the committed items along", () => {
+  const opts = { now: T0, fallbackTokensPerWeight: 10 };
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = c["commit"]!(s, { by: "product-owner", now: T0, items: ["B"], goalImpact: "none" }).state;
+  s = next(s, m, opts).state;
+  s = complete(
+    s,
+    m,
+    h("B", "developer", { verdict: "escalate", open_questions: ["why?"] }),
+    a("B", 20),
+    T0,
+  ).state;
+  s = c["uncommit"]!(s, { by: "product-owner", now: T0, items: ["B"], reason: "x" }).state;
+  s = { ...s, items: { ...s.items, "B-q1": { ...s.items["B-q1"]!, stage: "backlog" } } };
+  s = c["commit"]!(s, { by: "product-owner", now: T1, items: ["B"], goalImpact: "none" }).state;
+  assert.equal(getItem(s, "B-q1").stage, "sprint");
+  assert.equal(getItem(s, "B-q1").iteration, "S1");
+  assert.deepEqual(s.iterations[0]!.committed, ["A", "B"]);
+});

@@ -31,6 +31,28 @@ export function isTerminalStage(state: WorkflowState, stageId: string): boolean 
   return state.stages[state.stages.length - 1]?.id === stageId;
 }
 
+/** Replace one item with `fn(item)`; no event. */
+export function patchItem(
+  state: WorkflowState,
+  id: string,
+  fn: (item: WorkItem) => WorkItem,
+): WorkflowState {
+  return { ...state, items: { ...state.items, [id]: fn(getItem(state, id)) } };
+}
+
+/** Drop optional fields (iteration, role, ...) from one item; no event. */
+export function stripItemFields(
+  state: WorkflowState,
+  id: string,
+  keys: Array<"iteration" | "role">,
+): WorkflowState {
+  return patchItem(state, id, (item) => {
+    const copy = { ...item };
+    for (const k of keys) delete copy[k];
+    return copy;
+  });
+}
+
 const RESERVED_IDS = new Set(["__proto__", "constructor", "prototype"]);
 
 /** Ids become object keys and file names: letters, digits, `.`, `_`, `-`; no `..`, no prototype names. */
@@ -341,8 +363,7 @@ export function clearBlocker(
 
 /** Entering a new stage is a new assignment: the role that finished the previous stage is cleared so the planner picks the right one (a reviewer, not the author). */
 export function clearRole(state: WorkflowState, itemId: string): WorkflowState {
-  const { role: _r, ...rest } = state.items[itemId]!;
-  return { ...state, items: { ...state.items, [itemId]: rest as WorkItem } };
+  return stripItemFields(state, itemId, ["role"]);
 }
 
 /** Move an item to the next stage (done at the end, review/todo otherwise) and clear its role. */

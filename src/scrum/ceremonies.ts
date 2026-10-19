@@ -1,7 +1,16 @@
 import { timSort } from "exsorted";
 import { estimateTokens, remaining } from "../budget.ts";
 import { fail } from "../errors.ts";
-import { addItem, editItem, getItem, moveItem, stageOf, type ItemPatch } from "../items.ts";
+import {
+  addItem,
+  editItem,
+  getItem,
+  moveItem,
+  patchItem,
+  stageOf,
+  stripItemFields,
+  type ItemPatch,
+} from "../items.ts";
 import { applyAction } from "../methodology.ts";
 import { assertPolicies } from "../policies.ts";
 import { openIteration } from "../planner.ts";
@@ -122,10 +131,18 @@ function lastClosedIteration(state: WorkflowState): Iteration | undefined {
   return undefined;
 }
 
+/** Event seq of the sprint.closed event of `id`; infinity when it is missing, so nothing counts as "after" it. */
+export function closedSeq(state: WorkflowState, id: string): number {
+  return (
+    state.events.find((e) => e.type === "sprint.closed" && (e.payload as { id: string }).id === id)
+      ?.seq ?? Number.POSITIVE_INFINITY
+  );
+}
+
 function backlogOrdered(state: WorkflowState): WorkItem[] {
   const carry = new Set(lastClosedIteration(state)?.carryover ?? []);
   const items = Object.values(state.items).filter(
-    (i) => i.stage === "backlog" && i.status === "todo",
+    (i) => i.stage === "backlog" && i.status === "todo" && i.type !== "question",
   );
   return timSort([...items], (x, y) => {
     const cx = carry.has(x.id) ? 1 : 0;
@@ -133,6 +150,44 @@ function backlogOrdered(state: WorkflowState): WorkItem[] {
     if (cx !== cy) return cy - cx;
     return (y.priority ?? 0) - (x.priority ?? 0);
   });
+}
+
+/** Throw unless the item sits in the Product Backlog and meets the backlog exit policy. */
+function assertCommittable(state: WorkflowState, id: string): void {
+  const item = getItem(state, id);
+  if (item.stage !== "backlog" || item.status !== "todo")
+    fail(
+      "invalid-input",
+      `item "${id}" is not in the Product Backlog (${item.stage}/${item.status})`,
+      "only backlog items can be committed",
+      { items: [id] },
+    );
+  assertPolicies(state, item, stageOf(state, "backlog").exitPolicy, "enter the Sprint Backlog");
+}
+
+/** Open questions raised by the given parents travel with them into the sprint (they carry no weight). */
+function attachQuestions(
+  state: WorkflowState,
+  parentIds: string[],
+  iterationId: string,
+  by: string,
+  now: string,
+): WorkflowState {
+  let s = state;
+  for (const q of Object.values(state.items)) {
+    if (
+      q.type !== "question" ||
+      q.parent === undefined ||
+      !parentIds.includes(q.parent) ||
+      q.status === "done" ||
+      q.status === "dropped"
+    )
+      continue;
+    if (q.stage !== "sprint" || q.status !== "todo")
+      s = moveItem(s, q.id, { stage: "sprint", status: "todo" }, by, now);
+    s = patchItem(s, q.id, (it) => ({ ...it, iteration: iterationId }));
+  }
+  return s;
 }
 
 function selectAuto(state: WorkflowState, budget: Budget): string[] {
@@ -213,26 +268,16 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         "no backlog items fit the sprint",
         "refine the backlog (acceptance + estimates) or raise the budget in config",
       );
-    const backlogStage = stageOf(state, "backlog");
-    for (const id of wanted) {
-      const item = getItem(state, id);
-      if (item.stage !== "backlog" || item.status !== "todo")
-        fail(
-          "invalid-input",
-          `item "${id}" is not in the Product Backlog (${item.stage}/${item.status})`,
-          "only backlog items can be committed",
-          { items: [id] },
-        );
-      assertPolicies(state, item, backlogStage.exitPolicy, "enter the Sprint Backlog");
-    }
+    for (const id of wanted) assertCommittable(state, id);
     return act(state, "ceremony.plan", input, (s, now) => {
       const id = `S${s.iterations.length + 1}`;
       const last = lastClosedIteration(s);
       const carryover = wanted.filter((w) => last?.carryover.includes(w));
       for (const w of wanted) {
         s = moveItem(s, w, { stage: "sprint", status: "todo" }, input.by, now);
-        s = { ...s, items: { ...s.items, [w]: { ...s.items[w]!, iteration: id } } };
+        s = patchItem(s, w, (it) => ({ ...it, iteration: id }));
       }
+      s = attachQuestions(s, wanted, id, input.by, now);
       const committedWeight = wanted.reduce((sum, w) => sum + (s.items[w]?.weight ?? 0), 0);
       s = {
         ...s,
@@ -265,7 +310,6 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     const items = input["items"] as string[] | undefined;
     if (!Array.isArray(items) || items.length === 0)
       fail("invalid-input", "commit needs items[]", 'pass ["A"]');
-    const backlogStage = stageOf(state, "backlog");
     const seen = new Set<string>();
     for (const id of items) {
       if (seen.has(id))
@@ -273,25 +317,19 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           items: [id],
         });
       seen.add(id);
-      const item = getItem(state, id);
+      getItem(state, id);
       if (it.committed.includes(id))
         fail("invalid-input", `item "${id}" is already committed to ${it.id}`, "nothing to do", {
           items: [id],
         });
-      if (item.stage !== "backlog" || item.status !== "todo")
-        fail(
-          "invalid-input",
-          `item "${id}" is not in the Product Backlog (${item.stage}/${item.status})`,
-          "only backlog items can be committed",
-          { items: [id] },
-        );
-      assertPolicies(state, item, backlogStage.exitPolicy, "enter the Sprint Backlog");
+      assertCommittable(state, id);
     }
     return act(state, "ceremony.commit", input, (s, now) => {
       for (const id of items) {
         s = moveItem(s, id, { stage: "sprint", status: "todo" }, input.by, now);
-        s = { ...s, items: { ...s.items, [id]: { ...s.items[id]!, iteration: it.id } } };
+        s = patchItem(s, id, (x) => ({ ...x, iteration: it.id }));
       }
+      s = attachQuestions(s, items, it.id, input.by, now);
       s = {
         ...s,
         iterations: s.iterations.map((x) =>
@@ -332,8 +370,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     return act(state, "ceremony.uncommit", input, (s, now) => {
       for (const id of items) {
         s = moveItem(s, id, { stage: "backlog", status: "todo" }, input.by, now);
-        const { iteration: _i, role: _r, ...rest } = s.items[id]!;
-        s = { ...s, items: { ...s.items, [id]: rest as WorkItem } };
+        s = stripItemFields(s, id, ["iteration", "role"]);
       }
       s = {
         ...s,
@@ -409,11 +446,8 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         "a sprint is still open",
         "retro runs between sprints; review or cancel the open one",
       );
-    const closedSeq =
-      state.events.find(
-        (e) => e.type === "sprint.closed" && (e.payload as { id: string }).id === last.id,
-      )?.seq ?? 0;
-    if (state.events.some((e) => e.type === "retro" && e.seq > closedSeq))
+    const closedAt = closedSeq(state, last.id);
+    if (state.events.some((e) => e.type === "retro" && e.seq > closedAt))
       fail(
         "invalid-input",
         `sprint ${last.id} already has a retrospective`,
