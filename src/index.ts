@@ -24,3 +24,6 @@ export {
   clearBlocker,
 } from "./items.ts";
 export type { ItemPatch } from "./items.ts";
+export { evaluatePolicies, assertPolicies } from "./policies.ts";
+export { checkGate, authorOf, raisePending, decide } from "./gates.ts";
+export type { GateResult } from "./gates.ts";

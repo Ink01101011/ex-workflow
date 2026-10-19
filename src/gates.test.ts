@@ -1,0 +1,117 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createState } from "./state.ts";
+import { addEvidence, addItem, getItem, moveItem } from "./items.ts";
+import { checkGate, decide, raisePending } from "./gates.ts";
+import { WorkflowError } from "./errors.ts";
+import type { Gate, Role, Stage } from "./types.ts";
+
+const T0 = "2026-10-19T00:00:00.000Z";
+const gate: Gate = {
+  id: "qa-gate",
+  requires: [{ capability: "approve-gate" }],
+  evidence: ["test-report"],
+  onFail: { action: "return-to", stage: "doing" },
+};
+const stages: Stage[] = [
+  { id: "doing", name: "Doing", entryPolicy: [], exitPolicy: [] },
+  { id: "verify", name: "Verify", entryPolicy: [], exitPolicy: [], gate },
+  { id: "done", name: "Done", entryPolicy: [], exitPolicy: [] },
+];
+const r = (id: string, caps: Role["capabilities"], canApprove: string[] = []): Role => ({
+  id,
+  name: id,
+  modelTier: "small",
+  capabilities: caps,
+  canApprove,
+  inputs: [],
+  outputs: [],
+  do_not: [],
+});
+const roles = [
+  r("dev", ["deliver"]),
+  r("qa", ["approve-gate"], ["qa-gate"]),
+  r("devqa", ["deliver", "approve-gate"], ["qa-gate"]),
+];
+const base = () => {
+  let s = createState({ methodology: "waterfall", config: {}, stages, roles, now: T0 });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  s = moveItem(s, "A", { stage: "doing", status: "in_progress" }, "dev", T0);
+  s = moveItem(s, "A", { stage: "verify", status: "review" }, "dev", T0);
+  return s;
+};
+
+test("checkGate fails on missing evidence", () => {
+  const s = base();
+  const res = checkGate(s, getItem(s, "A"), gate, "qa");
+  assert.equal(res.outcome, "fail");
+  if (res.outcome === "fail") assert.equal(res.violations[0]!.rule, "gate:evidence");
+});
+
+test("checkGate passes for an approver that is not the author", () => {
+  const s = addEvidence(base(), "A", { kind: "test-report", ref: "r1", by: "qa" }, T0);
+  assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "qa"), { outcome: "pass" });
+  const res = checkGate(s, getItem(s, "A"), gate, "dev");
+  assert.equal(res.outcome, "fail");
+  if (res.outcome === "fail") assert.equal(res.violations[0]!.rule, "gate:capability");
+});
+
+test("checkGate reports conflict of interest when author approves own work", () => {
+  let s = createState({ methodology: "waterfall", config: {}, stages, roles, now: T0 });
+  s = addItem(s, { id: "B", title: "b" }, "pm", T0);
+  s = moveItem(s, "B", { stage: "doing", status: "in_progress" }, "devqa", T0);
+  s = moveItem(s, "B", { stage: "verify", status: "review" }, "devqa", T0);
+  s = addEvidence(s, "B", { kind: "test-report", ref: "r1", by: "devqa" }, T0);
+  const res = checkGate(s, getItem(s, "B"), gate, "devqa");
+  assert.equal(res.outcome, "fail");
+  if (res.outcome === "fail") assert.equal(res.violations[0]!.rule, "conflict-of-interest");
+});
+
+test("human gates go to pending and decide resolves them", () => {
+  const humanGate: Gate = { ...gate, requires: ["human"] };
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r1", by: "qa" }, T0);
+  assert.deepEqual(checkGate(s, getItem(s, "A"), humanGate, "qa"), { outcome: "human" });
+  assert.deepEqual(checkGate(s, getItem(s, "A"), humanGate, "human"), { outcome: "pass" });
+  s = raisePending(
+    s,
+    { kind: "gate", item: "A", gate: "qa-gate", question: "approve qa-gate for A?" },
+    T0,
+  );
+  assert.equal(s.pending[0]!.id, "p1");
+  assert.equal(getItem(s, "A").status, "awaiting_human");
+  const approved = decide(s, "p1", "approve", "supakit", "ok", T0);
+  assert.equal(approved.pending.length, 0);
+  assert.equal(getItem(approved, "A").stage, "done");
+  assert.equal(getItem(approved, "A").status, "done");
+  const rejected = decide(s, "p1", "reject", "supakit", "flaky tests", T0);
+  assert.equal(getItem(rejected, "A").stage, "doing");
+  assert.equal(getItem(rejected, "A").status, "todo");
+
+  const blockStages: Stage[] = stages.map((st) =>
+    st.id === "verify"
+      ? { ...st, gate: { ...gate, requires: ["human"], onFail: { action: "block" } } }
+      : st,
+  );
+  let b = createState({
+    methodology: "waterfall",
+    config: {},
+    stages: blockStages,
+    roles,
+    now: T0,
+  });
+  b = addItem(b, { id: "A", title: "a" }, "pm", T0);
+  b = moveItem(b, "A", { stage: "doing", status: "in_progress" }, "dev", T0);
+  b = moveItem(b, "A", { stage: "verify", status: "review" }, "dev", T0);
+  b = addEvidence(b, "A", { kind: "test-report", ref: "r1", by: "qa" }, T0);
+  b = raisePending(b, { kind: "gate", item: "A", gate: "qa-gate", question: "approve?" }, T0);
+  const blocked = decide(b, "p1", "reject", "supakit", "flaky tests", T0);
+  assert.equal(getItem(blocked, "A").status, "blocked");
+  assert.equal(getItem(blocked, "A").stage, "verify");
+  assert.match(getItem(blocked, "A").blockers[0]!.reason, /rejected/);
+  assert.match(getItem(blocked, "A").blockers[0]!.reason, /flaky/);
+
+  assert.throws(
+    () => decide(s, "p9", "approve", "x", ""),
+    (e: unknown) => e instanceof WorkflowError && e.code === "unknown-pending",
+  );
+});
