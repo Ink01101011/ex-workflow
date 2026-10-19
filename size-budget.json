@@ -1,0 +1,9 @@
+{
+  "dist/index.mjs": 1072,
+  "dist/scrum/index.mjs": 339,
+  "core+scrum": 40960,
+  "measured": {
+    "core+scrum": 45053
+  },
+  "note": "measured 2026-10-19; budget is the spec target, measurement exceeds it"
+}
