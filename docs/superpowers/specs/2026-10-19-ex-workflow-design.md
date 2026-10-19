@@ -746,3 +746,25 @@ Spec for the skills and the channel build is a separate document.
 | Escalation | non-blocking by default | owner's standing rule |
 | Human gates | Waterfall all, Scrum sprint-review, Kanban none | matches each method's governance |
 | Runtime | Node, zero deps beyond ex-flow/exsorted | present wherever agent CLIs run; Windows required |
+
+## 17. Phase 1 implementation addenda (2026-10-19)
+
+Decisions taken during implementation and the final whole-branch review; they refine sections 4, 6, 8, 11, 12 and 13 above.
+
+| Topic | Decision |
+|---|---|
+| Rework | `Verdict` gains `rework`; the item returns to the stage of the last dispatch made from a stage strictly BEFORE its current one (`lastDispatchBefore(state, item)`), role cleared, evidence kept; the reviewer's notes reach the author through `Brief.priorHandoffs`. |
+| Authorship | `authorOf(state, item)` is the role of the last dispatch made from an earlier stage (stage order, not equality), so a reviewer dispatched inside a gated stage is never the author and a rework round trip cannot resurface a stale dispatch. |
+| Escalation | A `question` item (max priority) is created in the parent's pulled-from stage with the parent's `iteration`; the parent is re-queued with the question in `dependsOn`; answered questions bypass exit policies and gates; `closeSprint` carries open questions with their parents and `plan`/`commit` re-attach them. |
+| Follow-ups and lessons | `Handoff.follow_ups` land in the first stage, never the iteration; `Handoff.lessons` are stored `raised`; the retro adopts/dismisses them and applies `LessonChange`s (`agreement` → `state.agreements`, present in every later brief's invariants; `dod`; `backlog`; `skill` for the host). |
+| Bugs | `WorkItem.affects` names finished work a bug/change-request invalidates; `Brief.relatedBugs` surfaces open bugs touching an item or its dependencies. Done items are never reopened. |
+| Stage advance | One shared `advanceItem` (items.ts) used by `complete` and `decide`; entering a non-terminal stage clears `role`; the review routing uses a `Stage.review` flag, never a stage id. |
+| Blockers and gates | Gate rejection with `onFail: block` raises a real, clearable blocker; clearing a blocker on an `in_progress` item re-queues it in its pulled-from stage; clearing after `awaiting_human` restores `review`/`todo` per the stage flag. `decide` requires `human` or a role that satisfies the gate; the decision value is validated. |
+| Sprint close | Carryover excludes `done` and `dropped`, clears blockers and pending entries of carried items with a "sprint closed" reason, strips `iteration` and `role`. Budget exhaustion with work still in progress sets `Iteration.closing` (no new dispatch) and closes on the last completion. |
+| Ids | `assertId` in core: `^[A-Za-z0-9][A-Za-z0-9._-]*$`, no `..`, no prototype names; adapter asserts written paths stay under `.workflow/`; object lookups use `Object.hasOwn`. |
+| Metrics | `costPerPoint` = Σ spent.tokens / Σ doneWeight over non-cancelled closed sprints. |
+| Packaging | tsup `splitting: true` and a `check:dist` guard so core/scrum/cli share one `WorkflowError`; per-condition `types` for ESM and CJS; the file adapter is its own subpath `ex-workflow/adapters` (not in the core barrel); the executable is `src/cli/bin.ts`, separate from the `./cli` library entry. |
+| Concurrency | The CLI serialises writers per `.workflow/` with `state.lock` (`open wx`, retry, stale after 60 s); one writer at a time. |
+| Size | Budget is measured as `core+scrum` by bundling `scripts/measure-entry.ts`; target 40 KB; `size-budget.json` ratchets down only. |
+| Tests | `scripts/run-tests.mjs` collects `*.test.ts` so Node 18/20 run the suite. |
+| Out of Phase 1 | `ex-workflow/schema` JSON Schema and on-load schema validation; Kanban and Waterfall modules; `archive`; custom ceremonies as data. |
