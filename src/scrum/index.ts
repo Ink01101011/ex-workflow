@@ -26,6 +26,7 @@ export const SCRUM_VOCABULARY: Record<CoreTerm, string> = {
   gate: "Sprint Review",
 };
 
+/** Advanced; used by ceremonies. */
 export function configOf(state: WorkflowState): ScrumConfig {
   return state.config as ScrumConfig;
 }

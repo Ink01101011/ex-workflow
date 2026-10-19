@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createState } from "./state.ts";
 import { addItem, moveItem } from "./items.ts";
 import { coreRulesFor } from "./rules.ts";
-import type { Methodology, Role, Stage } from "./types.ts";
+import type { Action, Methodology, Role, Stage } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const stages: Stage[] = [
@@ -92,4 +92,37 @@ test("conflict-of-interest errors when the author completes through a capability
   assert.equal(v[0]?.rule, "conflict-of-interest");
   assert.equal(v[0]?.severity, "error");
   assert.match(v[0]!.fix, /qa/);
+});
+
+const build = (st: Stage[]) => {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: st,
+    roles: [r("devqa", ["deliver", "approve-gate"]), r("qa", ["approve-gate"])],
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a", role: "devqa" }, "po", T0);
+  return moveItem(s, "A", { status: "in_progress" }, "devqa", T0);
+};
+const act = (role: string, verdict = "done") => ({
+  type: "complete",
+  by: role,
+  payload: { handoff: { item: "A", role, verdict } },
+});
+
+test("conflict-of-interest stays silent for a different author, a blocked verdict, a human-only gate and an ungated stage", () => {
+  const run = (s: ReturnType<typeof build>, a: Action) =>
+    coreRulesFor(m()).flatMap((rule) => rule.check(s, a));
+  const s = build(stages);
+  assert.equal(run(s, act("devqa"))[0]?.rule, "conflict-of-interest"); // control
+  assert.deepEqual(run(s, act("qa")), []); // someone else completes
+  assert.deepEqual(run(s, act("devqa", "blocked")), []);
+  assert.deepEqual(run(s, { type: "ceremony.plan", by: "devqa" }), []); // not a completion
+  const humanOnly = stages.map((st) =>
+    st.gate ? { ...st, gate: { ...st.gate, requires: ["human" as const] } } : st,
+  );
+  assert.deepEqual(run(build(humanOnly), act("devqa")), []);
+  const ungated = stages.map(({ gate: _g, ...st }) => st);
+  assert.deepEqual(run(build(ungated), act("devqa")), []);
 });

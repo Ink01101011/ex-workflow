@@ -4,6 +4,7 @@ import { init } from "../methodology.ts";
 import { addItem, getItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
+import { authorOf } from "../gates.ts";
 import { WorkflowError } from "../errors.ts";
 import { scrum } from "./index.ts";
 import { dailyReport } from "./ceremonies.ts";
@@ -393,4 +394,80 @@ test("commit brings the open questions of the committed items along", () => {
   assert.equal(getItem(s, "B-q1").stage, "sprint");
   assert.equal(getItem(s, "B-q1").iteration, "S1");
   assert.deepEqual(s.iterations[0]!.committed, ["A", "B"]);
+});
+
+test("scrum-shaped rework: the reviewer's rework lands in the sprint and the developer stays the author", () => {
+  const opts = { now: T0, fallbackTokensPerWeight: 10 };
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, opts).state;
+  s = complete(s, m, h("A"), a("A", 20), T0).state;
+  assert.equal(getItem(s, "A").stage, "review");
+  assert.equal(getItem(s, "A").status, "review");
+  s = next(s, m, opts).state;
+  assert.equal(getItem(s, "A").role, "developer"); // the only reviewer
+  assert.equal(authorOf(s, getItem(s, "A")), "developer");
+  s = complete(
+    s,
+    m,
+    h("A", "developer", { verdict: "rework", notes: "add tests", produced: [] }),
+    a("A", 20),
+    T0,
+  ).state;
+  const item = getItem(s, "A");
+  assert.equal(item.stage, "sprint");
+  assert.equal(item.status, "todo");
+  assert.equal(item.role, undefined);
+  assert.equal(item.iteration, "S1");
+});
+
+test("retro rejects a lesson referenced twice and flags a DoD change", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = c["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state;
+  s = {
+    ...s,
+    lessons: [
+      {
+        id: "L1",
+        at: T0,
+        text: "t",
+        scope: "spec",
+        status: "raised",
+        from: "developer",
+        item: "A",
+      },
+    ],
+  };
+  assert.throws(
+    () =>
+      c["retro"]!(s, {
+        by: "scrum-master",
+        now: T1,
+        lessons: [],
+        adopt: [{ id: "L1" }],
+        dismiss: ["L1"],
+      }),
+    (e) => code(e) === "invalid-input",
+  );
+  assert.throws(
+    () =>
+      c["retro"]!(s, {
+        by: "scrum-master",
+        now: T1,
+        lessons: [],
+        adopt: [{ id: "L1" }, { id: "L1" }],
+      }),
+    (e) => code(e) === "invalid-input",
+  );
+  const plain = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [], adopt: [{ id: "L1" }] });
+  assert.equal((plain.state.events.at(-1)!.payload as { dodChanged: boolean }).dodChanged, false);
+  const changed = c["retro"]!(s, {
+    by: "scrum-master",
+    now: T1,
+    lessons: [],
+    dodChanges: [{ kind: "no-open-blockers" }],
+  });
+  assert.equal((changed.state.events.at(-1)!.payload as { dodChanged: boolean }).dodChanged, true);
+  assert.deepEqual(changed.state.stages.find((x) => x.id === "review")!.exitPolicy, [
+    { kind: "no-open-blockers" },
+  ]);
 });
