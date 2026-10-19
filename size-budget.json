@@ -1,11 +1,11 @@
 {
-  "dist/index.mjs": 1025,
+  "dist/index.mjs": 1031,
   "dist/scrum/index.mjs": 369,
-  "core+scrum": 45238,
+  "core+scrum": 45244,
   "measured": {
-    "dist/index.mjs": 1025,
+    "dist/index.mjs": 1031,
     "dist/scrum/index.mjs": 369,
-    "core+scrum": 45238
+    "core+scrum": 45244
   },
   "note": "budget set at measured size on 2026-10-19 (owner decision); spec target was 40960; ratchets down only"
 }
