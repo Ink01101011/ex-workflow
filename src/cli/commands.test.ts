@@ -135,7 +135,7 @@ test("add rejects ids that could escape the .workflow directory", async () => {
     const r = await runCommand(["add", f], root);
     assert.equal(r.exit, 1);
     assert.equal(out<{ error: { code: string; fix: string } }>(r).error.code, "invalid-input");
-    assert.match(out<{ error: { fix: string } }>(r).error.fix, /plain id/);
+    assert.match(out<{ error: { fix: string } }>(r).error.fix, /letters, digits/);
   }
 });
 
@@ -145,4 +145,20 @@ test("ceremony with a prototype-key name is unknown-ceremony, not a crash", asyn
   const r = await runCommand(["ceremony", "constructor"], root);
   assert.equal(r.exit, 1);
   assert.equal(out<{ error: { code: string } }>(r).error.code, "unknown-ceremony");
+});
+
+test("concurrent add commands do not lose updates", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const ids = ["A", "B", "C", "D", "E", "F"];
+  const files = await Promise.all(
+    ids.map((id) => w(`${id}.json`, { id, title: id, weight: 1, acceptance: ["ok"] })),
+  );
+  const results = await Promise.all(files.map((f) => runCommand(["add", f], root)));
+  assert.deepEqual(
+    results.map((r) => r.exit),
+    ids.map(() => 0),
+  );
+  const state = JSON.parse(await readFile(path.join(root, ".workflow", "state.json"), "utf8"));
+  assert.deepEqual(Object.keys(state.items).sort(), ids);
 });

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createState } from "../state.ts";
 import { WorkflowError } from "../errors.ts";
-import { loadState, saveBrief, saveHandoff, saveState, statePath } from "./file.ts";
+import { loadState, saveBrief, saveHandoff, saveState, statePath, withStateLock } from "./file.ts";
 import type { Role } from "../types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
@@ -105,4 +105,66 @@ test("saveBrief and saveHandoff write under .workflow", async () => {
   );
   assert.equal(h, path.join(root, ".workflow", "handoffs", "A-7.json"));
   assert.equal(JSON.parse(await readFile(h, "utf8")).item, "A");
+});
+
+const invalid = (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input";
+
+test("withStateLock serialises concurrent holders and removes the lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const log: string[] = [];
+  const hold = (name: string) => async () => {
+    log.push(`${name}:start`);
+    await new Promise((r) => setTimeout(r, 40));
+    log.push(`${name}:end`);
+    return name;
+  };
+  const opts = { retries: 100, intervalMs: 5 };
+  const out = await Promise.all([
+    withStateLock(root, hold("a"), opts),
+    withStateLock(root, hold("b"), opts),
+  ]);
+  assert.deepEqual(out, ["a", "b"]);
+  const first = log[0]!.split(":")[0];
+  const second = first === "a" ? "b" : "a";
+  assert.deepEqual(log, [`${first}:start`, `${first}:end`, `${second}:start`, `${second}:end`]);
+  assert.deepEqual(await readdir(path.join(root, ".workflow")), []);
+});
+
+test("withStateLock gives up with invalid-input and releases the lock after an error", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await withStateLock(
+    root,
+    () =>
+      assert.rejects(
+        withStateLock(root, async () => "never", { retries: 2, intervalMs: 5 }),
+        invalid,
+      ),
+    { retries: 0 },
+  );
+  await assert.rejects(
+    withStateLock(root, async () => {
+      throw new Error("boom");
+    }),
+    /boom/,
+  );
+  assert.equal(await withStateLock(root, async () => "free", { retries: 0 }), "free");
+});
+
+test("withStateLock takes over a stale lock", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await mkdir(path.join(root, ".workflow"));
+  await writeFile(path.join(root, ".workflow", "state.lock"), "123 old\n");
+  assert.equal(await withStateLock(root, async () => "ok", { retries: 0, staleMs: -1 }), "ok");
+});
+
+test("saveBrief and saveHandoff refuse ids that escape .workflow", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await assert.rejects(
+    saveBrief(root, { item: { id: "../../evil" } } as unknown as Parameters<typeof saveBrief>[1]),
+    invalid,
+  );
+  await assert.rejects(
+    saveHandoff(root, { item: "../../evil" } as unknown as Parameters<typeof saveHandoff>[1], 1),
+    invalid,
+  );
 });

@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fail } from "../errors.ts";
@@ -24,6 +24,54 @@ async function writeAtomic(file: string, content: string): Promise<void> {
       `cannot write ${file}: ${(e as Error).message}`,
       "check the directory exists and is writable",
     );
+  }
+}
+
+export interface LockOptions {
+  retries?: number;
+  intervalMs?: number;
+  staleMs?: number;
+}
+
+/** Run `fn` while holding `.workflow/state.lock`, so concurrent exwf commands cannot lose each other's updates. */
+export async function withStateLock<T>(
+  root: string,
+  fn: () => Promise<T>,
+  opts: LockOptions = {},
+): Promise<T> {
+  const { retries = 40, intervalMs = 50, staleMs = 60_000 } = opts;
+  const lock = path.join(root, WORKFLOW_DIR, "state.lock");
+  await mkdir(path.dirname(lock), { recursive: true });
+  let held = false;
+  for (let attempt = 0; !held; attempt++) {
+    try {
+      const fh = await open(lock, "wx");
+      await fh.writeFile(`${process.pid} ${new Date().toISOString()}\n`);
+      await fh.close();
+      held = true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      const age = await stat(lock).then(
+        (st) => Date.now() - st.mtimeMs,
+        () => 0,
+      );
+      if (age > staleMs) {
+        await unlink(lock).catch(() => undefined);
+        continue;
+      }
+      if (attempt >= retries)
+        fail(
+          "invalid-input",
+          "another exwf command holds .workflow/state.lock",
+          "retry, or delete the file if no exwf process is running",
+        );
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await unlink(lock).catch(() => undefined);
   }
 }
 
@@ -99,14 +147,30 @@ export async function loadState(root: string): Promise<WorkflowState> {
   return { ...state, roles };
 }
 
+function inWorkflowDir(root: string, file: string): string {
+  if (!path.resolve(file).startsWith(path.resolve(root, WORKFLOW_DIR) + path.sep))
+    fail(
+      "invalid-input",
+      `${file} resolves outside ${WORKFLOW_DIR}/`,
+      "use a plain item id (letters, digits, - _ .)",
+    );
+  return file;
+}
+
 export async function saveBrief(root: string, brief: Brief): Promise<string> {
-  const file = path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`);
+  const file = inWorkflowDir(
+    root,
+    path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`),
+  );
   await writeAtomic(file, JSON.stringify(brief, null, 2) + "\n");
   return file;
 }
 
 export async function saveHandoff(root: string, handoff: Handoff, seq: number): Promise<string> {
-  const file = path.join(root, WORKFLOW_DIR, "handoffs", `${handoff.item}-${seq}.json`);
+  const file = inWorkflowDir(
+    root,
+    path.join(root, WORKFLOW_DIR, "handoffs", `${handoff.item}-${seq}.json`),
+  );
   await writeAtomic(file, JSON.stringify(handoff, null, 2) + "\n");
   return file;
 }
