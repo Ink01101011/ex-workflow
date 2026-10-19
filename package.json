@@ -1,6 +1,6 @@
 {
   "name": "ex-workflow",
-  "version": "0.1.0",
+  "version": "0.0.0-stage",
   "description": "Methodology engine for AI teams: Scrum, Kanban and Waterfall as data-driven state machines on top of ex-flow",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "./cli": { "import": { "types": "./dist/cli/index.d.ts", "default": "./dist/cli/index.mjs" }, "require": { "types": "./dist/cli/index.d.cts", "default": "./dist/cli/index.cjs" } },
     "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.mjs" }
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "build": "tsup",
