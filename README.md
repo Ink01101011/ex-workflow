@@ -7,8 +7,10 @@ State is plain JSON, every operation is `(state, action) -> state`, and every er
 ## Install
 
 ```sh
-npm install ex-workflow
+pnpm add ex-workflow@stage
 ```
+
+The first pre-release is published under the `stage` dist-tag (`0.0.0-stage`); `latest` is reserved for 0.1.0.
 
 Node >= 18. Runs on macOS, Linux and Windows.
 
@@ -82,7 +84,29 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Status
 
-0.1.0 = core + Scrum. Kanban and Waterfall follow. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+0.0.0-stage is a pre-release for integration testing: core + Scrum, adapters and the `exwf` CLI. Expect changes before 0.1.0. Kanban and Waterfall follow. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+
+## Known backlog
+
+Minor items deferred past 0.0.0-stage:
+
+- Stale-lock takeover can race when a lock is older than 60 s.
+- `decide(approve)` ignores a `needs-review` verdict.
+- `setDod` hard-codes the `review` stage id in the Scrum methodology.
+- The `closing` sprint state is not enforced on commit, plan or uncommit.
+- State is written before briefs; a crash between the two leaves them out of step.
+- `roles/*.json` are re-merged on every load.
+- Evidence can go stale across a rework cycle.
+- The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget ratchets down from 45238 B (spec target 40960 B).
+- Minor test gaps: retro duplicate-ref rejection, `writeAtomic` failure path, thin CLI usage and `decide` tests.
+
+## Publishing
+
+For the owner. The `stage` dist-tag keeps `latest` free for 0.1.0:
+
+```sh
+pnpm run ci && npm publish --tag stage
+```
 
 ## Design principles
 
