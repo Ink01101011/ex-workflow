@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.0-stage (2026-10-19)
+## 0.1.0-stage (2026-10-19)
 
 Pre-release for integration testing, published under the `stage` dist-tag.
 
