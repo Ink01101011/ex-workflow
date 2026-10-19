@@ -117,3 +117,19 @@ test("separationLost finds roles that hold every required capability", () => {
   );
   assert.deepEqual(separationLost(s, ["order-backlog", "review"]), []);
 });
+
+test("role ids are validated by registerRole and createState", () => {
+  for (const id of ["__proto__", "../x", "a/b", "constructor"]) {
+    assert.throws(
+      () => registerRole(base(), role(id, ["deliver"]), "admin", T0),
+      (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+      id,
+    );
+    assert.throws(
+      () =>
+        createState({ methodology: "scrum", config: {}, stages, roles: [role(id, [])], now: T0 }),
+      (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+      id,
+    );
+  }
+});

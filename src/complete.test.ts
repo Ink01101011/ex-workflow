@@ -459,3 +459,35 @@ test("decide return-to clears the role; only human or a qualifying role may deci
   const done = decide(s, "p1", "approve", "human", "", T0);
   assert.equal(getItem(done, "A").status, "done");
 });
+
+test("complete rejects an unknown verdict and malformed produced, lessons and follow_ups", () => {
+  const s = started();
+  const bad = (over: object) =>
+    assert.throws(
+      () => complete(s, m(), handoff(over as Partial<Handoff>), acc(), T0),
+      (e) => code(e) === "handoff-invalid",
+    );
+  bad({ verdict: "approved" });
+  bad({ produced: [{ kind: "code" }] });
+  bad({ produced: ["code"] });
+  bad({ lessons: [{ text: "t", scope: "nope" }] });
+  bad({ lessons: [{ scope: "spec" }] });
+  bad({ follow_ups: [{ title: "no id" }] });
+  bad({ follow_ups: ["F1"] });
+  try {
+    complete(s, m(), handoff({ verdict: "approved" as unknown as "done" }), acc(), T0);
+  } catch (e) {
+    assert.match((e as WorkflowError).fix, /needs-review/);
+  }
+});
+
+test("escalate without an escalate role is missing-capability", () => {
+  const noLead = roles.filter((x) => x.id !== "lead");
+  let s = createState({ methodology: "kanban", config: {}, stages, roles: noLead, now: T0 });
+  s = addItem(s, { id: "A", title: "a", weight: 1 }, "po", T0);
+  s = next(s, m(), { now: T0 }).state;
+  assert.throws(
+    () => complete(s, m(), handoff({ verdict: "escalate", open_questions: ["?"] }), acc(), T0),
+    (e) => code(e) === "missing-capability",
+  );
+});

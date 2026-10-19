@@ -2,6 +2,7 @@ import { remaining } from "./budget.ts";
 import { fail } from "./errors.ts";
 import { stageOf } from "./items.ts";
 import { openIteration, plan, type PlanOptions, type PlanReason } from "./planner.ts";
+import { roleOf } from "./roles.ts";
 import type { Brief, Handoff, Methodology, Verdict, WorkItem, WorkflowState } from "./types.ts";
 
 interface CompletedPayload {
@@ -42,7 +43,7 @@ export function synthesizeBrief(
       "dispatch it with next() or set item.role",
       { items: [item.id] },
     );
-  const role = state.roles[item.role];
+  const role = roleOf(state, item.role);
   if (!role)
     fail(
       "unknown-role",

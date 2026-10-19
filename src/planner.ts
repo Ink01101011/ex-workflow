@@ -4,7 +4,7 @@ import { fail } from "./errors.ts";
 import { authorOf } from "./gates.ts";
 import { moveItem, stageOf } from "./items.ts";
 import { evaluatePolicies } from "./policies.ts";
-import { rolesWith } from "./roles.ts";
+import { roleOf, rolesWith } from "./roles.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type { Iteration, Methodology, Role, WorkItem, WorkflowState } from "./types.ts";
 
@@ -16,7 +16,7 @@ export function openIteration(state: WorkflowState): Iteration | undefined {
 
 export function assignRole(state: WorkflowState, item: WorkItem): Role {
   if (item.role) {
-    const r = state.roles[item.role];
+    const r = roleOf(state, item.role);
     if (!r)
       fail(
         "unknown-role",
@@ -139,7 +139,7 @@ export function plan(
   const inProgress = Object.values(state.items).filter((i) => i.status === "in_progress");
   const perClass: Record<string, number> = {};
   for (const i of inProgress) {
-    const r = i.role ? state.roles[i.role] : undefined;
+    const r = i.role ? roleOf(state, i.role) : undefined;
     const cls = r ? (r.resourceClass ?? r.id) : "?";
     perClass[cls] = (perClass[cls] ?? 0) + 1;
   }

@@ -1,6 +1,11 @@
-import { fail } from "./errors.ts";
+import { assertId, fail } from "./errors.ts";
 import { appendEvent } from "./state.ts";
 import type { Capability, Role, WorkflowState } from "./types.ts";
+
+/** Own-property role lookup (ids such as "constructor" never hit the prototype). */
+export function roleOf(state: WorkflowState, id: string): Role | undefined {
+  return Object.hasOwn(state.roles, id) ? state.roles[id] : undefined;
+}
 
 const OPEN: ReadonlySet<string> = new Set(["in_progress", "review", "blocked"]);
 
@@ -10,7 +15,8 @@ export function registerRole(
   by: string,
   now?: string,
 ): WorkflowState {
-  if (state.roles[role.id])
+  assertId(role.id, "role id");
+  if (roleOf(state, role.id))
     fail(
       "duplicate-role",
       `role "${role.id}" already exists`,
@@ -32,7 +38,7 @@ export function retireRole(
   by: string,
   now?: string,
 ): WorkflowState {
-  if (!state.roles[roleId])
+  if (!roleOf(state, roleId))
     fail(
       "unknown-role",
       `role "${roleId}" does not exist`,

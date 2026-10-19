@@ -25,6 +25,9 @@ import type {
   WorkflowState,
 } from "./types.ts";
 
+const VERDICTS: readonly string[] = ["done", "needs-review", "rework", "blocked", "escalate"];
+const LESSON_SCOPES: readonly string[] = ["policy", "skill", "memory", "spec", "review"];
+
 function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void {
   const item = getItem(state, handoff.item);
   if (item.status !== "in_progress")
@@ -48,6 +51,28 @@ function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void
       "pass empty arrays when there is nothing",
       { items: [item.id] },
     );
+  const bad = (what: string, fix: string) =>
+    fail("handoff-invalid", `handoff for "${item.id}": ${what}`, fix, { items: [item.id] });
+  const verdict = handoff.verdict ?? "done";
+  if (!VERDICTS.includes(verdict))
+    bad(`unknown verdict ${JSON.stringify(verdict)}`, `use one of: ${VERDICTS.join(", ")}`);
+  const isObj = (x: unknown): x is Record<string, unknown> =>
+    typeof x === "object" && x !== null && !Array.isArray(x);
+  const str = (x: unknown) => typeof x === "string";
+  if (!handoff.produced.every((p) => isObj(p) && str(p.kind) && str(p.ref)))
+    bad("produced[] entries need string kind and ref", 'use { "kind": "code", "ref": "src/a.ts" }');
+  const lessons: unknown = handoff.lessons ?? [];
+  if (
+    !Array.isArray(lessons) ||
+    !lessons.every((l) => isObj(l) && str(l.text) && LESSON_SCOPES.includes(l.scope as string))
+  )
+    bad(
+      "lessons[] entries need a text and a scope",
+      `scope is one of: ${LESSON_SCOPES.join(", ")}`,
+    );
+  const followUps: unknown = handoff.follow_ups ?? [];
+  if (!Array.isArray(followUps) || !followUps.every((f) => isObj(f) && str(f.id) && str(f.title)))
+    bad("follow_ups[] entries need a string id and title", "describe each follow-up as a new item");
   if (handoff.role !== item.role)
     fail(
       "handoff-invalid",
@@ -199,7 +224,7 @@ export function complete(
     }
   } else if (verdict === "blocked") {
     s = raiseBlocker(s, id, handoff.notes || "blocked by worker", role, role, at);
-  } else {
+  } else if (verdict === "escalate") {
     const thinker = rolesWith(s, "escalate")[0];
     if (!thinker)
       fail(

@@ -1,4 +1,4 @@
-import { fail } from "./errors.ts";
+import { assertId, fail } from "./errors.ts";
 import type { Event, MethodologyName, Role, Stage, WorkflowState } from "./types.ts";
 
 export function nowOf(now?: string): string {
@@ -22,7 +22,8 @@ export function createState(input: CreateStateInput): WorkflowState {
   }
   const roles: Record<string, Role> = {};
   for (const r of input.roles) {
-    if (roles[r.id])
+    assertId(r.id, "role id");
+    if (Object.hasOwn(roles, r.id))
       fail("duplicate-role", `duplicate role id "${r.id}"`, "give every role a unique id");
     roles[r.id] = r;
   }

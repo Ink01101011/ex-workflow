@@ -14,7 +14,7 @@ import {
 import { applyAction } from "../methodology.ts";
 import { assertPolicies } from "../policies.ts";
 import { openIteration } from "../planner.ts";
-import { hasCapability } from "../roles.ts";
+import { hasCapability, roleOf } from "../roles.ts";
 import { appendEvent, nowOf } from "../state.ts";
 import type {
   Budget,
@@ -35,7 +35,7 @@ import { closeSprint, configOf } from "./index.ts";
 
 export function canDo(state: WorkflowState, by: string, ...caps: Capability[]): boolean {
   if (by === "human") return true;
-  const role = state.roles[by];
+  const role = roleOf(state, by);
   return !!role && caps.some((c) => hasCapability(role, c));
 }
 
@@ -396,7 +396,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
   const review: Ceremony = (state, input) => {
     const it = openIteration(state);
     if (!it) fail("invalid-input", "no open sprint to review", "run the plan ceremony first");
-    const role = state.roles[input.by];
+    const role = roleOf(state, input.by);
     const mayApprove =
       input.by === "human" || (!!role && role.canApprove.includes("sprint-review"));
     if (!mayApprove) {

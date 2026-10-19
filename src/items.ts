@@ -1,4 +1,6 @@
-import { fail } from "./errors.ts";
+import { assertId, fail } from "./errors.ts";
+
+export { assertId };
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Evidence,
@@ -51,23 +53,6 @@ export function stripItemFields(
     for (const k of keys) delete copy[k];
     return copy;
   });
-}
-
-const RESERVED_IDS = new Set(["__proto__", "constructor", "prototype"]);
-
-/** Ids become object keys and file names: letters, digits, `.`, `_`, `-`; no `..`, no prototype names. */
-export function assertId(id: unknown, what: string): void {
-  if (
-    typeof id !== "string" ||
-    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) ||
-    id.includes("..") ||
-    RESERVED_IDS.has(id)
-  )
-    fail(
-      "invalid-input",
-      `${what} ${JSON.stringify(id)} is not a valid id`,
-      "use letters, digits, - _ . (e.g. CART-12)",
-    );
 }
 
 export function getItem(state: WorkflowState, id: string): WorkItem {

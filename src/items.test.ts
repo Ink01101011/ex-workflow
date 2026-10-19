@@ -149,3 +149,31 @@ test("clearing a blocker on an in_progress item re-queues it in the stage it was
   assert.equal(getItem(s, "A").stage, "backlog");
   assert.equal(getItem(s, "A").status, "todo");
 });
+
+test("ids are validated: no path separators, dots-only, prototype names or empties", () => {
+  const s = createState({ methodology: "kanban", config: {}, stages, roles: [], now: T0 });
+  for (const id of [
+    "../evil",
+    "a/b",
+    "a\\b",
+    "x..y",
+    "",
+    "__proto__",
+    "constructor",
+    "prototype",
+    ".hidden",
+    "a b",
+  ]) {
+    assert.throws(
+      () => addItem(s, { id, title: "t" }, "po", T0),
+      (e: unknown) =>
+        e instanceof WorkflowError && e.code === "invalid-input" && /letters, digits/.test(e.fix),
+      id,
+    );
+  }
+  assert.doesNotThrow(() => addItem(s, { id: "CART-12.a_b", title: "t" }, "po", T0));
+  assert.throws(
+    () => getItem(s, "constructor"),
+    (e: unknown) => e instanceof WorkflowError && e.code === "unknown-item",
+  );
+});
