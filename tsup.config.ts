@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     types: "src/types.ts",
     "scrum/index": "src/scrum/index.ts",
+    "adapters/index": "src/adapters/index.ts",
     "cli/index": "src/cli/index.ts",
     "cli/bin": "src/cli/bin.ts",
   },

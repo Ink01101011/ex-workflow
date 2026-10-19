@@ -30,6 +30,17 @@ const { state: s2, briefs } = next(state, m); // dispatches work, returns one br
 // state = m.ceremonies["review"]!(state, { by: "human", accepted: true, goalMet: true }).state;
 ```
 
+To persist state, use the file adapter (the only part of the package that touches disk):
+
+```ts
+import { loadState, saveState, withStateLock } from "ex-workflow/adapters";
+
+await withStateLock(process.cwd(), async () => {
+  const state = await loadState(process.cwd());
+  await saveState(process.cwd(), complete(state, m, handoff, accounting).state);
+});
+```
+
 `test/sprint.e2e.test.ts` is a complete two-sprint scenario: rework, a blocker, an escalation, a retro that changes the working agreements, and metrics.
 
 ## CLI
@@ -53,6 +64,10 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 | `role add <manifest.json>` / `role list` | `{ ok, roles }` |
 
 `--by` defaults to `human`.
+
+### Concurrency
+
+One writer at a time per `.workflow/`: `exwf` serialises writers with `.workflow/state.lock` (created exclusively, retried for about two seconds, taken over when older than 60 s). If a crashed process left the lock behind and a command reports that another `exwf` holds it, delete the file. Read-only commands do not lock. Use `withStateLock` from `ex-workflow/adapters` when you write state yourself.
 
 ## Layers
 

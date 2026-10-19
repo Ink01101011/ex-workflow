@@ -160,5 +160,5 @@ test("concurrent add commands do not lose updates", async () => {
     ids.map(() => 0),
   );
   const state = JSON.parse(await readFile(path.join(root, ".workflow", "state.json"), "utf8"));
-  assert.deepEqual(Object.keys(state.items).sort(), ids);
+  assert.deepEqual(new Set(Object.keys(state.items)), new Set(ids));
 });

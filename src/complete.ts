@@ -28,6 +28,10 @@ import type {
 const VERDICTS: readonly string[] = ["done", "needs-review", "rework", "blocked", "escalate"];
 const LESSON_SCOPES: readonly string[] = ["policy", "skill", "memory", "spec", "review"];
 
+const isObj = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null && !Array.isArray(x);
+const str = (x: unknown) => typeof x === "string";
+
 function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void {
   const item = getItem(state, handoff.item);
   if (item.status !== "in_progress")
@@ -56,9 +60,6 @@ function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void
   const verdict = handoff.verdict ?? "done";
   if (!VERDICTS.includes(verdict))
     bad(`unknown verdict ${JSON.stringify(verdict)}`, `use one of: ${VERDICTS.join(", ")}`);
-  const isObj = (x: unknown): x is Record<string, unknown> =>
-    typeof x === "object" && x !== null && !Array.isArray(x);
-  const str = (x: unknown) => typeof x === "string";
   if (!handoff.produced.every((p) => isObj(p) && str(p.kind) && str(p.ref)))
     bad("produced[] entries need string kind and ref", 'use { "kind": "code", "ref": "src/a.ts" }');
   const lessons: unknown = handoff.lessons ?? [];

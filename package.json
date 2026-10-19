@@ -16,14 +16,15 @@
   "types": "dist/index.d.ts",
   "bin": { "exwf": "dist/cli/bin.cjs" },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.mjs", "require": "./dist/index.cjs", "default": "./dist/index.mjs" },
-    "./scrum": { "types": "./dist/scrum/index.d.ts", "import": "./dist/scrum/index.mjs", "require": "./dist/scrum/index.cjs", "default": "./dist/scrum/index.mjs" },
-    "./cli": { "types": "./dist/cli/index.d.ts", "import": "./dist/cli/index.mjs", "require": "./dist/cli/index.cjs", "default": "./dist/cli/index.mjs" },
-    "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.d.ts" }
+    ".": { "import": { "types": "./dist/index.d.ts", "default": "./dist/index.mjs" }, "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" } },
+    "./scrum": { "import": { "types": "./dist/scrum/index.d.ts", "default": "./dist/scrum/index.mjs" }, "require": { "types": "./dist/scrum/index.d.cts", "default": "./dist/scrum/index.cjs" } },
+    "./adapters": { "import": { "types": "./dist/adapters/index.d.ts", "default": "./dist/adapters/index.mjs" }, "require": { "types": "./dist/adapters/index.d.cts", "default": "./dist/adapters/index.cjs" } },
+    "./cli": { "import": { "types": "./dist/cli/index.d.ts", "default": "./dist/cli/index.mjs" }, "require": { "types": "./dist/cli/index.d.cts", "default": "./dist/cli/index.cjs" } },
+    "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.mjs" }
   },
   "files": ["dist", "README.md"],
   "scripts": {
-    "test": "tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\"",
+    "test": "node scripts/run-tests.mjs",
     "build": "tsup",
     "minify": "tsup --minify",
     "lint": "oxlint src test",
@@ -31,7 +32,7 @@
     "format:check": "oxfmt --check src test",
     "typecheck": "tsc --noEmit",
     "size": "node scripts/size.mjs",
-    "check:dist": "node scripts/check-dist.mjs",
+    "check:dist": "node scripts/check-dist.mjs && node scripts/check-exports.mjs",
     "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm minify && pnpm check:dist && pnpm size",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "pnpm run ci"
