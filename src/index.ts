@@ -11,3 +11,16 @@ export {
   requireCapabilities,
   separationLost,
 } from "./roles.ts";
+export {
+  stageOf,
+  nextStageOf,
+  isTerminalStage,
+  getItem,
+  addItem,
+  editItem,
+  moveItem,
+  addEvidence,
+  raiseBlocker,
+  clearBlocker,
+} from "./items.ts";
+export type { ItemPatch } from "./items.ts";
