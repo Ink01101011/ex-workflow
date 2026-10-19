@@ -5,11 +5,13 @@ import { appendEvent } from "../state.ts";
 import type { CoreTerm, Methodology, PlannerOptions, WorkItem, WorkflowState } from "../types.ts";
 import { scrumCeremonies } from "./ceremonies.ts";
 import { validateScrumConfig, type ScrumConfig } from "./config.ts";
+import { scrumMetrics, type ScrumMetrics } from "./metrics.ts";
 import { scrumRoles } from "./roles.ts";
 import { scrumRules } from "./rules.ts";
 import { scrumStages } from "./stages.ts";
 
-export { validateScrumConfig, scrumRoles, scrumRules, scrumStages };
+export { validateScrumConfig, scrumRoles, scrumRules, scrumStages, scrumMetrics };
+export type { ScrumMetrics };
 export type { ScrumConfig };
 export { scrumCeremonies, dailyReport, canDo } from "./ceremonies.ts";
 export type { DailyReport } from "./ceremonies.ts";
@@ -121,7 +123,7 @@ export function scrum(): Methodology<ScrumConfig> {
     },
     ceremonies: scrumCeremonies(scrum),
     rules: scrumRules(),
-    metrics: () => ({}),
+    metrics: (state) => ({ ...scrumMetrics(state) }),
     humanDefaults: { gates: ["sprint-review"] },
     afterComplete(state, _itemId, now) {
       const it = openIteration(state);
