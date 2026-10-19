@@ -100,6 +100,15 @@ Minor items deferred past 0.0.0-stage:
 - The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget ratchets down from 45238 B (spec target 40960 B).
 - Minor test gaps: retro duplicate-ref rejection, `writeAtomic` failure path, thin CLI usage and `decide` tests.
 
+## Development gate
+
+There is no hosted CI. A husky pre-commit hook runs the local gate on every commit
+(`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`); `pnpm run ci` adds the
+minified build, the dist identity check and the size ratchet, and `prepublishOnly` runs it
+before any publish. oxfmt and oxlint need Node ^20.19 or >=22.12 on the developer machine; the
+package itself supports Node >=18 (verified on ubuntu, macOS and Windows x Node 18/20/22
+before the hosted workflow was removed).
+
 ## Publishing
 
 For the owner. The `stage` dist-tag keeps `latest` free for 0.1.0:
