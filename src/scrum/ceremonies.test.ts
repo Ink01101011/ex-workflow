@@ -1,0 +1,473 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { init } from "../methodology.ts";
+import { addItem, getItem } from "../items.ts";
+import { next } from "../brief.ts";
+import { complete } from "../complete.ts";
+import { authorOf } from "../gates.ts";
+import { WorkflowError } from "../errors.ts";
+import { scrum } from "./index.ts";
+import { dailyReport } from "./ceremonies.ts";
+import type { Accounting, Handoff, WorkflowState } from "../types.ts";
+
+const T0 = "2026-10-19T00:00:00.000Z";
+const T1 = "2026-10-19T01:00:00.000Z";
+const config = {
+  sprintBudget: { tokens: 1000 },
+  productGoal: "ship v1",
+  definitionOfDone: [{ kind: "evidence", evidenceKind: "test-output" }],
+};
+const code = (e: unknown) => (e instanceof WorkflowError ? e.code : String(e));
+const m = scrum();
+const c = m.ceremonies;
+
+function backlog(): WorkflowState {
+  let { state } = init({ methodology: m, config, now: T0 });
+  state = addItem(
+    state,
+    { id: "A", title: "a", weight: 1, priority: 3, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = addItem(
+    state,
+    { id: "B", title: "b", weight: 2, priority: 2, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = addItem(
+    state,
+    { id: "C", title: "c", weight: 5, priority: 1, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  return state;
+}
+const h = (item: string, role = "developer", over: Partial<Handoff> = {}): Handoff => ({
+  item,
+  role,
+  produced: [{ kind: "test-output", ref: "ci" }],
+  notes: "",
+  do_not: [],
+  open_questions: [],
+  ...over,
+});
+const a = (item: string, tokens: number, role = "developer"): Accounting => ({
+  item,
+  role,
+  model: "haiku",
+  tokensIn: tokens / 2,
+  tokensOut: tokens / 2,
+  durationMs: 10,
+  startedAt: T0,
+  endedAt: T0,
+});
+
+test("refine edits items and splits them; priority change needs order-backlog (rule in Task 13; here capability check)", () => {
+  const s = backlog();
+  const r = c["refine"]!(s, {
+    by: "developer",
+    now: T0,
+    items: [{ id: "A", patch: { acceptance: ["ok", "fast"] } }],
+    split: [
+      {
+        from: "C",
+        into: [
+          { id: "C1", title: "c1", weight: 2, acceptance: ["ok"] },
+          { id: "C2", title: "c2", weight: 3, acceptance: ["ok"] },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(getItem(r.state, "A").acceptance, ["ok", "fast"]);
+  assert.equal(getItem(r.state, "C").status, "dropped");
+  assert.equal(getItem(r.state, "C1").parent, "C");
+  assert.equal(r.state.events.at(-1)!.type, "ceremony.refine");
+  assert.throws(
+    () =>
+      c["refine"]!(s, {
+        by: "scrum-master",
+        now: T0,
+        items: [{ id: "A", patch: { weight: 2 } }],
+      }),
+    (e) => code(e) === "missing-capability",
+  );
+});
+
+test("plan auto commits by priority until the token budget is full", () => {
+  const s = backlog();
+  // fallback 20000 tokens/weight is far above a 1000-token budget, so seed history: 100 tokens per weight via accounting on a done item
+  const seeded: WorkflowState = {
+    ...s,
+    items: {
+      ...s.items,
+      Z: {
+        id: "Z",
+        type: "task",
+        title: "z",
+        dependsOn: [],
+        weight: 1,
+        stage: "done",
+        status: "done",
+        acceptance: [],
+        evidence: [],
+        blockers: [],
+        transitions: [],
+      },
+    },
+    accounting: [a("Z", 100)],
+  };
+  const r = c["plan"]!(seeded, {
+    by: "scrum-master",
+    now: T0,
+    goal: "finish A and B",
+    items: "auto",
+  });
+  const it = r.state.iterations[0]!;
+  assert.equal(it.id, "S1");
+  assert.equal(it.goal, "finish A and B");
+  assert.deepEqual(it.committed, ["A", "B", "C"]); // 100/weight → A=100, B=200, C=500 → total 800 ≤ 1000
+  assert.equal(getItem(r.state, "A").stage, "sprint");
+  assert.equal(getItem(r.state, "A").iteration, "S1");
+  assert.equal(r.state.events.at(-1)!.type, "sprint.opened");
+  const tight = c["plan"]!(
+    { ...seeded, config: { ...config, sprintBudget: { tokens: 350 } } },
+    { by: "scrum-master", now: T0, goal: "g", items: "auto" },
+  );
+  assert.deepEqual(tight.state.iterations[0]!.committed, ["A", "B"]);
+});
+
+test("plan validates goal, capability and backlog exit policy", () => {
+  const s = backlog();
+  assert.throws(
+    () => c["plan"]!(s, { by: "scrum-master", now: T0, goal: "", items: ["A"] }),
+    (e) => code(e) === "invalid-input",
+  );
+  assert.throws(
+    () => c["plan"]!(s, { by: "developer", now: T0, goal: "g", items: ["A"] }),
+    (e) => code(e) === "missing-capability",
+  );
+  const noEstimate = addItem(s, { id: "D", title: "d", acceptance: ["ok"] }, "product-owner", T0);
+  assert.throws(
+    () => c["plan"]!(noEstimate, { by: "scrum-master", now: T0, goal: "g", items: ["D"] }),
+    (e) => code(e) === "policy-unmet",
+  );
+});
+
+test("daily reports status, blockers, budget and forecast", () => {
+  let s = c["plan"]!(backlog(), {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A", "B"],
+  }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(
+    s,
+    m,
+    h("A", "developer", { verdict: "blocked", notes: "waiting" }),
+    a("A", 100),
+    T0,
+  ).state;
+  const rep = dailyReport(s);
+  assert.equal(rep.sprint, "S1");
+  assert.equal(rep.byStatus.blocked, 1);
+  assert.equal(rep.byStatus.in_progress, 1);
+  assert.equal(rep.blockers[0]!.item, "A");
+  assert.equal(rep.spent.tokens, 100);
+  assert.deepEqual(rep.remaining, { tokens: 900 });
+  assert.equal(rep.remainingWeight, 3);
+  assert.equal(rep.raisedLessons, 0);
+  assert.equal(rep.velocity, null);
+  assert.equal(rep.forecast, "unknown");
+  const d = c["daily"]!(s, { by: "scrum-master", now: T1 });
+  assert.equal(d.state.events.at(-1)!.type, "daily");
+  assert.equal((d.state.events.at(-1)!.payload as { remainingWeight: number }).remainingWeight, 3);
+});
+
+test("review requires an approver, adds feedback to the backlog and closes the sprint", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(s, m, h("A"), a("A", 50), T0).state; // → review
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state; // reviewer dispatched (developer again is the only reviewer → assignRole must pick a different role)
+  assert.throws(
+    () => c["review"]!(s, { by: "scrum-master", now: T1, accepted: true, goalMet: true }),
+    (e) => code(e) === "gate-unmet",
+  );
+  const r = c["review"]!(s, {
+    by: "human",
+    now: T1,
+    accepted: true,
+    goalMet: true,
+    feedback: [{ id: "F1", title: "stakeholder ask", weight: 1, acceptance: ["ok"] }],
+  });
+  assert.equal(getItem(r.state, "F1").stage, "backlog");
+  assert.equal(r.state.iterations[0]!.outcome, "completed");
+  assert.ok(r.state.events.some((e) => e.type === "increment"));
+  assert.equal(r.state.events.at(-1)!.type, "sprint.closed");
+});
+
+test("retro appends lessons and may change the DoD for the next sprint", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  assert.throws(
+    () => c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }),
+    (e) => code(e) === "invalid-input",
+  ); // sprint still open
+  s = c["cancel"]!(s, { by: "product-owner", now: T1, reason: "goal obsolete" }).state;
+  assert.equal(s.iterations[0]!.outcome, "cancelled");
+  // a worker raised a lesson during the sprint; the retro adopts it as a working agreement, and dismisses another
+  s = {
+    ...s,
+    lessons: [
+      {
+        id: "L1",
+        at: T0,
+        text: "spec never named the DB",
+        scope: "spec",
+        status: "raised",
+        from: "developer",
+        item: "A",
+      },
+      {
+        id: "L2",
+        at: T0,
+        text: "flaky network in CI",
+        scope: "review",
+        status: "raised",
+        from: "developer",
+        item: "A",
+      },
+    ],
+  };
+  const r = c["retro"]!(s, {
+    by: "scrum-master",
+    now: T1,
+    lessons: [
+      { text: "estimate smaller", scope: "memory" },
+      {
+        text: "reviews must cover error paths",
+        scope: "review",
+        suggestedChange: {
+          kind: "dod",
+          policy: { kind: "custom", id: "error-paths", description: "error paths reviewed" },
+        },
+      },
+    ],
+    adopt: [
+      {
+        id: "L1",
+        suggestedChange: { kind: "agreement", text: "name the DB in every acceptance criterion" },
+      },
+    ],
+    dismiss: ["L2"],
+    dodChanges: [{ kind: "evidence", evidenceKind: "test-output" }, { kind: "no-open-blockers" }],
+  });
+  assert.equal(r.state.lessons.length, 4);
+  assert.equal(r.state.lessons.find((l) => l.id === "L1")!.status, "adopted");
+  assert.equal(r.state.lessons.find((l) => l.id === "L2")!.status, "dismissed");
+  assert.deepEqual(r.state.agreements, ["name the DB in every acceptance criterion"]);
+  assert.equal((r.state.config as { definitionOfDone: unknown[] }).definitionOfDone.length, 2); // dodChanges replaced wholesale after the adopted dod policy
+  assert.equal(r.state.stages.find((x) => x.id === "review")!.exitPolicy.length, 2);
+  const payload = r.state.events.at(-1)!.payload as {
+    adopted: string[];
+    dismissed: string[];
+    agreements: string[];
+  };
+  assert.deepEqual(payload.adopted, ["L3", "L4", "L1"]);
+  assert.deepEqual(payload.dismissed, ["L2"]);
+  assert.throws(
+    () => c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [], adopt: [{ id: "L9" }] }),
+    (e) => code(e) === "invalid-input",
+  );
+  assert.throws(
+    () => c["retro"]!(r.state, { by: "scrum-master", now: T1, lessons: [] }),
+    (e) => code(e) === "invalid-input",
+  ); // already retro'd
+  assert.throws(
+    () => c["cancel"]!(r.state, { by: "product-owner", now: T1, reason: "x" }),
+    (e) => code(e) === "invalid-input",
+  ); // nothing open
+  assert.throws(
+    () => c["cancel"]!(s, { by: "scrum-master", now: T1, reason: "x" }),
+    (e) => code(e) === "missing-capability",
+  );
+});
+
+test("commit and uncommit move items in and out of the open sprint", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = c["commit"]!(s, { by: "product-owner", now: T1, items: ["B"], goalImpact: "none" }).state;
+  assert.deepEqual(s.iterations[0]!.committed, ["A", "B"]);
+  assert.equal(getItem(s, "B").stage, "sprint");
+  s = c["uncommit"]!(s, { by: "product-owner", now: T1, items: ["B"], reason: "too big" }).state;
+  assert.deepEqual(s.iterations[0]!.committed, ["A"]);
+  assert.equal(getItem(s, "B").stage, "backlog");
+  assert.equal(getItem(s, "B").iteration, undefined);
+  assert.equal(getItem(s, "B").role, undefined);
+  assert.throws(
+    () => c["uncommit"]!(s, { by: "developer", now: T1, items: ["A"], reason: "x" }),
+    (e) => code(e) === "missing-capability",
+  );
+});
+
+test("commit rejects items already in the sprint or not in the backlog; uncommit rejects done items", () => {
+  const s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  assert.throws(
+    () => c["commit"]!(s, { by: "product-owner", now: T1, items: ["A"], goalImpact: "none" }),
+    (e) => code(e) === "invalid-input",
+  );
+  const busy = {
+    ...s,
+    items: { ...s.items, B: { ...s.items["B"]!, status: "in_progress" as const } },
+  };
+  assert.throws(
+    () => c["commit"]!(busy, { by: "product-owner", now: T1, items: ["B"], goalImpact: "none" }),
+    (e) => code(e) === "invalid-input",
+  );
+  assert.throws(
+    () => c["commit"]!(s, { by: "product-owner", now: T1, items: ["B", "B"], goalImpact: "none" }),
+    (e) => code(e) === "invalid-input",
+  );
+  const fin = { ...s, items: { ...s.items, A: { ...s.items["A"]!, status: "done" as const } } };
+  assert.throws(
+    () => c["uncommit"]!(fin, { by: "product-owner", now: T1, items: ["A"], reason: "x" }),
+    (e) => code(e) === "invalid-input",
+  );
+});
+
+test("an escalation across a sprint boundary does not deadlock the parent", () => {
+  const opts = { now: T0, fallbackTokensPerWeight: 10 };
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, opts).state;
+  s = complete(
+    s,
+    m,
+    h("A", "developer", { verdict: "escalate", open_questions: ["which DB?"] }),
+    a("A", 20),
+    T0,
+  ).state;
+  assert.equal(getItem(s, "A-q1").iteration, "S1");
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  const closed = s.events.at(-1)!.payload as { carryover: string[]; carriedQuestions: string[] };
+  assert.deepEqual(closed.carryover, ["A"]);
+  assert.deepEqual(closed.carriedQuestions, ["A-q1"]);
+  assert.equal(getItem(s, "A-q1").stage, "backlog");
+  assert.equal(getItem(s, "A-q1").iteration, undefined);
+  s = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+  s = c["refine"]!(s, {
+    by: "developer",
+    now: T1,
+    items: [{ id: "A", patch: { weight: 2 } }],
+  }).state;
+  s = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] }).state;
+  assert.equal(getItem(s, "A-q1").stage, "sprint");
+  assert.equal(getItem(s, "A-q1").iteration, "S2");
+  assert.deepEqual(s.iterations[1]!.committed, ["A"]);
+  s = next(s, m, opts).state;
+  assert.equal(getItem(s, "A-q1").status, "in_progress");
+  assert.equal(getItem(s, "A").status, "todo");
+  s = complete(
+    s,
+    m,
+    h("A-q1", "product-owner", { produced: [], notes: "use sqlite" }),
+    a("A-q1", 10, "product-owner"),
+    T1,
+  ).state;
+  s = next(s, m, opts).state;
+  assert.equal(getItem(s, "A").status, "in_progress");
+});
+
+test("commit brings the open questions of the committed items along", () => {
+  const opts = { now: T0, fallbackTokensPerWeight: 10 };
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = c["commit"]!(s, { by: "product-owner", now: T0, items: ["B"], goalImpact: "none" }).state;
+  s = next(s, m, opts).state;
+  s = complete(
+    s,
+    m,
+    h("B", "developer", { verdict: "escalate", open_questions: ["why?"] }),
+    a("B", 20),
+    T0,
+  ).state;
+  s = c["uncommit"]!(s, { by: "product-owner", now: T0, items: ["B"], reason: "x" }).state;
+  s = { ...s, items: { ...s.items, "B-q1": { ...s.items["B-q1"]!, stage: "backlog" } } };
+  s = c["commit"]!(s, { by: "product-owner", now: T1, items: ["B"], goalImpact: "none" }).state;
+  assert.equal(getItem(s, "B-q1").stage, "sprint");
+  assert.equal(getItem(s, "B-q1").iteration, "S1");
+  assert.deepEqual(s.iterations[0]!.committed, ["A", "B"]);
+});
+
+test("scrum-shaped rework: the reviewer's rework lands in the sprint and the developer stays the author", () => {
+  const opts = { now: T0, fallbackTokensPerWeight: 10 };
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, opts).state;
+  s = complete(s, m, h("A"), a("A", 20), T0).state;
+  assert.equal(getItem(s, "A").stage, "review");
+  assert.equal(getItem(s, "A").status, "review");
+  s = next(s, m, opts).state;
+  assert.equal(getItem(s, "A").role, "developer"); // the only reviewer
+  assert.equal(authorOf(s, getItem(s, "A")), "developer");
+  s = complete(
+    s,
+    m,
+    h("A", "developer", { verdict: "rework", notes: "add tests", produced: [] }),
+    a("A", 20),
+    T0,
+  ).state;
+  const item = getItem(s, "A");
+  assert.equal(item.stage, "sprint");
+  assert.equal(item.status, "todo");
+  assert.equal(item.role, undefined);
+  assert.equal(item.iteration, "S1");
+});
+
+test("retro rejects a lesson referenced twice and flags a DoD change", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = c["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state;
+  s = {
+    ...s,
+    lessons: [
+      {
+        id: "L1",
+        at: T0,
+        text: "t",
+        scope: "spec",
+        status: "raised",
+        from: "developer",
+        item: "A",
+      },
+    ],
+  };
+  assert.throws(
+    () =>
+      c["retro"]!(s, {
+        by: "scrum-master",
+        now: T1,
+        lessons: [],
+        adopt: [{ id: "L1" }],
+        dismiss: ["L1"],
+      }),
+    (e) => code(e) === "invalid-input",
+  );
+  assert.throws(
+    () =>
+      c["retro"]!(s, {
+        by: "scrum-master",
+        now: T1,
+        lessons: [],
+        adopt: [{ id: "L1" }, { id: "L1" }],
+      }),
+    (e) => code(e) === "invalid-input",
+  );
+  const plain = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [], adopt: [{ id: "L1" }] });
+  assert.equal((plain.state.events.at(-1)!.payload as { dodChanged: boolean }).dodChanged, false);
+  const changed = c["retro"]!(s, {
+    by: "scrum-master",
+    now: T1,
+    lessons: [],
+    dodChanges: [{ kind: "no-open-blockers" }],
+  });
+  assert.equal((changed.state.events.at(-1)!.payload as { dodChanged: boolean }).dodChanged, true);
+  assert.deepEqual(changed.state.stages.find((x) => x.id === "review")!.exitPolicy, [
+    { kind: "no-open-blockers" },
+  ]);
+});

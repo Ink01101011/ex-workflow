@@ -1,0 +1,52 @@
+{
+  "name": "ex-workflow",
+  "version": "0.1.0",
+  "description": "Methodology engine for AI teams: Scrum, Kanban and Waterfall as data-driven state machines on top of ex-flow",
+  "license": "MIT",
+  "type": "module",
+  "author": "Supakit Kitjaroen",
+  "repository": { "type": "git", "url": "git+https://github.com/Ink01101011/ex-workflow.git" },
+  "homepage": "https://github.com/Ink01101011/ex-workflow#readme",
+  "keywords": ["scrum", "kanban", "waterfall", "workflow", "orchestration", "ai-agents", "ex-flow"],
+  "packageManager": "pnpm@10.24.0",
+  "engines": { "node": ">=18" },
+  "sideEffects": false,
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "bin": { "exwf": "dist/cli/bin.cjs" },
+  "exports": {
+    ".": { "import": { "types": "./dist/index.d.ts", "default": "./dist/index.mjs" }, "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" } },
+    "./scrum": { "import": { "types": "./dist/scrum/index.d.ts", "default": "./dist/scrum/index.mjs" }, "require": { "types": "./dist/scrum/index.d.cts", "default": "./dist/scrum/index.cjs" } },
+    "./adapters": { "import": { "types": "./dist/adapters/index.d.ts", "default": "./dist/adapters/index.mjs" }, "require": { "types": "./dist/adapters/index.d.cts", "default": "./dist/adapters/index.cjs" } },
+    "./cli": { "import": { "types": "./dist/cli/index.d.ts", "default": "./dist/cli/index.mjs" }, "require": { "types": "./dist/cli/index.d.cts", "default": "./dist/cli/index.cjs" } },
+    "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.mjs" }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "build": "tsup",
+    "minify": "tsup --minify",
+    "lint": "oxlint src test",
+    "format": "oxfmt src test",
+    "format:check": "oxfmt --check src test",
+    "typecheck": "tsc --noEmit",
+    "size": "node scripts/size.mjs",
+    "check:dist": "node scripts/check-dist.mjs && node scripts/check-exports.mjs",
+    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm minify && pnpm check:dist && pnpm size",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepublishOnly": "pnpm run ci"
+  },
+  "dependencies": {
+    "ex-flow": "^1.1.0",
+    "exsorted": "^1.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "oxfmt": "^0.45.0",
+    "oxlint": "^1.19.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
