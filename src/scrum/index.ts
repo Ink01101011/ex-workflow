@@ -6,9 +6,10 @@ import type { CoreTerm, Methodology, PlannerOptions, WorkItem, WorkflowState } f
 import { scrumCeremonies } from "./ceremonies.ts";
 import { validateScrumConfig, type ScrumConfig } from "./config.ts";
 import { scrumRoles } from "./roles.ts";
+import { scrumRules } from "./rules.ts";
 import { scrumStages } from "./stages.ts";
 
-export { validateScrumConfig, scrumRoles, scrumStages };
+export { validateScrumConfig, scrumRoles, scrumRules, scrumStages };
 export type { ScrumConfig };
 export { scrumCeremonies, dailyReport, canDo } from "./ceremonies.ts";
 export type { DailyReport } from "./ceremonies.ts";
@@ -119,7 +120,7 @@ export function scrum(): Methodology<ScrumConfig> {
       ];
     },
     ceremonies: scrumCeremonies(scrum),
-    rules: [],
+    rules: scrumRules(),
     metrics: () => ({}),
     humanDefaults: { gates: ["sprint-review"] },
     afterComplete(state, _itemId, now) {
