@@ -27,9 +27,11 @@ const measured = {
   "core+scrum": statSync(".size-measure/measure.mjs").size,
 };
 const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+const NOTE =
+  "budget set at measured size on 2026-10-19 (owner decision); spec target was 40960; ratchets down only";
 const budgets = {};
 for (const k of Object.keys(measured)) {
-  budgets[k] = k === "core+scrum" ? TARGET : (current[k] ?? measured[k]);
+  budgets[k] = current[k] ?? (k === "core+scrum" ? TARGET : measured[k]);
 }
 
 let failed = false;
@@ -38,12 +40,12 @@ for (const [k, size] of Object.entries(measured)) {
   if (!ok) failed = true;
   console.log(`${ok ? "ok  " : "FAIL"} ${k} ${size} B (budget ${budgets[k]} B)`);
 }
-if (process.argv.includes("--write")) {
-  const out = { ...budgets };
-  if (measured["core+scrum"] > TARGET) {
-    out.measured = { "core+scrum": measured["core+scrum"] };
-    out.note = "measured 2026-10-19; budget is the spec target, measurement exceeds it";
-  }
+if (process.argv.includes("--write") && !failed) {
+  // ratchet: a stored budget may only be lowered, never raised
+  const out = {};
+  for (const k of Object.keys(measured)) out[k] = Math.min(budgets[k], measured[k]);
+  out.measured = { ...measured };
+  out.note = NOTE;
   writeFileSync(file, JSON.stringify(out, null, 2) + "\n");
 }
 if (failed) {
