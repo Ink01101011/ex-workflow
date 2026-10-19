@@ -8,6 +8,7 @@ import {
   clearRole,
   getItem,
   moveItem,
+  patchItem,
   raiseBlocker,
   stageOf,
 } from "./items.ts";
@@ -250,10 +251,7 @@ export function complete(
     if (parent.iteration !== undefined) q.iteration = parent.iteration;
     s = addItem(s, q, role, at);
     s = moveItem(s, id, { stage: pulledFrom, status: "todo" }, role, at);
-    s = {
-      ...s,
-      items: { ...s.items, [id]: { ...s.items[id]!, dependsOn: [...s.items[id]!.dependsOn, qid] } },
-    };
+    s = patchItem(s, id, (x) => ({ ...x, dependsOn: [...x.dependsOn, qid] }));
     s = appendEvent(s, "item.escalated", role, { id, question: qid, to: thinker.id }, at);
   }
 

@@ -33,13 +33,17 @@ export function isTerminalStage(state: WorkflowState, stageId: string): boolean 
   return state.stages[state.stages.length - 1]?.id === stageId;
 }
 
+function putItem(state: WorkflowState, item: WorkItem): WorkflowState {
+  return { ...state, items: { ...state.items, [item.id]: item } };
+}
+
 /** Replace one item with `fn(item)`; no event. */
 export function patchItem(
   state: WorkflowState,
   id: string,
   fn: (item: WorkItem) => WorkItem,
 ): WorkflowState {
-  return { ...state, items: { ...state.items, [id]: fn(getItem(state, id)) } };
+  return putItem(state, fn(getItem(state, id)));
 }
 
 /** Drop optional fields (iteration, role, ...) from one item; no event. */
@@ -122,7 +126,7 @@ export function addItem(
     blockers: [],
     transitions: [],
   };
-  const next = { ...state, items: { ...state.items, [item.id]: item } };
+  const next = putItem(state, item);
   return appendEvent(
     next,
     "item.added",
@@ -171,7 +175,7 @@ export function editItem(
     );
   const updated: WorkItem = { ...item };
   for (const k of changed) (updated as unknown as Record<string, unknown>)[k] = patch[k];
-  const next = { ...state, items: { ...state.items, [id]: updated } };
+  const next = putItem(state, updated);
   return appendEvent(next, "item.edited", by, { id, changed }, now);
 }
 
@@ -215,7 +219,7 @@ export function moveItem(
       },
     ],
   };
-  const next = { ...state, items: { ...state.items, [id]: updated } };
+  const next = putItem(state, updated);
   return appendEvent(
     next,
     "item.transition",
@@ -238,7 +242,7 @@ export function addEvidence(
   const item = getItem(state, id);
   const at = nowOf(now);
   const updated: WorkItem = { ...item, evidence: [...item.evidence, { ...evidence, at }] };
-  const next = { ...state, items: { ...state.items, [id]: updated } };
+  const next = putItem(state, updated);
   return appendEvent(
     next,
     "item.evidence",
@@ -276,7 +280,7 @@ export function raiseBlocker(
             },
           ],
   };
-  const next = { ...state, items: { ...state.items, [id]: updated } };
+  const next = putItem(state, updated);
   return appendEvent(next, "blocker.raised", by, { id, blocker: blockerId, reason, owner }, at);
 }
 
@@ -342,7 +346,7 @@ export function clearBlocker(
           },
         ],
   };
-  const next = { ...state, items: { ...state.items, [id]: updated } };
+  const next = putItem(state, updated);
   return appendEvent(next, "blocker.cleared", by, { id, blocker: blockerId }, at);
 }
 

@@ -14,7 +14,7 @@ import {
 import { applyAction } from "../methodology.ts";
 import { assertPolicies } from "../policies.ts";
 import { openIteration } from "../planner.ts";
-import { hasCapability, roleOf } from "../roles.ts";
+import { approverIds, hasCapability, roleOf } from "../roles.ts";
 import { appendEvent, nowOf } from "../state.ts";
 import type {
   Budget,
@@ -188,6 +188,15 @@ function attachQuestions(
     s = patchItem(s, q.id, (it) => ({ ...it, iteration: iterationId }));
   }
   return s;
+}
+
+/** Set the Definition of Done in the config and on the review stage. */
+function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
+  return {
+    ...state,
+    config: { ...configOf(state), definitionOfDone: policies },
+    stages: state.stages.map((st) => (st.id === "review" ? { ...st, exitPolicy: policies } : st)),
+  };
 }
 
 function selectAuto(state: WorkflowState, budget: Budget): string[] {
@@ -396,13 +405,8 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
   const review: Ceremony = (state, input) => {
     const it = openIteration(state);
     if (!it) fail("invalid-input", "no open sprint to review", "run the plan ceremony first");
-    const role = roleOf(state, input.by);
-    const mayApprove =
-      input.by === "human" || (!!role && role.canApprove.includes("sprint-review"));
-    if (!mayApprove) {
-      const approvers = Object.values(state.roles)
-        .filter((r) => r.canApprove.includes("sprint-review"))
-        .map((r) => r.id);
+    const approvers = approverIds(state, "sprint-review");
+    if (input.by !== "human" && !approvers.includes(input.by)) {
       fail(
         "gate-unmet",
         `"${input.by}" may not accept the Sprint Review`,
@@ -502,15 +506,8 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         } else if (c.kind === "dod") {
           const cur = configOf(s).definitionOfDone;
           if (!cur.some((p) => JSON.stringify(p) === JSON.stringify(c.policy))) {
-            const nextDod = [...cur, c.policy];
             dodChanged = true;
-            s = {
-              ...s,
-              config: { ...configOf(s), definitionOfDone: nextDod },
-              stages: s.stages.map((st) =>
-                st.id === "review" ? { ...st, exitPolicy: nextDod } : st,
-              ),
-            };
+            s = setDod(s, [...cur, c.policy]);
           }
         } else if (c.kind === "backlog") {
           s = addItem(
@@ -560,11 +557,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         };
       if (dod) {
         dodChanged = true;
-        s = {
-          ...s,
-          config: { ...configOf(s), definitionOfDone: dod },
-          stages: s.stages.map((st) => (st.id === "review" ? { ...st, exitPolicy: dod } : st)),
-        };
+        s = setDod(s, dod);
       }
       return appendEvent(
         s,

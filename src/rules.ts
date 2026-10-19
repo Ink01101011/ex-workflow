@@ -1,5 +1,5 @@
 import { authorOf } from "./gates.ts";
-import { separationLost } from "./roles.ts";
+import { approverIds, separationLost } from "./roles.ts";
 import type { Action, Handoff, Methodology, Rule, Violation } from "./types.ts";
 
 export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilities">): Rule[] {
@@ -30,9 +30,7 @@ export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilitie
       const gate = state.stages.find((s) => s.id === item.stage)?.gate;
       if (!gate || !gate.requires.some((q) => q !== "human")) return [];
       if (authorOf(state, item) !== handoff.role) return [];
-      const others = Object.values(state.roles)
-        .filter((r) => r.id !== handoff.role && r.canApprove.includes(gate.id))
-        .map((r) => r.id);
+      const others = approverIds(state, gate.id, undefined, handoff.role);
       return [
         {
           rule: "conflict-of-interest",

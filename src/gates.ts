@@ -1,5 +1,6 @@
 import { fail } from "./errors.ts";
 import { advanceItem, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
+import { approverIds } from "./roles.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Gate,
@@ -39,18 +40,6 @@ export function authorOf(state: WorkflowState, item: WorkItem): string | undefin
   return undefined;
 }
 
-/** Roles that hold `cap` and may approve `gate` (optionally excluding one id). */
-function approverIds(state: WorkflowState, gate: Gate, cap: string, except?: string): string[] {
-  return Object.values(state.roles)
-    .filter(
-      (r) =>
-        r.id !== except &&
-        (r.capabilities as readonly string[]).includes(cap) &&
-        r.canApprove.includes(gate.id),
-    )
-    .map((r) => r.id);
-}
-
 export function checkGate(
   state: WorkflowState,
   item: WorkItem,
@@ -77,20 +66,20 @@ export function checkGate(
       if (by !== "human") needsHuman = true;
       continue;
     }
-    const ok = approverIds(state, gate, req.capability).includes(by);
+    const ok = approverIds(state, gate.id, req.capability).includes(by);
     if (!ok) {
       violations.push({
         rule: "gate:capability",
         severity: "error",
         item: item.id,
         message: `"${by}" may not approve gate "${gate.id}" (needs capability "${req.capability}" and canApprove "${gate.id}")`,
-        fix: `approve as one of: ${approverIds(state, gate, req.capability).join(", ") || "(no role qualifies; register one)"}`,
+        fix: `approve as one of: ${approverIds(state, gate.id, req.capability).join(", ") || "(no role qualifies; register one)"}`,
       });
       continue;
     }
     const author = authorOf(state, item);
     if (author !== undefined && author === by) {
-      const others = approverIds(state, gate, req.capability, by);
+      const others = approverIds(state, gate.id, req.capability, by);
       violations.push({
         rule: "conflict-of-interest",
         severity: "error",
@@ -160,7 +149,7 @@ export function decide(
         "gate-unmet",
         `"${by}" may not decide gate "${gate.id}" on "${item0.id}"`,
         `decide as one of: human${gate.requires
-          .flatMap((q) => (q === "human" ? [] : approverIds(state, gate, q.capability)))
+          .flatMap((q) => (q === "human" ? [] : approverIds(state, gate.id, q.capability)))
           .map((r) => `, ${r}`)
           .join("")}`,
         { items: [item0.id], rule: "gate" },
