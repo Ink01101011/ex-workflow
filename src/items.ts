@@ -73,6 +73,7 @@ export function addItem(
   const stageId = input.stage ?? firstStage.id;
   stageOf(state, stageId);
   assertKnownItems(state, input.dependsOn ?? [], `item "${input.id}".dependsOn`);
+  if (input.affects) assertKnownItems(state, input.affects, `item "${input.id}".affects`);
   if (input.parent !== undefined)
     assertKnownItems(state, [input.parent], `item "${input.id}".parent`);
   if (input.role !== undefined && !state.roles[input.role])
@@ -125,6 +126,7 @@ export function editItem(
 ): WorkflowState {
   const item = getItem(state, id);
   if (patch.dependsOn) assertKnownItems(state, patch.dependsOn, `item "${id}".dependsOn`);
+  if (patch.affects) assertKnownItems(state, patch.affects, `item "${id}".affects`);
   if (patch.parent !== undefined) assertKnownItems(state, [patch.parent], `item "${id}".parent`);
   if (patch.role !== undefined && !state.roles[patch.role])
     fail(

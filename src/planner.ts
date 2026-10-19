@@ -26,7 +26,7 @@ export function assignRole(state: WorkflowState, item: WorkItem): Role {
     return r;
   }
   if (item.status === "review") {
-    const author = authorOf(item);
+    const author = authorOf(state, item);
     const reviewers = rolesWith(state, "review").filter((r) => r.id !== author);
     const r = reviewers[0];
     if (!r)

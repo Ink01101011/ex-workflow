@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
 import { addEvidence, addItem, getItem, moveItem } from "./items.ts";
-import { checkGate, decide, raisePending } from "./gates.ts";
+import { authorOf, checkGate, decide, raisePending } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
 import type { Gate, Role, Stage } from "./types.ts";
 
@@ -114,4 +114,11 @@ test("human gates go to pending and decide resolves them", () => {
     () => decide(s, "p9", "approve", "x", ""),
     (e: unknown) => e instanceof WorkflowError && e.code === "unknown-pending",
   );
+});
+
+test("a reviewer dispatched into the gated stage is not the author; the earlier-stage worker is", () => {
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r1", by: "qa" }, T0);
+  s = moveItem(s, "A", { stage: "verify", status: "in_progress" }, "qa", T0);
+  assert.equal(authorOf(s, getItem(s, "A")), "dev");
+  assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "qa"), { outcome: "pass" });
 });

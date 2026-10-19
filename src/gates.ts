@@ -1,15 +1,37 @@
 import { fail } from "./errors.ts";
 import { getItem, isTerminalStage, moveItem, nextStageOf, raiseBlocker } from "./items.ts";
 import { appendEvent, nowOf } from "./state.ts";
-import type { Gate, PendingHuman, Violation, WorkItem, WorkflowState } from "./types.ts";
+import type {
+  Gate,
+  PendingHuman,
+  Transition,
+  Violation,
+  WorkItem,
+  WorkflowState,
+} from "./types.ts";
 
 export type GateResult =
   | { outcome: "pass" }
   | { outcome: "human" }
   | { outcome: "fail"; violations: Violation[] };
 
-/** Role id that last moved the item into in_progress; undefined if never. */
-export function authorOf(item: WorkItem): string | undefined {
+/** Last in_progress dispatch made from a stage that comes STRICTLY BEFORE the item's current stage in `state.stages` order (unknown stage ids count as not-before). */
+export function lastDispatchBefore(state: WorkflowState, item: WorkItem): Transition | undefined {
+  const order = new Map(state.stages.map((s, i) => [s.id, i] as const));
+  const here = order.get(item.stage);
+  if (here === undefined) return undefined;
+  for (let i = item.transitions.length - 1; i >= 0; i--) {
+    const t = item.transitions[i]!;
+    const from = order.get(t.from.stage);
+    if (t.to.status === "in_progress" && from !== undefined && from < here) return t;
+  }
+  return undefined;
+}
+
+/** Role that did the work the gate guards: the last dispatch made from a stage strictly before the current one (so a reviewer dispatched into the gated stage is not its author); else the last dispatch of any stage; undefined if never dispatched. */
+export function authorOf(state: WorkflowState, item: WorkItem): string | undefined {
+  const before = lastDispatchBefore(state, item);
+  if (before) return before.by;
   for (let i = item.transitions.length - 1; i >= 0; i--) {
     const t = item.transitions[i]!;
     if (t.to.status === "in_progress") return t.by;
@@ -65,7 +87,7 @@ export function checkGate(
       });
       continue;
     }
-    const author = authorOf(item);
+    const author = authorOf(state, item);
     if (author !== undefined && author === by) {
       const others = Object.values(state.roles)
         .filter(

@@ -47,6 +47,7 @@ export function createState(input: CreateStateInput): WorkflowState {
     accounting: [],
     pending: [],
     lessons: [],
+    agreements: [],
   };
 }
 

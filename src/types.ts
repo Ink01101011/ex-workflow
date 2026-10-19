@@ -58,6 +58,8 @@ export interface WorkItem {
   iteration?: string;
   traces?: string[];
   tags?: string[];
+  /** bug / change-request: ids of items whose finished work this invalidates */
+  affects?: string[];
 }
 
 /** Fields a caller supplies to addItem; the rest are defaulted. */
@@ -141,7 +143,7 @@ export interface Role {
 }
 
 // ---- handoff, accounting, events ------------------------------------
-export type Verdict = "done" | "blocked" | "needs-review" | "escalate";
+export type Verdict = "done" | "blocked" | "needs-review" | "rework" | "escalate";
 export interface Handoff {
   item: string;
   role: string;
@@ -150,6 +152,10 @@ export interface Handoff {
   do_not: string[];
   open_questions: string[];
   verdict?: Verdict;
+  /** new work discovered while doing this item; lands in the FIRST stage (backlog), never in the iteration */
+  follow_ups?: NewItem[];
+  /** raised by the worker the moment it happens, e.g. "spec was vague here" */
+  lessons?: Array<{ text: string; scope: Lesson["scope"] }>;
 }
 
 export interface Accounting {
@@ -180,11 +186,20 @@ export interface PendingHuman {
   raisedAt: string;
 }
 
+export type LessonChange =
+  | { kind: "agreement"; text: string } // a working agreement every future brief carries as an invariant
+  | { kind: "dod"; policy: Policy } // tighten the Definition of Done
+  | { kind: "backlog"; item: NewItem } // work for the backlog
+  | { kind: "skill"; note: string }; // for the host: change a role prompt / memory
 export interface Lesson {
+  id: string; // L<n>
   at: string;
   text: string;
-  scope: "policy" | "skill" | "memory";
-  suggestedChange?: string;
+  scope: "policy" | "skill" | "memory" | "spec" | "review";
+  status: "raised" | "adopted" | "dismissed";
+  from?: string; // role that raised it
+  item?: string; // item it was raised on
+  suggestedChange?: LessonChange;
 }
 
 export interface Phase {
@@ -218,6 +233,8 @@ export interface WorkflowState {
   accounting: Accounting[];
   pending: PendingHuman[];
   lessons: Lesson[];
+  /** adopted working agreements; synthesizeBrief appends them to invariants */
+  agreements: string[];
 }
 
 // ---- actions, rules, methodology -------------------------------------
@@ -251,6 +268,16 @@ export interface Brief {
   do_not: string[];
   acceptance: string[];
   upstream: Array<{ item: string; produced: Handoff["produced"]; notes: string }>;
+  /** earlier completions of THIS item (rework feedback) */
+  priorHandoffs: Array<{
+    role: string;
+    verdict: Verdict;
+    notes: string;
+    produced: Handoff["produced"];
+    at: string;
+  }>;
+  /** open bug/change-request items whose `affects` touches this item or its dependsOn */
+  relatedBugs: Array<{ id: string; title: string; affects: string[] }>;
   budgetRemaining: Budget;
   gateAhead?: Gate;
 }
