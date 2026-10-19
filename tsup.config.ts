@@ -6,6 +6,7 @@ export default defineConfig({
     types: "src/types.ts",
     "scrum/index": "src/scrum/index.ts",
     "cli/index": "src/cli/index.ts",
+    "cli/bin": "src/cli/bin.ts",
   },
   format: ["esm", "cjs"],
   dts: true,
