@@ -1,5 +1,5 @@
 import { fail } from "./errors.ts";
-import { getItem, isTerminalStage, moveItem, nextStageOf, raiseBlocker } from "./items.ts";
+import { advanceItem, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Gate,
@@ -39,6 +39,18 @@ export function authorOf(state: WorkflowState, item: WorkItem): string | undefin
   return undefined;
 }
 
+/** Roles that hold `cap` and may approve `gate` (optionally excluding one id). */
+function approverIds(state: WorkflowState, gate: Gate, cap: string, except?: string): string[] {
+  return Object.values(state.roles)
+    .filter(
+      (r) =>
+        r.id !== except &&
+        (r.capabilities as readonly string[]).includes(cap) &&
+        r.canApprove.includes(gate.id),
+    )
+    .map((r) => r.id);
+}
+
 export function checkGate(
   state: WorkflowState,
   item: WorkItem,
@@ -65,38 +77,20 @@ export function checkGate(
       if (by !== "human") needsHuman = true;
       continue;
     }
-    const role = state.roles[by];
-    const ok =
-      role !== undefined &&
-      (role.capabilities as readonly string[]).includes(req.capability) &&
-      role.canApprove.includes(gate.id);
+    const ok = approverIds(state, gate, req.capability).includes(by);
     if (!ok) {
-      const candidates = Object.values(state.roles)
-        .filter(
-          (r) =>
-            (r.capabilities as readonly string[]).includes(req.capability) &&
-            r.canApprove.includes(gate.id),
-        )
-        .map((r) => r.id);
       violations.push({
         rule: "gate:capability",
         severity: "error",
         item: item.id,
         message: `"${by}" may not approve gate "${gate.id}" (needs capability "${req.capability}" and canApprove "${gate.id}")`,
-        fix: `approve as one of: ${candidates.join(", ") || "(no role qualifies; register one)"}`,
+        fix: `approve as one of: ${approverIds(state, gate, req.capability).join(", ") || "(no role qualifies; register one)"}`,
       });
       continue;
     }
     const author = authorOf(state, item);
     if (author !== undefined && author === by) {
-      const others = Object.values(state.roles)
-        .filter(
-          (r) =>
-            r.id !== by &&
-            (r.capabilities as readonly string[]).includes(req.capability) &&
-            r.canApprove.includes(gate.id),
-        )
-        .map((r) => r.id);
+      const others = approverIds(state, gate, req.capability, by);
       violations.push({
         rule: "conflict-of-interest",
         severity: "error",
@@ -116,7 +110,7 @@ export function raisePending(
   now?: string,
 ): WorkflowState {
   const at = nowOf(now);
-  const id = `p${state.pending.length + 1 + state.events.filter((e) => e.type === "pending.decided").length}`;
+  const id = `p${state.events.filter((e) => e.type === "pending.raised").length + 1}`;
   const entry: PendingHuman = { ...pending, id, raisedAt: at };
   let next: WorkflowState = { ...state, pending: [...state.pending, entry] };
   if (pending.item) {
@@ -141,6 +135,12 @@ export function decide(
   note: string,
   now?: string,
 ): WorkflowState {
+  if (decision !== "approve" && decision !== "reject")
+    fail(
+      "invalid-input",
+      `decision must be "approve" or "reject" (got ${JSON.stringify(decision)})`,
+      "pass approve or reject",
+    );
   const entry = state.pending.find((p) => p.id === pendingId);
   if (!entry)
     fail(
@@ -148,6 +148,24 @@ export function decide(
       `no pending decision "${pendingId}"`,
       `open decisions: ${state.pending.map((p) => p.id).join(", ") || "(none)"}`,
     );
+  const item0 = entry.kind === "gate" && entry.item ? getItem(state, entry.item) : undefined;
+  const gate =
+    item0 &&
+    (state.stages.find((s) => entry.gate !== undefined && s.gate?.id === entry.gate)?.gate ??
+      state.stages.find((s) => s.id === item0.stage)?.gate);
+  if (item0 && gate && by !== "human") {
+    const res = gate.requires.includes("human") ? undefined : checkGate(state, item0, gate, by);
+    if (res?.outcome !== "pass")
+      fail(
+        "gate-unmet",
+        `"${by}" may not decide gate "${gate.id}" on "${item0.id}"`,
+        `decide as one of: human${gate.requires
+          .flatMap((q) => (q === "human" ? [] : approverIds(state, gate, q.capability)))
+          .map((r) => `, ${r}`)
+          .join("")}`,
+        { items: [item0.id], rule: "gate" },
+      );
+  }
   const at = nowOf(now);
   let next: WorkflowState = { ...state, pending: state.pending.filter((p) => p.id !== pendingId) };
   next = appendEvent(
@@ -157,42 +175,26 @@ export function decide(
     { id: pendingId, decision, note, item: entry.item ?? null, gate: entry.gate ?? null },
     at,
   );
-  if (entry.kind === "gate" && entry.item) {
-    const item = getItem(next, entry.item);
-    const stage = next.stages.find((s) => s.id === item.stage);
-    const gate = stage?.gate;
+  if (item0) {
+    const id = item0.id;
+    const gateId = entry.gate ?? gate?.id ?? null;
     if (decision === "approve") {
-      const to = nextStageOf(next, item.stage);
-      if (!to || isTerminalStage(next, to.id))
-        next = moveItem(next, item.id, { stage: to?.id ?? item.stage, status: "done" }, by, at);
-      else next = moveItem(next, item.id, { stage: to.id, status: "todo" }, by, at);
-      next = appendEvent(
-        next,
-        "gate.passed",
-        by,
-        { item: item.id, gate: entry.gate ?? gate?.id ?? null },
-        at,
-      );
+      next = advanceItem(next, id, by, false, at);
+      next = appendEvent(next, "gate.passed", by, { item: id, gate: gateId }, at);
     } else {
       const onFail = gate?.onFail ?? { action: "block" as const };
       if (onFail.action === "return-to")
-        next = moveItem(next, item.id, { stage: onFail.stage, status: "todo" }, by, at);
+        next = clearRole(moveItem(next, id, { stage: onFail.stage, status: "todo" }, by, at), id);
       else
         next = raiseBlocker(
           next,
-          item.id,
-          `gate "${entry.gate ?? gate?.id ?? "?"}" rejected: ${note || "no reason given"}`,
+          id,
+          `gate "${gateId ?? "?"}" rejected: ${note || "no reason given"}`,
           by,
           by,
           at,
         );
-      next = appendEvent(
-        next,
-        "gate.failed",
-        by,
-        { item: item.id, gate: entry.gate ?? gate?.id ?? null, note },
-        at,
-      );
+      next = appendEvent(next, "gate.failed", by, { item: id, gate: gateId, note }, at);
     }
   }
   return next;

@@ -4,10 +4,10 @@ import { checkGate, lastDispatchBefore, raisePending } from "./gates.ts";
 import {
   addEvidence,
   addItem,
+  advanceItem,
+  clearRole,
   getItem,
-  isTerminalStage,
   moveItem,
-  nextStageOf,
   raiseBlocker,
   stageOf,
 } from "./items.ts";
@@ -85,28 +85,6 @@ function pulledFromStage(item: WorkItem): string {
 /** Stage a reworked item returns to: the from.stage of the last dispatch made from a stage strictly before the current one (so a reviewer's rework lands where the work was pulled from), else the plain pulled-from stage. */
 function reworkStage(state: WorkflowState, item: WorkItem): string {
   return lastDispatchBefore(state, item)?.from.stage ?? pulledFromStage(item);
-}
-
-/** Entering a new stage is a new assignment: the role that finished the previous stage is cleared so the planner picks the right one (a reviewer, not the author). */
-function clearRole(state: WorkflowState, itemId: string): WorkflowState {
-  const { role: _r, ...rest } = state.items[itemId]!;
-  return { ...state, items: { ...state.items, [itemId]: rest as WorkItem } };
-}
-
-function advance(
-  state: WorkflowState,
-  itemId: string,
-  by: string,
-  wantsReview: boolean,
-  now: string,
-): WorkflowState {
-  const item = getItem(state, itemId);
-  const to = nextStageOf(state, item.stage);
-  if (!to) return moveItem(state, itemId, { status: "done" }, by, now);
-  if (isTerminalStage(state, to.id))
-    return moveItem(state, itemId, { stage: to.id, status: "done" }, by, now);
-  const status = wantsReview || to.id === "review" ? "review" : "todo";
-  return clearRole(moveItem(state, itemId, { stage: to.id, status }, by, now), itemId);
 }
 
 export function complete(
@@ -209,7 +187,7 @@ export function complete(
         );
       } else {
         s = appendEvent(
-          advance(s, id, role, verdict === "needs-review", at),
+          advanceItem(s, id, role, verdict === "needs-review", at),
           "gate.passed",
           role,
           { item: id, gate: stage.gate.id },
@@ -217,7 +195,7 @@ export function complete(
         );
       }
     } else {
-      s = advance(s, id, role, verdict === "needs-review", at);
+      s = advanceItem(s, id, role, verdict === "needs-review", at);
     }
   } else if (verdict === "blocked") {
     s = raiseBlocker(s, id, handoff.notes || "blocked by worker", role, role, at);

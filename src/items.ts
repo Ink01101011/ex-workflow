@@ -31,8 +31,25 @@ export function isTerminalStage(state: WorkflowState, stageId: string): boolean 
   return state.stages[state.stages.length - 1]?.id === stageId;
 }
 
+const RESERVED_IDS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Ids become object keys and file names: letters, digits, `.`, `_`, `-`; no `..`, no prototype names. */
+export function assertId(id: unknown, what: string): void {
+  if (
+    typeof id !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) ||
+    id.includes("..") ||
+    RESERVED_IDS.has(id)
+  )
+    fail(
+      "invalid-input",
+      `${what} ${JSON.stringify(id)} is not a valid id`,
+      "use letters, digits, - _ . (e.g. CART-12)",
+    );
+}
+
 export function getItem(state: WorkflowState, id: string): WorkItem {
-  const it = state.items[id];
+  const it = Object.hasOwn(state.items, id) ? state.items[id] : undefined;
   if (!it)
     fail(
       "unknown-item",
@@ -44,7 +61,7 @@ export function getItem(state: WorkflowState, id: string): WorkItem {
 }
 
 function assertKnownItems(state: WorkflowState, ids: string[], what: string): void {
-  const missing = ids.filter((d) => !state.items[d]);
+  const missing = ids.filter((d) => !Object.hasOwn(state.items, d));
   if (missing.length)
     fail(
       "unknown-item",
@@ -60,7 +77,8 @@ export function addItem(
   by: string,
   now?: string,
 ): WorkflowState {
-  if (state.items[input.id])
+  assertId(input.id, "item id");
+  if (Object.hasOwn(state.items, input.id))
     fail(
       "duplicate-item",
       `item "${input.id}" already exists`,
@@ -76,7 +94,7 @@ export function addItem(
   if (input.affects) assertKnownItems(state, input.affects, `item "${input.id}".affects`);
   if (input.parent !== undefined)
     assertKnownItems(state, [input.parent], `item "${input.id}".parent`);
-  if (input.role !== undefined && !state.roles[input.role])
+  if (input.role !== undefined && !Object.hasOwn(state.roles, input.role))
     fail(
       "unknown-role",
       `role "${input.role}" does not exist`,
@@ -128,7 +146,7 @@ export function editItem(
   if (patch.dependsOn) assertKnownItems(state, patch.dependsOn, `item "${id}".dependsOn`);
   if (patch.affects) assertKnownItems(state, patch.affects, `item "${id}".affects`);
   if (patch.parent !== undefined) assertKnownItems(state, [patch.parent], `item "${id}".parent`);
-  if (patch.role !== undefined && !state.roles[patch.role])
+  if (patch.role !== undefined && !Object.hasOwn(state.roles, patch.role))
     fail(
       "unknown-role",
       `role "${patch.role}" does not exist`,
@@ -290,12 +308,18 @@ export function clearBlocker(
   const prev = lastTransitionTo(item, "blocked")?.from.status ?? "todo";
   let toStage = item.stage;
   let toStatus: ItemStatus = prev;
+  let dropRole = false;
   if (prev === "in_progress") {
     toStatus = "todo";
     toStage = lastTransitionTo(item, "in_progress")?.from.stage ?? item.stage;
+  } else if (prev === "awaiting_human") {
+    // a rejected human gate: the work is re-dispatched in the current stage
+    toStatus = stageOf(state, item.stage).review ? "review" : "todo";
+    dropRole = true;
   }
+  const { role: _r, ...noRole } = item;
   const updated: WorkItem = {
-    ...item,
+    ...(dropRole && !stillBlocked ? (noRole as WorkItem) : item),
     blockers,
     stage: stillBlocked ? item.stage : toStage,
     status: stillBlocked ? "blocked" : toStatus,
@@ -313,4 +337,27 @@ export function clearBlocker(
   };
   const next = { ...state, items: { ...state.items, [id]: updated } };
   return appendEvent(next, "blocker.cleared", by, { id, blocker: blockerId }, at);
+}
+
+/** Entering a new stage is a new assignment: the role that finished the previous stage is cleared so the planner picks the right one (a reviewer, not the author). */
+export function clearRole(state: WorkflowState, itemId: string): WorkflowState {
+  const { role: _r, ...rest } = state.items[itemId]!;
+  return { ...state, items: { ...state.items, [itemId]: rest as WorkItem } };
+}
+
+/** Move an item to the next stage (done at the end, review/todo otherwise) and clear its role. */
+export function advanceItem(
+  state: WorkflowState,
+  itemId: string,
+  by: string,
+  wantsReview: boolean,
+  now: string,
+): WorkflowState {
+  const item = getItem(state, itemId);
+  const to = nextStageOf(state, item.stage);
+  if (!to) return moveItem(state, itemId, { status: "done" }, by, now);
+  if (isTerminalStage(state, to.id))
+    return moveItem(state, itemId, { stage: to.id, status: "done" }, by, now);
+  const status = wantsReview || to.review === true ? "review" : "todo";
+  return clearRole(moveItem(state, itemId, { stage: to.id, status }, by, now), itemId);
 }

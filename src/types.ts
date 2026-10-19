@@ -94,6 +94,8 @@ export interface Stage {
   gate?: Gate;
   commitmentPoint?: boolean;
   deliveryPoint?: boolean;
+  /** Items entering this stage wait for a reviewer (status "review") instead of "todo". */
+  review?: boolean;
 }
 
 // ---- iterations & budget ---------------------------------------------
@@ -112,6 +114,8 @@ export interface Iteration {
   committed: string[];
   carryover: string[];
   outcome?: "completed" | "cancelled";
+  /** Budget is exhausted; in-flight items may finish, nothing new is dispatched. */
+  closing?: boolean;
 }
 
 // ---- roles -----------------------------------------------------------

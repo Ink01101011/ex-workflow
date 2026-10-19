@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
-import { addItem, getItem } from "./items.ts";
+import { addItem, clearBlocker, getItem } from "./items.ts";
 import { next, synthesizeBrief } from "./brief.ts";
 import { complete } from "./complete.ts";
-import { authorOf } from "./gates.ts";
+import { authorOf, decide } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
 import type { Accounting, Handoff, Methodology, Role, Stage, WorkflowState } from "./types.ts";
 
@@ -22,6 +22,7 @@ const stages: Stage[] = [
     name: "Review",
     entryPolicy: [],
     exitPolicy: [],
+    review: true,
     gate: {
       id: "qa",
       requires: ["human"],
@@ -341,6 +342,7 @@ function gated(evidence: string[], mid = false) {
       name: "Review",
       entryPolicy: [],
       exitPolicy: [],
+      review: true,
       ...(mid
         ? {}
         : {
@@ -408,4 +410,52 @@ test("two rework cycles: the item stays in the author stage and the author is st
   s = complete(s, m(), handoff({ verdict: "rework", notes: "round two" }), acc(), T0).state;
   assert.equal(getItem(s, "A").stage, "todo");
   assert.equal(getItem(s, "A").status, "todo");
+});
+
+function atHumanGate(
+  onFail: Stage["gate"] extends infer G ? (G extends { onFail: infer F } ? F : never) : never,
+) {
+  const st = stages.map((x) => (x.id === "review" ? { ...x, gate: { ...x.gate!, onFail } } : x));
+  let s = createState({ methodology: "kanban", config: {}, stages: st, roles, now: T0 });
+  s = addItem(s, { id: "A", title: "a", weight: 1 }, "po", T0);
+  s = next(s, m(), { now: T0 }).state;
+  s = complete(s, m(), handoff(), acc(), T0).state;
+  s = next(s, m(), { now: T0 }).state;
+  return complete(s, m(), handoff({ role: "qa", produced: [] }), acc({ role: "qa" }), T0).state;
+}
+
+test("a rejected human gate (onFail block) can be cleared and the item is dispatched again", () => {
+  let s = atHumanGate({ action: "block" });
+  assert.equal(getItem(s, "A").status, "awaiting_human");
+  s = decide(s, "p1", "reject", "human", "not yet", T0);
+  assert.equal(getItem(s, "A").status, "blocked");
+  s = clearBlocker(s, "A", "A-b1", "human", T0);
+  const a = getItem(s, "A");
+  assert.equal(a.stage, "review");
+  assert.equal(a.status, "review");
+  assert.equal(a.role, undefined);
+  s = next(s, m(), { now: T0 }).state;
+  assert.equal(getItem(s, "A").status, "in_progress");
+  assert.equal(getItem(s, "A").role, "qa");
+});
+
+test("decide return-to clears the role; only human or a qualifying role may decide", () => {
+  const s = atHumanGate({ action: "return-to", stage: "todo" });
+  assert.throws(
+    () => decide(s, "p1", "approve", "qa", "", T0),
+    (e) => code(e) === "gate-unmet",
+  );
+  assert.throws(
+    () => decide(s, "p1", "approve", "nobody", "", T0),
+    (e) => code(e) === "gate-unmet",
+  );
+  assert.throws(
+    () => decide(s, "p1", "maybe" as unknown as "approve", "human", "", T0),
+    (e) => code(e) === "invalid-input",
+  );
+  const back = decide(s, "p1", "reject", "human", "redo", T0);
+  assert.equal(getItem(back, "A").stage, "todo");
+  assert.equal(getItem(back, "A").role, undefined);
+  const done = decide(s, "p1", "approve", "human", "", T0);
+  assert.equal(getItem(done, "A").status, "done");
 });

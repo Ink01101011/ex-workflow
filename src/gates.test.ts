@@ -79,11 +79,11 @@ test("human gates go to pending and decide resolves them", () => {
   );
   assert.equal(s.pending[0]!.id, "p1");
   assert.equal(getItem(s, "A").status, "awaiting_human");
-  const approved = decide(s, "p1", "approve", "supakit", "ok", T0);
+  const approved = decide(s, "p1", "approve", "human", "ok", T0);
   assert.equal(approved.pending.length, 0);
   assert.equal(getItem(approved, "A").stage, "done");
   assert.equal(getItem(approved, "A").status, "done");
-  const rejected = decide(s, "p1", "reject", "supakit", "flaky tests", T0);
+  const rejected = decide(s, "p1", "reject", "human", "flaky tests", T0);
   assert.equal(getItem(rejected, "A").stage, "doing");
   assert.equal(getItem(rejected, "A").status, "todo");
 
@@ -104,7 +104,7 @@ test("human gates go to pending and decide resolves them", () => {
   b = moveItem(b, "A", { stage: "verify", status: "review" }, "dev", T0);
   b = addEvidence(b, "A", { kind: "test-report", ref: "r1", by: "qa" }, T0);
   b = raisePending(b, { kind: "gate", item: "A", gate: "qa-gate", question: "approve?" }, T0);
-  const blocked = decide(b, "p1", "reject", "supakit", "flaky tests", T0);
+  const blocked = decide(b, "p1", "reject", "human", "flaky tests", T0);
   assert.equal(getItem(blocked, "A").status, "blocked");
   assert.equal(getItem(blocked, "A").stage, "verify");
   assert.match(getItem(blocked, "A").blockers[0]!.reason, /rejected/);

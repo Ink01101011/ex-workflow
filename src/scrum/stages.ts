@@ -18,7 +18,13 @@ export function scrumStages(config: ScrumConfig): Stage[] {
     },
     { id: "sprint", name: "Sprint Backlog", entryPolicy: [], exitPolicy: [] },
     inProgress,
-    { id: "review", name: "Review", entryPolicy: [], exitPolicy: config.definitionOfDone },
+    {
+      id: "review",
+      name: "Review",
+      entryPolicy: [],
+      exitPolicy: config.definitionOfDone,
+      review: true,
+    },
     { id: "done", name: "Increment", entryPolicy: [], exitPolicy: [] },
   ];
 }
