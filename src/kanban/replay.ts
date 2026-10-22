@@ -42,31 +42,33 @@ export interface Replay {
 
 const ms = (from: string, to: string) => Date.parse(to) - Date.parse(from);
 
+const carried = (p: Record<string, unknown>) =>
+  (p["transition"] ?? null) as { to: { stage: string; status: ItemStatus } } | null;
+
 export function replay(events: Event[], commitment: string, delivery: string): Replay {
   const items = new Map<string, ReplayedItem>();
   const blockers: ReplayedBlocker[] = [];
   let lastAt = events[0]?.at ?? "1970-01-01T00:00:00.000Z";
-  /** per item: the status it held before it was blocked, and the stage it was last pulled from */
-  const memo = new Map<string, { before: ItemStatus; pulledFrom?: string }>();
-  const move = (it: ReplayedItem, stage: string, status: ItemStatus, at: string) => {
-    if (it.since.status === "in_progress") it.activeMs += ms(it.since.at, at);
-    if (it.since.status === "blocked") it.blockedMs += ms(it.since.at, at);
-    const mem = memo.get(it.id) ?? { before: "todo" as ItemStatus };
-    if (status === "blocked" && it.status !== "blocked") mem.before = it.status;
-    if (status === "in_progress" && it.status !== "in_progress") mem.pulledFrom = it.stage;
-    memo.set(it.id, mem);
-    it.since = { status, at };
-    if (stage !== it.stage) {
-      it.stays[it.stays.length - 1]!.leftAt = at;
-      it.stays.push({ stage, enteredAt: at });
-      stamp(it, stage, at);
-    }
-    it.stage = stage;
-    it.status = status;
-  };
   const stamp = (it: ReplayedItem, stage: string, at: string) => {
     if (stage === commitment && it.committedAt === undefined) it.committedAt = at;
     if (stage === delivery && it.deliveredAt === undefined) it.deliveredAt = at;
+  };
+  /** the one place a transition (from item.transition or carried by a blocker event) is applied */
+  const applyTransition = (
+    it: ReplayedItem,
+    to: { stage: string; status: ItemStatus },
+    at: string,
+  ) => {
+    if (it.since.status === "in_progress") it.activeMs += ms(it.since.at, at);
+    if (it.since.status === "blocked") it.blockedMs += ms(it.since.at, at);
+    it.since = { status: to.status, at };
+    if (to.stage !== it.stage) {
+      it.stays[it.stays.length - 1]!.leftAt = at;
+      it.stays.push({ stage: to.stage, enteredAt: at });
+      stamp(it, to.stage, at);
+    }
+    it.stage = to.stage;
+    it.status = to.status;
   };
   for (const ev of events) {
     lastAt = ev.at;
@@ -93,8 +95,7 @@ export function replay(events: Event[], commitment: string, delivery: string): R
       case "item.transition": {
         const it = items.get(p["id"] as string);
         if (!it) break;
-        const to = p["to"] as { stage: string; status: ItemStatus };
-        move(it, to.stage, to.status, ev.at);
+        applyTransition(it, p["to"] as { stage: string; status: ItemStatus }, ev.at);
         break;
       }
       case "cadence.replenishment": {
@@ -118,9 +119,9 @@ export function replay(events: Event[], commitment: string, delivery: string): R
           blocker: p["blocker"] as string,
           raisedAt: ev.at,
         });
-        // raising a blocker moves the item to blocked without an item.transition event
         const it = items.get(p["id"] as string);
-        if (it && it.status !== "blocked") move(it, it.stage, "blocked", ev.at);
+        const t = carried(p);
+        if (it && t) applyTransition(it, t.to, ev.at);
         break;
       }
       case "blocker.cleared": {
@@ -128,18 +129,9 @@ export function replay(events: Event[], commitment: string, delivery: string): R
           (x) => x.item === p["id"] && x.blocker === p["blocker"] && x.clearedAt === undefined,
         );
         if (b) b.clearedAt = ev.at;
-        // clearing the last blocker releases the item the way clearBlocker does, again without an item.transition event
         const it = items.get(p["id"] as string);
-        const mem = it && memo.get(it.id);
-        if (
-          it &&
-          mem &&
-          it.status === "blocked" &&
-          !blockers.some((x) => x.item === it.id && x.clearedAt === undefined)
-        ) {
-          if (mem.before === "in_progress") move(it, mem.pulledFrom ?? it.stage, "todo", ev.at);
-          else move(it, it.stage, mem.before === "awaiting_human" ? "todo" : mem.before, ev.at);
-        }
+        const t = carried(p);
+        if (it && t) applyTransition(it, t.to, ev.at);
         break;
       }
       default:
