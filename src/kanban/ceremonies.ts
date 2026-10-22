@@ -151,9 +151,10 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
           "null removes the limit",
         );
     }
+    const checked: Record<string, Policy[]> = {};
     for (const [id, p] of Object.entries(policies)) {
       stageOf(state, id);
-      validatePolicies(p, `policies.${id}`);
+      checked[id] = validatePolicies(p, `policies.${id}`);
     }
     for (const [cls, level] of Object.entries(sle)) {
       if (!(CLASSES as readonly string[]).includes(cls))
@@ -188,7 +189,7 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
         stages = stages.map((st) => (st.id === id ? withWip(st, limit) : st));
         columns = columns.map((col) => (col.id === id ? withWip(col, limit) : col));
       }
-      for (const [id, p] of Object.entries(policies) as Array<[string, Policy[]]>) {
+      for (const [id, p] of Object.entries(checked)) {
         const before = stages.find((st) => st.id === id)!.exitPolicy;
         if (JSON.stringify(before) === JSON.stringify(p)) continue;
         policyChanges.push({ column: id, before, after: p });
