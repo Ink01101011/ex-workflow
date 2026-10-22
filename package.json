@@ -51,6 +51,16 @@
         "default": "./dist/scrum/index.cjs"
       }
     },
+    "./kanban": {
+      "import": {
+        "types": "./dist/kanban/index.d.ts",
+        "default": "./dist/kanban/index.mjs"
+      },
+      "require": {
+        "types": "./dist/kanban/index.d.cts",
+        "default": "./dist/kanban/index.cjs"
+      }
+    },
     "./adapters": {
       "import": {
         "types": "./dist/adapters/index.d.ts",
@@ -86,6 +96,9 @@
     "*": {
       "scrum": [
         "dist/scrum/index.d.ts"
+      ],
+      "kanban": [
+        "dist/kanban/index.d.ts"
       ],
       "adapters": [
         "dist/adapters/index.d.ts"

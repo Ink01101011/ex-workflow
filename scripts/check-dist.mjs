@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
-function verify(label, core, scrum) {
+function verify(label, core, scrum, kanban) {
   try {
     let caught;
     try {
@@ -13,6 +13,15 @@ function verify(label, core, scrum) {
     if (!(caught instanceof core.WorkflowError)) throw new Error("scrum error is not instanceof core WorkflowError");
     if (caught.code !== "config-invalid") throw new Error(`unexpected code ${caught.code}`);
     if (scrum.scrum().name !== "scrum") throw new Error("scrum().name is not scrum");
+    let kcaught;
+    try {
+      kanban.validateKanbanConfig({ columns: 5 });
+    } catch (e) {
+      kcaught = e;
+    }
+    if (!(kcaught instanceof core.WorkflowError)) throw new Error("kanban error is not instanceof core WorkflowError");
+    if (kcaught.code !== "config-invalid") throw new Error(`unexpected kanban code ${kcaught.code}`);
+    if (kanban.kanban().name !== "kanban") throw new Error("kanban().name is not kanban");
   } catch (e) {
     console.error(`FAIL ${label}: ${e.message}`);
     process.exit(1);
@@ -20,7 +29,7 @@ function verify(label, core, scrum) {
 }
 
 const url = (p) => pathToFileURL(resolve(p)).href;
-verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")));
+verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")));
 const require = createRequire(import.meta.url);
-verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"));
+verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"));
 console.log("ok");
