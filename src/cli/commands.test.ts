@@ -229,15 +229,12 @@ test("kanban: init → replenishment → next → complete → status report →
     };
   }>(rs).report;
   assert.equal(report.cadencesDue.length, 6);
+  const repl = report.cadencesDue.find((c) => c.cadence === "replenishment")!;
+  assert.equal(typeof repl.lastAt, "string");
+  assert.ok(Number.isFinite(Date.parse(repl.lastAt!)));
   assert.deepEqual(
-    report.cadencesDue.find((c) => c.cadence === "replenishment"),
-    {
-      cadence: "replenishment",
-      everyTurns: 1,
-      lastAt: report.cadencesDue[0]!.lastAt,
-      turnsSince: 1,
-      due: true,
-    },
+    { ...repl, lastAt: null },
+    { cadence: "replenishment", everyTurns: 1, lastAt: null, turnsSince: 1, due: true },
   );
   const rb = await runCommand(["board"], root);
   const cols = out<{ columns: Array<{ stage: string; items: Array<{ id: string }> }> }>(rb).columns;
