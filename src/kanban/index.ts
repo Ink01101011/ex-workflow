@@ -4,6 +4,7 @@ import { cadencesDue } from "./board.ts";
 import { kanbanCeremonies } from "./ceremonies.ts";
 import { ACTIVE, activeExpedites, commitmentColumn, enteredStageAt, onBoard } from "./columns.ts";
 import { configOf, validateKanbanConfig, type KanbanConfig } from "./config.ts";
+import { kanbanMetrics } from "./metrics.ts";
 import { kanbanRoles } from "./roles.ts";
 import { kanbanRules } from "./rules.ts";
 import { kanbanStages } from "./stages.ts";
@@ -52,6 +53,8 @@ export { configOf } from "./config.ts";
 export { board, cardAge, addedAt, cadencesDue, CADENCE_EVENT } from "./board.ts";
 export type { BoardCard, BoardColumn, CadenceStatus } from "./board.ts";
 export { replay } from "./replay.ts";
+export { kanbanMetrics, percentile, columnStays } from "./metrics.ts";
+export type { KanbanMetrics } from "./metrics.ts";
 export type { Replay, ReplayedItem, ReplayedBlocker, Stay } from "./replay.ts";
 
 const RANK: Record<string, number> = { expedite: 0, "fixed-date": 1, standard: 2, intangible: 3 };
@@ -152,7 +155,7 @@ export function kanban(): Methodology<KanbanConfig> {
     },
     ceremonies: kanbanCeremonies(kanban),
     rules: kanbanRules(),
-    metrics: () => ({}),
+    metrics: (state) => ({ ...kanbanMetrics(state) }),
     humanDefaults: { gates: "none" },
     report: (state) => ({ cadencesDue: cadencesDue(state) }),
   };
