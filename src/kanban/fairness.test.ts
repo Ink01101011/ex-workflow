@@ -111,7 +111,7 @@ test("2: a fixed-date card beats every standard card; earliest deadline first", 
   assert.deepEqual(b.calls.flat(), ["F-early", "F-mid", "F-late", "N1"]);
 });
 
-test("3: standard cards order by their own priority, then oldest in the column", () => {
+test("3: standard cards order by their own priority, then oldest in the column; aging promotes stepwise", () => {
   const b = new Board();
   b.replenish("A", "standard", { priority: 1 });
   b.replenish("B", "standard", { priority: 5 });
@@ -121,7 +121,15 @@ test("3: standard cards order by their own priority, then oldest in the column",
     b.round();
   }
   assert.deepEqual(b.calls.flat(), ["B", "C", "A"]);
-  // with aging off nothing but priority and column age matters, even for a fresher high-priority card
+  // a fresh high-priority card beats an older low-priority one deferred fewer than 5 times; at 5 the older card wins
+  const aging = new Board();
+  aging.replenish("OLD", "standard", { priority: 1 });
+  for (let i = 1; i <= 6; i++) {
+    aging.replenish(`X${i}`, "standard", { priority: 9 });
+    aging.round();
+  }
+  assert.deepEqual(aging.calls.flat(), ["X1", "X2", "X3", "X4", "X5", "OLD"]);
+  // with aging off nothing but priority and column age matters
   const off = new Board({ aging: false });
   off.replenish("A", "standard", { priority: 1 });
   off.replenish("B", "standard", { priority: 5 });

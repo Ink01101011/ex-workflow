@@ -71,13 +71,13 @@ export interface PriorityContext {
 }
 
 const BAND = 1e15;
-const AGE_STEP = 2e9;
+const AGE_STEP = 4e9;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /**
  * Class band x 1e15 + an in-band offset. Bands: question 5, expedite 4, fixed-date 3, standard 2,
  * intangible 1. Fixed-date: earlier deadline = larger offset. Others: own priority (clamped to +-1e9)
- * plus, with aging, 2e9 per deferral up to maxDeferralRounds. An intangible card deferred that many
+ * plus, with aging, 4e9 per full window of maxDeferralRounds deferrals (priority decides within a window). An intangible card deferred that many
  * times is scored in the standard band, so it overtakes fresh standard cards.
  */
 export function priorityByClass(item: WorkItem, ctx: PriorityContext): number {
@@ -87,7 +87,7 @@ export function priorityByClass(item: WorkItem, ctx: PriorityContext): number {
     const t = Date.parse(item.deadline);
     if (Number.isFinite(t)) return 3 * BAND + 1e10 - Math.floor(t / 1000);
   }
-  const aged = ctx.aging ? Math.min(ctx.deferrals, ctx.maxDeferralRounds) : 0;
+  const aged = ctx.aging ? Math.floor(ctx.deferrals / ctx.maxDeferralRounds) : 0;
   const offset = clamp(item.priority ?? 0, -1e9, 1e9) + aged * AGE_STEP;
   const promoted = ctx.aging && ctx.deferrals >= ctx.maxDeferralRounds;
   const band =

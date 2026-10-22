@@ -63,7 +63,7 @@ kanbanMetrics(s2); // lead time, cycle time per column, throughput, WIP, flow ef
 
 Cadences are ceremonies: `replenishment`, `delivery-planning`, `service-delivery-review` (WIP, policies, SLEs), `operations-review` (blockers, aging WIP), `risk-review` (fixed-date risk, stale blockers), `strategy-review` (classes of service). `exwf status` reports which cadences are due (`config.cadences.<name>.everyTurns`). `test/kanban.e2e.test.ts` is a full week with an expedite, an escalation and a blocker.
 
-`next()` also returns `skipped`: each ready card it did not pull, with `reason` (`entry-policy`, `wip`, `resource-cap` or `budget`) and a `detail`; the commitment column's policies gate the pull out of it. Ordering is by class band (question, expedite, fixed-date, standard, intangible) and, with `fairness.aging` on (the default), a card passed over `fairness.maxDeferralRounds` times (default 5) moves up, so an intangible card is not starved.
+`next()` also returns `skipped`: each ready card it did not pull, with `reason` (`entry-policy`, `wip`, `resource-cap` or `budget`) and a `detail`; the commitment column's policies gate the pull out of it. Ordering is by class band (question, expedite, fixed-date, standard, intangible) and, with `fairness.aging` on (the default), priority stays primary inside a window of `fairness.maxDeferralRounds` passes (default 5); each full window a card is passed over promotes it one step above any priority difference, and an intangible card reaching the first window is ranked as standard, so nothing is starved.
 
 ## CLI
 

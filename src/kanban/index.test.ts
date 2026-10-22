@@ -244,9 +244,11 @@ test("priorityByClass and byClassThenAge order by class, then age, then id", () 
   assert.ok(priorityByClass({ ...S!, classOfService: "expedite" }, ctx) > priorityByClass(F!, ctx));
   assert.ok(priorityByClass({ ...S!, type: "question" }, ctx) > 4e15 + 1e9);
   assert.equal(priorityByClass({ ...S!, priority: 1e12 }, ctx), 2e15 + 1e9); // clamped
-  assert.equal(priorityByClass(S!, { ...ctx, deferrals: 9 }), 2e15 + 5 * 2e9); // aging is capped
+  assert.equal(priorityByClass(S!, { ...ctx, deferrals: 4 }), 2e15); // priority stays primary inside a window
+  assert.equal(priorityByClass(S!, { ...ctx, deferrals: 9 }), 2e15 + 4e9); // one step per full window
+  assert.equal(priorityByClass(S!, { ...ctx, deferrals: 10 }), 2e15 + 8e9);
   assert.equal(priorityByClass(S!, { ...ctx, deferrals: 9, aging: false }), 2e15);
-  assert.equal(priorityByClass(I!, { ...ctx, deferrals: 5 }), 2e15 + 99 + 5 * 2e9); // promoted
+  assert.equal(priorityByClass(I!, { ...ctx, deferrals: 5 }), 2e15 + 99 + 4e9); // promoted
   assert.equal(priorityByClass(I!, { ...ctx, deferrals: 5, aging: false }), 1e15 + 99);
   assert.ok(byClassThenAge(F!, S!) < 0);
   assert.ok(byClassThenAge(S!, I!) < 0);
