@@ -16,7 +16,7 @@ test("validateKanbanConfig applies defaults and names bad fields", () => {
   const c = validateKanbanConfig({});
   assert.deepEqual(c.columns, DEFAULT_COLUMNS);
   assert.deepEqual(c.classesOfService, {});
-  assert.deepEqual(c.fairness, { aging: true });
+  assert.deepEqual(c.fairness, { aging: true, maxDeferralRounds: 5 });
   assert.equal(c.throughputWindowMs, 7 * 86_400_000);
   assert.equal(c.maxExpedite, 1);
   assert.throws(
@@ -237,8 +237,17 @@ test("priorityByClass and byClassThenAge order by class, then age, then id", () 
     { id: "S", stage: "ready" },
   );
   const [I, F, S] = ["I", "F", "S"].map((id) => getItem(s, id));
-  assert.equal(priorityByClass(I!), Number.MIN_SAFE_INTEGER);
-  assert.equal(priorityByClass(S!), undefined);
+  const ctx = { deferrals: 0, aging: true, maxDeferralRounds: 5 };
+  assert.equal(priorityByClass(I!, ctx), 1e15 + 99);
+  assert.equal(priorityByClass(S!, ctx), 2e15);
+  assert.ok(priorityByClass(F!, ctx) > 2e15 + 1e9);
+  assert.ok(priorityByClass({ ...S!, classOfService: "expedite" }, ctx) > priorityByClass(F!, ctx));
+  assert.ok(priorityByClass({ ...S!, type: "question" }, ctx) > 4e15 + 1e9);
+  assert.equal(priorityByClass({ ...S!, priority: 1e12 }, ctx), 2e15 + 1e9); // clamped
+  assert.equal(priorityByClass(S!, { ...ctx, deferrals: 9 }), 2e15 + 5 * 2e9); // aging is capped
+  assert.equal(priorityByClass(S!, { ...ctx, deferrals: 9, aging: false }), 2e15);
+  assert.equal(priorityByClass(I!, { ...ctx, deferrals: 5 }), 2e15 + 99 + 5 * 2e9); // promoted
+  assert.equal(priorityByClass(I!, { ...ctx, deferrals: 5, aging: false }), 1e15 + 99);
   assert.ok(byClassThenAge(F!, S!) < 0);
   assert.ok(byClassThenAge(S!, I!) < 0);
   const older = { ...S!, transitions: [{ ...S!.transitions[0]!, at: T0 }] };

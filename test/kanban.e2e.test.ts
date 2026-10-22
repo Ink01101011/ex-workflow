@@ -122,11 +122,12 @@ test("one kanban week with an expedite", () => {
   assert.equal(getItem(s, devB!.item.id).stage, "ready");
   assert.deepEqual(getItem(s, devB!.item.id).dependsOn, [qid]);
 
-  // Wednesday: the expedite jumps the queue and bypasses WIP; the question is answered; a review completes
+  // Wednesday: the question goes first, the expedite jumps the queue and bypasses WIP; the question is answered; a review completes
   r = next(s, m, { now: tick() });
   s = r.state;
-  assert.equal(r.briefs[0]!.item.id, "E");
-  assert.equal(r.briefs[0]!.item.stage, "dev");
+  assert.equal(r.briefs[0]!.item.id, qid); // a question is dispatched before everything, then the expedite
+  assert.equal(r.briefs[1]!.item.id, "E");
+  assert.equal(r.briefs[1]!.item.stage, "dev");
   assert.ok(r.briefs.some((b) => b.item.id === qid && b.role.id === srm));
   assert.ok(
     !r.briefs.some((b) => b.item.id === devB!.item.id),

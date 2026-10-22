@@ -46,7 +46,7 @@ export interface ClassConfig {
 export interface KanbanConfig {
   columns: KanbanColumn[];
   classesOfService: Partial<Record<ClassOfService, ClassConfig>>;
-  fairness: { aging: boolean; maxDeferralRounds?: number };
+  fairness: { aging: boolean; maxDeferralRounds: number };
   cadences: Partial<Record<KanbanCadence, { everyTurns?: number }>>;
   throughputWindowMs: number;
   maxExpedite: number;
@@ -250,15 +250,15 @@ export function validateKanbanConfig(raw: unknown): KanbanConfig {
       "kanban config.fairness must be { aging: boolean, maxDeferralRounds?: number }",
       "omit it for aging on",
     );
-  const fairness: KanbanConfig["fairness"] = {
-    aging: f["aging"] === undefined ? true : (f["aging"] as boolean),
-  };
   const rounds = positive(
     f["maxDeferralRounds"],
     "fairness.maxDeferralRounds",
-    "omit it for ex-flow's default",
+    "omit it for 5 rounds",
   );
-  if (rounds !== undefined) fairness.maxDeferralRounds = rounds;
+  const fairness: KanbanConfig["fairness"] = {
+    aging: f["aging"] === undefined ? true : (f["aging"] as boolean),
+    maxDeferralRounds: rounds ?? 5,
+  };
   const cadences: KanbanConfig["cadences"] = {};
   const cad = c["cadences"] ?? {};
   if (!isObj(cad))

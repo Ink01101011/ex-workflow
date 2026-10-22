@@ -1,6 +1,6 @@
 import { timSort } from "exsorted";
 import type { CoreTerm, Methodology, PlannerOptions, Policy, WorkItem } from "../types.ts";
-import { cadencesDue } from "./board.ts";
+import { addedAt, cadencesDue } from "./board.ts";
 import { kanbanCeremonies } from "./ceremonies.ts";
 import { ACTIVE, activeExpedites, commitmentColumn, enteredStageAt, onBoard } from "./columns.ts";
 import { configOf, validateKanbanConfig, type KanbanConfig } from "./config.ts";
@@ -62,11 +62,37 @@ export type { Replay, ReplayedItem, ReplayedBlocker, Stay } from "./replay.ts";
 const RANK: Record<string, number> = { expedite: 0, "fixed-date": 1, standard: 2, intangible: 3 };
 const rankOf = (item: WorkItem) => RANK[item.classOfService ?? "standard"] ?? 2;
 
-/** Expedite always first, intangible always last, everything else by its own priority. */
-export function priorityByClass(item: WorkItem): number | undefined {
-  if (item.classOfService === "expedite") return Number.MAX_SAFE_INTEGER;
-  if (item.classOfService === "intangible") return Number.MIN_SAFE_INTEGER;
-  return item.priority;
+/** What the priority function needs besides the card: how long it has been passed over, and the fairness config. */
+export interface PriorityContext {
+  /** next() rounds that resolved since the card entered its column */
+  deferrals: number;
+  aging: boolean;
+  maxDeferralRounds: number;
+}
+
+const BAND = 1e15;
+const AGE_STEP = 2e9;
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+/**
+ * Class band x 1e15 + an in-band offset. Bands: question 5, expedite 4, fixed-date 3, standard 2,
+ * intangible 1. Fixed-date: earlier deadline = larger offset. Others: own priority (clamped to +-1e9)
+ * plus, with aging, 2e9 per deferral up to maxDeferralRounds. An intangible card deferred that many
+ * times is scored in the standard band, so it overtakes fresh standard cards.
+ */
+export function priorityByClass(item: WorkItem, ctx: PriorityContext): number {
+  const cos = item.classOfService ?? "standard";
+  if (item.type === "question") return 5 * BAND;
+  if (cos === "fixed-date" && item.deadline !== undefined) {
+    const t = Date.parse(item.deadline);
+    if (Number.isFinite(t)) return 3 * BAND + 1e10 - Math.floor(t / 1000);
+  }
+  const aged = ctx.aging ? Math.min(ctx.deferrals, ctx.maxDeferralRounds) : 0;
+  const offset = clamp(item.priority ?? 0, -1e9, 1e9) + aged * AGE_STEP;
+  const promoted = ctx.aging && ctx.deferrals >= ctx.maxDeferralRounds;
+  const band =
+    cos === "expedite" ? 4 : cos === "fixed-date" ? 3 : cos === "intangible" && !promoted ? 1 : 2;
+  return band * BAND + offset;
 }
 
 /** Class rank, then the card that has waited longest in its column, then id (FIFO by aging). */
@@ -114,7 +140,17 @@ export function kanban(): Methodology<KanbanConfig> {
         fairnessPolicy: cfg.fairness.aging ? "aging" : "none",
         deadlineStrategy: "earliest-first",
         dispatchStage: (item) => (item.stage === commit.id && after ? after.id : undefined),
-        priorityOf: priorityByClass,
+        priorityOf: (item) => {
+          const since = Date.parse(enteredStageAt(item) ?? addedAt(state, item.id));
+          const deferrals = state.events.filter(
+            (e) => e.type === "planner.resolved" && Date.parse(e.at) >= since,
+          ).length;
+          return priorityByClass(item, {
+            deferrals,
+            aging: cfg.fairness.aging,
+            maxDeferralRounds: cfg.fairness.maxDeferralRounds,
+          });
+        },
         tieBreaker: byClassThenAge,
         wipCounts: [...ACTIVE],
         wipLimitOf: (stage, item) =>
@@ -124,8 +160,7 @@ export function kanban(): Methodology<KanbanConfig> {
               ? stage.wipLimit + bypass
               : stage.wipLimit,
       };
-      if (cfg.fairness.maxDeferralRounds !== undefined)
-        po.maxDeferralRounds = cfg.fairness.maxDeferralRounds;
+      po.maxDeferralRounds = cfg.fairness.maxDeferralRounds;
       return po;
     },
     candidates(state): WorkItem[] {
