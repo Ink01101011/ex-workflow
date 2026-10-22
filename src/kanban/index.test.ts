@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { timSort } from "exsorted";
 import { init } from "../methodology.ts";
-import { addItem, getItem, moveItem } from "../items.ts";
+import { addItem, editItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { WorkflowError } from "../errors.ts";
 import { DEFAULT_COLUMNS, validateKanbanConfig } from "./config.ts";
@@ -253,4 +253,32 @@ test("priorityByClass and byClassThenAge order by class, then age, then id", () 
   const older = { ...S!, transitions: [{ ...S!.transitions[0]!, at: T0 }] };
   assert.ok(byClassThenAge(older, S!) < 0);
   assert.ok(byClassThenAge(S!, { ...S!, id: "T" }) < 0);
+});
+
+test("a commitment-column policy is enforced on the pull and the refusal is visible", () => {
+  const m = kanban();
+  const columns = DEFAULT_COLUMNS.map((c) =>
+    c.id === "ready" ? { ...c, policies: [{ kind: "estimate-present" as const }] } : c,
+  );
+  let s = init({ methodology: m, config: { columns }, now: T0 }).state;
+  assert.deepEqual(s.stages.find((x) => x.id === "dev")!.entryPolicy, [
+    { kind: "estimate-present" },
+  ]);
+  s = addItem(s, { id: "A", title: "a", acceptance: ["ok"] }, "human", T0);
+  s = moveItem(s, "A", { stage: "ready", status: "todo" }, "human", T1);
+  let r = next(s, m, { now: T1 });
+  assert.deepEqual(r.briefs, []);
+  assert.notEqual(r.reason, "no-candidates");
+  assert.equal(r.skipped[0]!.id, "A");
+  assert.equal(r.skipped[0]!.reason, "entry-policy");
+  assert.match(r.skipped[0]!.detail, /weight/);
+  const ev = r.state.events[r.state.events.length - 1]!;
+  assert.deepEqual((ev.payload as { skipped: unknown }).skipped, r.skipped);
+  s = editItem(r.state, "A", { weight: 3 }, "human", T1);
+  r = next(s, m, { now: T1 });
+  assert.deepEqual(
+    r.briefs.map((b) => b.item.id),
+    ["A"],
+  );
+  assert.deepEqual(r.skipped, []);
 });

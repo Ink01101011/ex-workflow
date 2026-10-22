@@ -192,7 +192,16 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
         const before = stages.find((st) => st.id === id)!.exitPolicy;
         if (JSON.stringify(before) === JSON.stringify(p)) continue;
         policyChanges.push({ column: id, before, after: p });
-        stages = stages.map((st) => (st.id === id ? { ...st, exitPolicy: p } : st));
+        const at = stages.findIndex((st) => st.id === id);
+        // the commitment column's policies also gate the pull out of it: the next column's entry policy
+        const gated = stages[at]!.commitmentPoint ? stages[at + 1]?.id : undefined;
+        stages = stages.map((st) =>
+          st.id === id
+            ? { ...st, exitPolicy: p }
+            : st.id === gated
+              ? { ...st, entryPolicy: p }
+              : st,
+        );
         columns = columns.map((col) => (col.id === id ? { ...col, policies: p } : col));
       }
       for (const [cls, level] of Object.entries(sle) as Array<

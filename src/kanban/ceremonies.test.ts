@@ -230,3 +230,18 @@ test("service-delivery-review changes WIP, policies and SLEs, keeps config in sy
   assert.equal(tight.state.stages.find((st) => st.id === "dev")!.wipLimit, 1);
   assert.deepEqual(m.candidates(tight.state), []);
 });
+
+test("service-delivery-review keeps the column after the commitment column gated by its policies", () => {
+  const s = withOptions();
+  const sdm = "service-delivery-manager";
+  const estimate = [{ kind: "estimate-present" }];
+  const blockers = [{ kind: "no-open-blockers" }];
+  let r = c["service-delivery-review"]!(s, { by: sdm, now: T(2), policies: { ready: estimate } });
+  assert.deepEqual(r.state.stages.find((x) => x.id === "ready")!.exitPolicy, estimate);
+  assert.deepEqual(r.state.stages.find((x) => x.id === "dev")!.entryPolicy, estimate);
+  // a column that is not the commitment column does not gate its successor
+  r = c["service-delivery-review"]!(r.state, { by: sdm, now: T(3), policies: { dev: blockers } });
+  assert.deepEqual(r.state.stages.find((x) => x.id === "review")!.entryPolicy, []);
+  r = c["service-delivery-review"]!(r.state, { by: sdm, now: T(4), policies: { ready: blockers } });
+  assert.deepEqual(r.state.stages.find((x) => x.id === "dev")!.entryPolicy, blockers);
+});
