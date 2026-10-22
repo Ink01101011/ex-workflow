@@ -10,7 +10,7 @@ State is plain JSON, every operation is `(state, action) -> state`, and every er
 pnpm add ex-workflow@stage
 ```
 
-The first pre-release is published under the `stage` dist-tag (`0.1.0-stage`); `latest` is reserved for 0.1.0.
+Pre-releases are published under the `stage` dist-tag (currently `0.2.0-stage`); `latest` is reserved for 0.1.0.
 
 Node >= 18. Runs on macOS, Linux and Windows.
 
@@ -69,14 +69,14 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 
 | Command | Returns |
 |---|---|
-| `init <scrum|kanban> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
+| `init <scrum\|kanban> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
 | `add <item.json>` | `{ ok, item }` |
 | `edit <id> <patch.json>` | `{ ok, item }` |
 | `next [--max n]` | `{ ok, reason, briefs }`; writes `.workflow/briefs/<id>.json` |
 | `complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--role r]` | `{ ok, item, warnings }` |
 | `ceremony <name> [input.json] [--by who]` | `{ ok, warnings, lastEvent }` |
 | `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` |
-| `status` | `{ ok, methodology, openIteration, counts, pending, lastEvent }` |
+| `status` | `{ ok, methodology, openIteration, counts, pending, lastEvent, report }` (`report` is the methodology's own status, e.g. Kanban's cadences due; `null` for Scrum) |
 | `board` | `{ ok, columns }` |
 | `metrics` | `{ ok, metrics }` |
 | `pending` / `lessons` | the arrays |
@@ -106,7 +106,7 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Known backlog
 
-Minor items deferred past 0.1.0-stage:
+Minor items deferred past 0.2.0-stage:
 
 - Stale-lock takeover can race when a lock is older than 60 s.
 - `decide(approve)` ignores a `needs-review` verdict.
