@@ -162,3 +162,98 @@ test("concurrent add commands do not lose updates", async () => {
   const state = JSON.parse(await readFile(path.join(root, ".workflow", "state.json"), "utf8"));
   assert.deepEqual(new Set(Object.keys(state.items)), new Set(ids));
 });
+
+test("kanban: init → replenishment → next → complete → status report → board", async () => {
+  const { root, w } = await project();
+  const kcfg = await w("kanban.json", { cadences: { replenishment: { everyTurns: 1 } } });
+  const r0 = await runCommand(["init", "kanban", "--config", kcfg], root);
+  assert.equal(r0.exit, 0);
+  assert.deepEqual(out<{ state: { stages: string[]; roles: string[] } }>(r0).state, {
+    methodology: "kanban",
+    stages: ["options", "ready", "dev", "review", "done"],
+    roles: ["service-request-manager", "service-delivery-manager", "worker"],
+  });
+  const a = await w("ka.json", { id: "A", title: "a", acceptance: ["ok"] });
+  assert.equal((await runCommand(["add", a, "--by", "service-request-manager"], root)).exit, 0);
+  const rep = await w("rep.json", { items: ["A"] });
+  const rr = await runCommand(
+    ["ceremony", "replenishment", rep, "--by", "service-request-manager"],
+    root,
+  );
+  assert.equal(rr.exit, 0);
+  assert.equal(out<{ lastEvent: { type: string } }>(rr).lastEvent.type, "cadence.replenishment");
+  const rn = await runCommand(["next"], root);
+  const briefs = out<{
+    briefs: Array<{ item: { id: string; stage: string }; role: { id: string } }>;
+  }>(rn).briefs;
+  assert.deepEqual(
+    briefs.map((b) => [b.item.id, b.item.stage, b.role.id]),
+    [["A", "dev", "worker"]],
+  );
+  const h = await w("kh.json", {
+    item: "A",
+    role: "worker",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  const rc = await runCommand(
+    [
+      "complete",
+      "A",
+      h,
+      "--tokens-in",
+      "10",
+      "--tokens-out",
+      "5",
+      "--duration-ms",
+      "100",
+      "--model",
+      "small",
+    ],
+    root,
+  );
+  assert.equal(rc.exit, 0);
+  assert.equal(out<{ item: { stage: string; status: string } }>(rc).item.stage, "review");
+  const rs = await runCommand(["status"], root);
+  const report = out<{
+    report: {
+      cadencesDue: Array<{
+        cadence: string;
+        everyTurns: number;
+        lastAt: string | null;
+        due: boolean;
+        turnsSince: number;
+      }>;
+    };
+  }>(rs).report;
+  assert.equal(report.cadencesDue.length, 6);
+  assert.deepEqual(
+    report.cadencesDue.find((c) => c.cadence === "replenishment"),
+    {
+      cadence: "replenishment",
+      everyTurns: 1,
+      lastAt: report.cadencesDue[0]!.lastAt,
+      turnsSince: 1,
+      due: true,
+    },
+  );
+  const rb = await runCommand(["board"], root);
+  const cols = out<{ columns: Array<{ stage: string; items: Array<{ id: string }> }> }>(rb).columns;
+  assert.deepEqual(
+    cols.find((c) => c.stage === "review")!.items.map((i) => i.id),
+    ["A"],
+  );
+  const rm = await runCommand(["metrics"], root);
+  assert.deepEqual(
+    out<{ metrics: { wipByColumn: Record<string, number> } }>(rm).metrics.wipByColumn,
+    { options: 0, ready: 0, dev: 0, review: 1, done: 0 },
+  );
+});
+
+test("status.report is null for scrum", async () => {
+  const { root, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  assert.equal(out<{ report: unknown }>(await runCommand(["status"], root)).report, null);
+});
