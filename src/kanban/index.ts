@@ -4,6 +4,7 @@ import { cadencesDue } from "./board.ts";
 import { ACTIVE, activeExpedites, commitmentColumn, enteredStageAt, onBoard } from "./columns.ts";
 import { configOf, validateKanbanConfig, type KanbanConfig } from "./config.ts";
 import { kanbanRoles } from "./roles.ts";
+import { kanbanRules } from "./rules.ts";
 import { kanbanStages } from "./stages.ts";
 
 export {
@@ -15,6 +16,7 @@ export {
 } from "./config.ts";
 export { kanbanRoles } from "./roles.ts";
 export { kanbanStages } from "./stages.ts";
+export { kanbanRules } from "./rules.ts";
 export type {
   KanbanConfig,
   KanbanColumn,
@@ -147,7 +149,7 @@ export function kanban(): Methodology<KanbanConfig> {
       ];
     },
     ceremonies: {},
-    rules: [],
+    rules: kanbanRules(),
     metrics: () => ({}),
     humanDefaults: { gates: "none" },
     report: (state) => ({ cadencesDue: cadencesDue(state) }),
