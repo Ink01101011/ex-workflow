@@ -14,7 +14,13 @@ import type {
   WorkflowState,
 } from "../types.ts";
 import { commitmentColumn, deliveryColumn, optionsColumn } from "./columns.ts";
-import { CLASSES, configOf, type KanbanColumn, type ServiceLevel } from "./config.ts";
+import {
+  CLASSES,
+  configOf,
+  validatePolicies,
+  type KanbanColumn,
+  type ServiceLevel,
+} from "./config.ts";
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
@@ -143,12 +149,7 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
     }
     for (const [id, p] of Object.entries(policies)) {
       stageOf(state, id);
-      if (!Array.isArray(p))
-        fail(
-          "invalid-input",
-          `policies.${id} must be a Policy[]`,
-          'e.g. [{ "kind": "no-open-blockers" }]',
-        );
+      validatePolicies(p, `policies.${id}`);
     }
     for (const [cls, level] of Object.entries(sle)) {
       if (!(CLASSES as readonly string[]).includes(cls))

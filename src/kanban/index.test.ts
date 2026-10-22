@@ -57,6 +57,16 @@ test("validateKanbanConfig applies defaults and names bad fields", () => {
     () => validateKanbanConfig({ maxExpedite: 0 }),
     (e: unknown) => e instanceof WorkflowError && /maxExpedite/.test(e.message),
   );
+  for (const bad of [["junk"], [{ kind: "evidence" }], [{ kind: "x" }]]) {
+    assert.throws(
+      () => validateKanbanConfig({ columns: [{ id: "a", policies: bad }] }),
+      (e: unknown) =>
+        e instanceof WorkflowError &&
+        e.code === "config-invalid" &&
+        /policies\[0\]/.test(e.message) &&
+        e.fix !== "",
+    );
+  }
   const named = validateKanbanConfig({
     columns: [{ id: "x", policies: [{ kind: "acceptance-written" }] }],
   });

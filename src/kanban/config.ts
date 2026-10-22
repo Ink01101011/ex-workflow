@@ -95,6 +95,44 @@ function positive(v: unknown, field: string, fix: string, min = 1): number | und
   return v;
 }
 
+const BARE_POLICY_KINDS = [
+  "acceptance-written",
+  "estimate-present",
+  "no-open-blockers",
+  "dependencies-done",
+];
+
+const nonEmpty = (x: unknown): boolean => typeof x === "string" && x.trim() !== "";
+
+/** Validate a Policy[]: every entry must be a core Policy object. Returns a fresh array. */
+export function validatePolicies(raw: unknown, field: string): Policy[] {
+  if (!Array.isArray(raw))
+    fail(
+      "config-invalid",
+      `kanban config.${field} must be an array of Policy objects`,
+      'e.g. [{ "kind": "evidence", "evidenceKind": "test-output" }]',
+    );
+  const out: Policy[] = [];
+  raw.forEach((p: unknown, i: number) => {
+    const at = `kanban config.${field}[${i}]`;
+    const ok =
+      isObj(p) &&
+      (p["kind"] === "evidence"
+        ? nonEmpty(p["evidenceKind"])
+        : p["kind"] === "custom"
+          ? nonEmpty(p["id"]) && nonEmpty(p["description"])
+          : typeof p["kind"] === "string" && BARE_POLICY_KINDS.includes(p["kind"]));
+    if (!ok)
+      fail(
+        "config-invalid",
+        `${at} must be a Policy`,
+        `use a Policy such as { "kind": "evidence", "evidenceKind": "test-output" }, { "kind": "custom", "id": "x", "description": "..." } or one of: ${BARE_POLICY_KINDS.join(", ")}`,
+      );
+    out.push(p as Policy);
+  });
+  return out;
+}
+
 function column(raw: unknown, i: number): KanbanColumn {
   if (!isObj(raw))
     fail(
@@ -113,7 +151,7 @@ function column(raw: unknown, i: number): KanbanColumn {
   const out: KanbanColumn = {
     id,
     name: typeof raw["name"] === "string" && raw["name"].trim() !== "" ? raw["name"] : id,
-    policies: raw["policies"] as Policy[],
+    policies: validatePolicies(raw["policies"], `columns[${i}].policies`),
   };
   const wip = positive(raw["wipLimit"], `columns[${i}].wipLimit`, "omit wipLimit for no limit");
   if (wip !== undefined) out.wipLimit = wip;

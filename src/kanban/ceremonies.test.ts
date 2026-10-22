@@ -162,6 +162,18 @@ test("service-delivery-review changes WIP, policies and SLEs, keeps config in sy
     ),
     "policy-explicit",
   );
+  const before = JSON.stringify(s);
+  assert.equal(
+    code(() =>
+      c["service-delivery-review"]!(s, {
+        by: "service-delivery-manager",
+        now: T(2),
+        policies: { dev: [{ kind: "nope" }] },
+      }),
+    ),
+    "config-invalid",
+  );
+  assert.equal(JSON.stringify(s), before);
   const empty = c["service-delivery-review"]!(s, { by: "service-delivery-manager", now: T(2) });
   assert.deepEqual(lastEvent(empty.state)!.payload, { wip: [], policies: [], sle: [] });
   const level = { percentile: 85, targetMs: 604_800_000 };
