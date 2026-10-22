@@ -1,6 +1,7 @@
 import { timSort } from "exsorted";
 import type { CoreTerm, Methodology, PlannerOptions, Policy, WorkItem } from "../types.ts";
 import { cadencesDue } from "./board.ts";
+import { kanbanCeremonies } from "./ceremonies.ts";
 import { ACTIVE, activeExpedites, commitmentColumn, enteredStageAt, onBoard } from "./columns.ts";
 import { configOf, validateKanbanConfig, type KanbanConfig } from "./config.ts";
 import { kanbanRoles } from "./roles.ts";
@@ -17,6 +18,7 @@ export {
 export { kanbanRoles } from "./roles.ts";
 export { kanbanStages } from "./stages.ts";
 export { kanbanRules } from "./rules.ts";
+export { kanbanCeremonies, wantItems } from "./ceremonies.ts";
 export type {
   KanbanConfig,
   KanbanColumn,
@@ -148,7 +150,7 @@ export function kanban(): Methodology<KanbanConfig> {
         `Do not change the scope of "${item.id}" or its acceptance criteria; raise open_questions instead`,
       ];
     },
-    ceremonies: {},
+    ceremonies: kanbanCeremonies(kanban),
     rules: kanbanRules(),
     metrics: () => ({}),
     humanDefaults: { gates: "none" },
