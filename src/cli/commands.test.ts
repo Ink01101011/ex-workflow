@@ -254,3 +254,20 @@ test("status.report is null for scrum", async () => {
   await runCommand(["init", "scrum", "--config", cfg], root);
   assert.equal(out<{ report: unknown }>(await runCommand(["status"], root)).report, null);
 });
+
+test("add and edit are checked by methodology rules and surface rule violations", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a2.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  const ra = await runCommand(["add", a, "--by", "product-owner"], root);
+  assert.equal(ra.exit, 0);
+  assert.equal(out<{ item: { id: string } }>(ra).item.id, "A");
+  const p = await w("p2.json", { title: "a renamed" });
+  const re = await runCommand(["edit", "A", p, "--by", "product-owner"], root);
+  assert.equal(re.exit, 0);
+  assert.equal(out<{ item: { title: string } }>(re).item.title, "a renamed");
+  const same = await w("p3.json", { title: "a renamed" });
+  const rn = await runCommand(["edit", "A", same, "--by", "product-owner"], root);
+  assert.equal(rn.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(rn).error.code, "no-op");
+});

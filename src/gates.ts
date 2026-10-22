@@ -4,6 +4,7 @@ import { approverIds } from "./roles.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Gate,
+  Methodology,
   PendingHuman,
   Transition,
   Violation,
@@ -123,6 +124,7 @@ export function decide(
   by: string,
   note: string,
   now?: string,
+  methodology?: Methodology,
 ): WorkflowState {
   if (decision !== "approve" && decision !== "reject")
     fail(
@@ -186,5 +188,6 @@ export function decide(
       next = appendEvent(next, "gate.failed", by, { item: id, gate: gateId, note }, at);
     }
   }
+  if (methodology?.afterDecide) next = methodology.afterDecide(next, entry, decision, by, note, at);
   return next;
 }

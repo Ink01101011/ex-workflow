@@ -13,7 +13,7 @@ import { complete } from "../complete.ts";
 import { WorkflowError, fail } from "../errors.ts";
 import { decide } from "../gates.ts";
 import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
-import { init, validateAction } from "../methodology.ts";
+import { applyAction, init, validateAction } from "../methodology.ts";
 import { openIteration } from "../planner.ts";
 import { registerRole } from "../roles.ts";
 import { lastEvent } from "../state.ts";
@@ -169,22 +169,31 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const item = await readJson<NewItem>(path.resolve(cwd, rest[0]));
-      const s2 = addItem(state, item, by, now);
-      await saveState(cwd, s2);
-      return { exit: 0, out: { ok: true, item: getItem(s2, item.id) } };
+      const res = applyAction(
+        state,
+        methodologyOf(state),
+        { type: "item.add", by, payload: { item } },
+        (s) => addItem(s, item, by, now),
+      );
+      await saveState(cwd, res.state);
+      return {
+        exit: 0,
+        out: { ok: true, warnings: res.warnings, item: getItem(res.state, item.id) },
+      };
     }
     case "edit": {
       if (!rest[0] || !rest[1]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
-      const s2 = editItem(
+      const id = rest[0];
+      const patch = await readJson<ItemPatch>(path.resolve(cwd, rest[1]));
+      const res = applyAction(
         state,
-        rest[0],
-        await readJson<ItemPatch>(path.resolve(cwd, rest[1])),
-        by,
-        now,
+        methodologyOf(state),
+        { type: "item.edit", by, payload: { id, patch } },
+        (s) => editItem(s, id, patch, by, now),
       );
-      await saveState(cwd, s2);
-      return { exit: 0, out: { ok: true, item: getItem(s2, rest[0]) } };
+      await saveState(cwd, res.state);
+      return { exit: 0, out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) } };
     }
     case "next": {
       const state = await loadState(cwd);
@@ -253,7 +262,15 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const entry = state.pending.find((p) => p.id === rest[0]);
-      const s2 = decide(state, rest[0], rest[1], by, flags["note"] ?? "", now);
+      const s2 = decide(
+        state,
+        rest[0],
+        rest[1],
+        by,
+        flags["note"] ?? "",
+        now,
+        methodologyOf(state),
+      );
       await saveState(cwd, s2);
       return { exit: 0, out: { ok: true, item: entry?.item ? getItem(s2, entry.item) : null } };
     }
