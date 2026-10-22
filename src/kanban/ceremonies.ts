@@ -1,5 +1,5 @@
 import { fail } from "../errors.ts";
-import { getItem, moveItem, stageOf } from "../items.ts";
+import { getItem, moveItem, patchItem, stageOf } from "../items.ts";
 import { applyAction } from "../methodology.ts";
 import { assertPolicies } from "../policies.ts";
 import { requireCap } from "../roles.ts";
@@ -13,14 +13,18 @@ import type {
   Stage,
   WorkflowState,
 } from "../types.ts";
-import { commitmentColumn, deliveryColumn, optionsColumn } from "./columns.ts";
+import { OPEN, commitmentColumn, deliveryColumn, onBoard, optionsColumn } from "./columns.ts";
 import {
   CLASSES,
+  DAY_MS,
   configOf,
+  validateKanbanConfig,
   validatePolicies,
+  type ClassConfig,
   type KanbanColumn,
   type ServiceLevel,
 } from "./config.ts";
+import { opsReport, riskReport } from "./reports.ts";
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
@@ -214,9 +218,133 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
     });
   };
 
+  const operationsReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "facilitate", "manage-flow");
+    const assign = (input["assign"] ?? []) as Array<{
+      item: string;
+      blocker: string;
+      owner: string;
+    }>;
+    if (
+      !Array.isArray(assign) ||
+      !assign.every(
+        (x) => isObj(x) && typeof x["item"] === "string" && typeof x["blocker"] === "string",
+      )
+    )
+      fail(
+        "invalid-input",
+        "operations-review.assign must be [{ item, blocker, owner }]",
+        'e.g. { "assign": [{ "item": "A", "blocker": "A-b1", "owner": "service-delivery-manager" }] }',
+      );
+    for (const x of assign) {
+      const it = getItem(state, x.item);
+      if (!it.blockers.some((b) => b.id === x.blocker && !b.clearedAt))
+        fail(
+          "invalid-input",
+          `item "${x.item}" has no open blocker "${x.blocker}"`,
+          `open blockers: ${
+            it.blockers
+              .filter((b) => !b.clearedAt)
+              .map((b) => b.id)
+              .join(", ") || "(none)"
+          }`,
+          { items: [x.item] },
+        );
+    }
+    return act(state, "ceremony.operations-review", input, (s, now) => {
+      for (const x of assign) {
+        const from = getItem(s, x.item).blockers.find((b) => b.id === x.blocker)!.owner;
+        s = patchItem(s, x.item, (it) => ({
+          ...it,
+          blockers: it.blockers.map((b) => (b.id === x.blocker ? { ...b, owner: x.owner } : b)),
+        }));
+        s = appendEvent(
+          s,
+          "blocker.reassigned",
+          input.by,
+          { id: x.item, blocker: x.blocker, from, to: x.owner },
+          now,
+        );
+      }
+      return appendEvent(s, "cadence.operations-review", input.by, opsReport(s, now), now);
+    });
+  };
+
+  const riskReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "facilitate", "manage-flow");
+    const stale = input["staleAfterMs"] ?? 7 * DAY_MS;
+    if (typeof stale !== "number" || !Number.isFinite(stale) || stale < 0)
+      fail(
+        "invalid-input",
+        "risk-review.staleAfterMs must be a non-negative number of milliseconds",
+        "omit it for one week",
+      );
+    return act(state, "ceremony.risk-review", input, (s, now) =>
+      appendEvent(s, "cadence.risk-review", input.by, riskReport(s, now, stale), now),
+    );
+  };
+
+  const strategyReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "manage-flow");
+    const cfg = configOf(state);
+    const patch = input["classesOfService"] ?? {};
+    if (!isObj(patch))
+      fail(
+        "invalid-input",
+        "strategy-review.classesOfService must be an object keyed by class",
+        'e.g. { "expedite": { "wipBypass": 2 }, "intangible": null }',
+      );
+    const merged: Record<string, ClassConfig> = { ...cfg.classesOfService } as Record<
+      string,
+      ClassConfig
+    >;
+    for (const [cls, entry] of Object.entries(patch)) {
+      if (!(CLASSES as readonly string[]).includes(cls))
+        fail(
+          "invalid-input",
+          `classesOfService.${cls} is not a class of service`,
+          `use one of: ${CLASSES.join(", ")}`,
+        );
+      if (entry === null) delete merged[cls];
+      else merged[cls] = entry as ClassConfig;
+    }
+    const next = validateKanbanConfig({
+      ...cfg,
+      classesOfService: merged,
+      maxExpedite: input["maxExpedite"] ?? cfg.maxExpedite,
+    });
+    return act(state, "ceremony.strategy-review", input, (s, now) => {
+      const mix: Record<string, number> = Object.fromEntries(CLASSES.map((k) => [k, 0]));
+      for (const it of Object.values(s.items))
+        if (OPEN.has(it.status) && onBoard(s, it)) mix[it.classOfService ?? "standard"]! += 1;
+      s = {
+        ...s,
+        config: {
+          ...configOf(s),
+          classesOfService: next.classesOfService,
+          maxExpedite: next.maxExpedite,
+        },
+      };
+      return appendEvent(
+        s,
+        "cadence.strategy-review",
+        input.by,
+        {
+          mix,
+          before: { classesOfService: cfg.classesOfService, maxExpedite: cfg.maxExpedite },
+          after: { classesOfService: next.classesOfService, maxExpedite: next.maxExpedite },
+        },
+        now,
+      );
+    });
+  };
+
   return {
     replenishment,
     "delivery-planning": deliveryPlanning,
     "service-delivery-review": serviceDeliveryReview,
+    "operations-review": operationsReview,
+    "risk-review": riskReview,
+    "strategy-review": strategyReview,
   };
 }

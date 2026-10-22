@@ -52,6 +52,8 @@ export const KANBAN_VOCABULARY: Record<CoreTerm, string> = {
 export { configOf } from "./config.ts";
 export { board, cardAge, addedAt, cadencesDue, CADENCE_EVENT } from "./board.ts";
 export type { BoardCard, BoardColumn, CadenceStatus } from "./board.ts";
+export { opsReport, riskReport } from "./reports.ts";
+export type { OpsReport, RiskReport } from "./reports.ts";
 export { replay } from "./replay.ts";
 export { kanbanMetrics, percentile, columnStays } from "./metrics.ts";
 export type { KanbanMetrics } from "./metrics.ts";
