@@ -158,7 +158,7 @@ test("one kanban week with an expedite", () => {
     notes: "waiting for finance sign-off",
     produced: [],
   });
-  for (const b of r.briefs.filter((b) => b.item.id !== parent.item.id))
+  for (const b of r.briefs.filter((x) => x.item.id !== parent.item.id))
     s = finish(s, b, b.item.stage === "review" ? { produced: [] } : {});
   const ops = c["operations-review"]!(s, {
     by: sdm,
