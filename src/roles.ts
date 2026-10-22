@@ -118,3 +118,23 @@ export function separationLost(state: WorkflowState, required: Capability[]): Ro
   if (required.length === 0) return [];
   return Object.values(state.roles).filter((r) => required.every((c) => hasCapability(r, c)));
 }
+
+/** `human` may do anything; a role must hold at least one of `caps`; unknown ids may do nothing. */
+export function canDo(state: WorkflowState, by: string, ...caps: Capability[]): boolean {
+  if (by === "human") return true;
+  const role = roleOf(state, by);
+  return !!role && caps.some((c) => hasCapability(role, c));
+}
+
+export function requireCap(state: WorkflowState, by: string, ...caps: Capability[]): void {
+  if (!canDo(state, by, ...caps)) {
+    const holders = Object.values(state.roles)
+      .filter((r) => caps.some((c) => hasCapability(r, c)))
+      .map((r) => r.id);
+    fail(
+      "missing-capability",
+      `"${by}" lacks capability ${caps.map((c) => `"${c}"`).join(" or ")}`,
+      `run this as one of: human${holders.map((h) => `, ${h}`).join("")}`,
+    );
+  }
+}

@@ -1,0 +1,360 @@
+import { fail } from "../errors.ts";
+import { getItem, moveItem, patchItem, stageOf } from "../items.ts";
+import { applyAction } from "../methodology.ts";
+import { assertPolicies } from "../policies.ts";
+import { requireCap } from "../roles.ts";
+import { appendEvent, nowOf } from "../state.ts";
+import type {
+  Ceremony,
+  CeremonyInput,
+  ClassOfService,
+  Methodology,
+  Policy,
+  Stage,
+  WorkflowState,
+} from "../types.ts";
+import { OPEN, commitmentColumn, deliveryColumn, onBoard, optionsColumn } from "./columns.ts";
+import {
+  CLASSES,
+  DAY_MS,
+  configOf,
+  validateKanbanConfig,
+  validatePolicies,
+  type ClassConfig,
+  type KanbanColumn,
+  type ServiceLevel,
+} from "./config.ts";
+import { opsReport, riskReport } from "./reports.ts";
+
+const isObj = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null && !Array.isArray(x);
+
+/** input.items as a non-empty, duplicate-free string[] of existing item ids. */
+export function wantItems(state: WorkflowState, input: CeremonyInput, cadence: string): string[] {
+  const items = input["items"];
+  if (!Array.isArray(items) || items.length === 0 || !items.every((x) => typeof x === "string"))
+    fail("invalid-input", `${cadence} needs items: string[]`, 'pass ["A", "B"]');
+  const dupe = items.find((id, i) => items.indexOf(id) !== i);
+  if (dupe !== undefined)
+    fail("invalid-input", `item "${dupe}" appears twice in items[]`, "list each item once", {
+      items: [dupe],
+    });
+  for (const id of items) getItem(state, id);
+  return items;
+}
+
+function validLevel(x: unknown): x is ServiceLevel {
+  return (
+    isObj(x) &&
+    typeof x["percentile"] === "number" &&
+    x["percentile"] >= 0 &&
+    x["percentile"] <= 100 &&
+    typeof x["targetMs"] === "number" &&
+    Number.isFinite(x["targetMs"]) &&
+    x["targetMs"] > 0
+  );
+}
+
+function withWip<T extends Stage | KanbanColumn>(x: T, limit: number | null): T {
+  const { wipLimit: _w, ...rest } = x;
+  return (limit === null ? rest : { ...rest, wipLimit: limit }) as T;
+}
+
+export function kanbanCeremonies(methodology: () => Methodology): Record<string, Ceremony> {
+  const act = (
+    state: WorkflowState,
+    type: string,
+    input: CeremonyInput,
+    reduce: (s: WorkflowState, now: string) => WorkflowState,
+  ) =>
+    applyAction(state, methodology(), { type, by: input.by, payload: input }, (s) =>
+      reduce(s, nowOf(input.now)),
+    );
+
+  const replenishment: Ceremony = (state, input) => {
+    requireCap(state, input.by, "order-backlog", "manage-flow");
+    const items = wantItems(state, input, "replenishment");
+    const target = commitmentColumn(state);
+    const options = optionsColumn(state);
+    for (const id of items)
+      assertPolicies(state, getItem(state, id), options.exitPolicy, `leave "${options.id}"`);
+    return act(state, "ceremony.replenishment", input, (s, now) => {
+      for (const id of items)
+        s = moveItem(s, id, { stage: target.id, status: "todo" }, input.by, now);
+      return appendEvent(
+        s,
+        "cadence.replenishment",
+        input.by,
+        {
+          column: target.id,
+          items: items.map((id) => {
+            const it = getItem(s, id);
+            return {
+              id,
+              classOfService: it.classOfService ?? "standard",
+              deadline: it.deadline ?? null,
+            };
+          }),
+        },
+        now,
+      );
+    });
+  };
+
+  const deliveryPlanning: Ceremony = (state, input) => {
+    requireCap(state, input.by, "facilitate", "manage-flow");
+    const items = wantItems(state, input, "delivery-planning");
+    const delivery = deliveryColumn(state);
+    const last = state.stages[state.stages.findIndex((st) => st.id === delivery.id) - 1]!;
+    for (const id of items) {
+      const it = getItem(state, id);
+      if (it.stage !== last.id && it.stage !== delivery.id)
+        fail(
+          "invalid-input",
+          `item "${id}" is in "${it.stage}", not ready for delivery`,
+          `only cards in "${last.id}" or "${delivery.id}" can be planned for delivery`,
+          { items: [id] },
+        );
+    }
+    return act(state, "ceremony.delivery-planning", input, (s, now) =>
+      appendEvent(
+        s,
+        "cadence.delivery-planning",
+        input.by,
+        {
+          items,
+          window: typeof input["window"] === "string" ? input["window"] : null,
+          delivered: items.filter((id) => getItem(s, id).status === "done"),
+        },
+        now,
+      ),
+    );
+  };
+
+  const serviceDeliveryReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "manage-flow");
+    const wip = input["wip"] ?? {};
+    const policies = input["policies"] ?? {};
+    const sle = input["sle"] ?? {};
+    if (!isObj(wip) || !isObj(policies) || !isObj(sle))
+      fail(
+        "invalid-input",
+        "service-delivery-review takes wip, policies and sle objects keyed by column or class",
+        'e.g. { "wip": { "dev": 2 }, "policies": { "dev": [{ "kind": "no-open-blockers" }] }, "sle": { "standard": { "percentile": 85, "targetMs": 604800000 } } }',
+      );
+    for (const [id, limit] of Object.entries(wip)) {
+      stageOf(state, id);
+      if (limit !== null && (typeof limit !== "number" || !Number.isFinite(limit) || limit < 1))
+        fail(
+          "invalid-input",
+          `wip.${id} must be a positive number or null`,
+          "null removes the limit",
+        );
+    }
+    const checked: Record<string, Policy[]> = {};
+    for (const [id, p] of Object.entries(policies)) {
+      stageOf(state, id);
+      checked[id] = validatePolicies(p, `policies.${id}`);
+    }
+    for (const [cls, level] of Object.entries(sle)) {
+      if (!(CLASSES as readonly string[]).includes(cls))
+        fail(
+          "invalid-input",
+          `sle.${cls} is not a class of service`,
+          `use one of: ${CLASSES.join(", ")}`,
+        );
+      if (level !== null && !validLevel(level))
+        fail(
+          "invalid-input",
+          `sle.${cls} must be { percentile: 0..100, targetMs: > 0 } or null`,
+          "null removes the service level",
+        );
+    }
+    return act(state, "ceremony.service-delivery-review", input, (s, now) => {
+      const cfg = configOf(s);
+      let stages = s.stages;
+      let columns = cfg.columns;
+      let classesOfService = { ...cfg.classesOfService };
+      const wipChanges: Array<{ column: string; before: number | null; after: number | null }> = [];
+      const policyChanges: Array<{ column: string; before: Policy[]; after: Policy[] }> = [];
+      const sleChanges: Array<{
+        classOfService: string;
+        before: ServiceLevel | null;
+        after: ServiceLevel | null;
+      }> = [];
+      for (const [id, limit] of Object.entries(wip) as Array<[string, number | null]>) {
+        const before = stages.find((st) => st.id === id)!.wipLimit ?? null;
+        if (before === limit) continue;
+        wipChanges.push({ column: id, before, after: limit });
+        stages = stages.map((st) => (st.id === id ? withWip(st, limit) : st));
+        columns = columns.map((col) => (col.id === id ? withWip(col, limit) : col));
+      }
+      for (const [id, p] of Object.entries(checked)) {
+        const before = stages.find((st) => st.id === id)!.exitPolicy;
+        if (JSON.stringify(before) === JSON.stringify(p)) continue;
+        policyChanges.push({ column: id, before, after: p });
+        const at = stages.findIndex((st) => st.id === id);
+        // the commitment column's policies also gate the pull out of it: the next column's entry policy
+        const gated = stages[at]!.commitmentPoint ? stages[at + 1]?.id : undefined;
+        stages = stages.map((st) =>
+          st.id === id
+            ? { ...st, exitPolicy: p }
+            : st.id === gated
+              ? { ...st, entryPolicy: p }
+              : st,
+        );
+        columns = columns.map((col) => (col.id === id ? { ...col, policies: p } : col));
+      }
+      for (const [cls, level] of Object.entries(sle) as Array<
+        [ClassOfService, ServiceLevel | null]
+      >) {
+        const before = classesOfService[cls]?.sle ?? null;
+        if (JSON.stringify(before) === JSON.stringify(level)) continue;
+        sleChanges.push({ classOfService: cls, before, after: level });
+        const { sle: _old, ...rest } = classesOfService[cls] ?? {};
+        classesOfService = {
+          ...classesOfService,
+          [cls]: level === null ? rest : { ...rest, sle: level },
+        };
+      }
+      s = { ...s, stages, config: { ...cfg, columns, classesOfService } };
+      return appendEvent(
+        s,
+        "cadence.service-delivery-review",
+        input.by,
+        { wip: wipChanges, policies: policyChanges, sle: sleChanges },
+        now,
+      );
+    });
+  };
+
+  const operationsReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "facilitate", "manage-flow");
+    const assign = (input["assign"] ?? []) as Array<{
+      item: string;
+      blocker: string;
+      owner: string;
+    }>;
+    if (
+      !Array.isArray(assign) ||
+      !assign.every(
+        (x) => isObj(x) && typeof x["item"] === "string" && typeof x["blocker"] === "string",
+      )
+    )
+      fail(
+        "invalid-input",
+        "operations-review.assign must be [{ item, blocker, owner }]",
+        'e.g. { "assign": [{ "item": "A", "blocker": "A-b1", "owner": "service-delivery-manager" }] }',
+      );
+    for (const x of assign) {
+      const it = getItem(state, x.item);
+      if (!it.blockers.some((b) => b.id === x.blocker && !b.clearedAt))
+        fail(
+          "invalid-input",
+          `item "${x.item}" has no open blocker "${x.blocker}"`,
+          `open blockers: ${
+            it.blockers
+              .filter((b) => !b.clearedAt)
+              .map((b) => b.id)
+              .join(", ") || "(none)"
+          }`,
+          { items: [x.item] },
+        );
+    }
+    return act(state, "ceremony.operations-review", input, (s, now) => {
+      for (const x of assign) {
+        const from = getItem(s, x.item).blockers.find((b) => b.id === x.blocker)!.owner;
+        s = patchItem(s, x.item, (it) => ({
+          ...it,
+          blockers: it.blockers.map((b) => (b.id === x.blocker ? { ...b, owner: x.owner } : b)),
+        }));
+        s = appendEvent(
+          s,
+          "blocker.reassigned",
+          input.by,
+          { id: x.item, blocker: x.blocker, from, to: x.owner },
+          now,
+        );
+      }
+      return appendEvent(s, "cadence.operations-review", input.by, opsReport(s, now), now);
+    });
+  };
+
+  const riskReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "facilitate", "manage-flow");
+    const stale = input["staleAfterMs"] ?? 7 * DAY_MS;
+    if (typeof stale !== "number" || !Number.isFinite(stale) || stale < 0)
+      fail(
+        "invalid-input",
+        "risk-review.staleAfterMs must be a non-negative number of milliseconds",
+        "omit it for one week",
+      );
+    return act(state, "ceremony.risk-review", input, (s, now) =>
+      appendEvent(s, "cadence.risk-review", input.by, riskReport(s, now, stale), now),
+    );
+  };
+
+  const strategyReview: Ceremony = (state, input) => {
+    requireCap(state, input.by, "manage-flow");
+    const cfg = configOf(state);
+    const patch = input["classesOfService"] ?? {};
+    if (!isObj(patch))
+      fail(
+        "invalid-input",
+        "strategy-review.classesOfService must be an object keyed by class",
+        'e.g. { "expedite": { "wipBypass": 2 }, "intangible": null }',
+      );
+    const merged: Record<string, ClassConfig> = { ...cfg.classesOfService } as Record<
+      string,
+      ClassConfig
+    >;
+    for (const [cls, entry] of Object.entries(patch)) {
+      if (!(CLASSES as readonly string[]).includes(cls))
+        fail(
+          "invalid-input",
+          `classesOfService.${cls} is not a class of service`,
+          `use one of: ${CLASSES.join(", ")}`,
+        );
+      if (entry === null) delete merged[cls];
+      else merged[cls] = entry as ClassConfig;
+    }
+    const next = validateKanbanConfig({
+      ...cfg,
+      classesOfService: merged,
+      maxExpedite: input["maxExpedite"] ?? cfg.maxExpedite,
+    });
+    return act(state, "ceremony.strategy-review", input, (s, now) => {
+      const mix: Record<string, number> = Object.fromEntries(CLASSES.map((k) => [k, 0]));
+      for (const it of Object.values(s.items))
+        if (OPEN.has(it.status) && onBoard(s, it)) mix[it.classOfService ?? "standard"]! += 1;
+      s = {
+        ...s,
+        config: {
+          ...configOf(s),
+          classesOfService: next.classesOfService,
+          maxExpedite: next.maxExpedite,
+        },
+      };
+      return appendEvent(
+        s,
+        "cadence.strategy-review",
+        input.by,
+        {
+          mix,
+          before: { classesOfService: cfg.classesOfService, maxExpedite: cfg.maxExpedite },
+          after: { classesOfService: next.classesOfService, maxExpedite: next.maxExpedite },
+        },
+        now,
+      );
+    });
+  };
+
+  return {
+    replenishment,
+    "delivery-planning": deliveryPlanning,
+    "service-delivery-review": serviceDeliveryReview,
+    "operations-review": operationsReview,
+    "risk-review": riskReview,
+    "strategy-review": strategyReview,
+  };
+}

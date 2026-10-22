@@ -263,25 +263,29 @@ export function raiseBlocker(
   const item = getItem(state, id);
   const at = nowOf(now);
   const blockerId = `${id}-b${item.blockers.length + 1}`;
+  const t: Transition | null =
+    item.status === "blocked"
+      ? null
+      : {
+          from: { stage: item.stage, status: item.status },
+          to: { stage: item.stage, status: "blocked" },
+          at,
+          by,
+        };
   const updated: WorkItem = {
     ...item,
     status: "blocked",
     blockers: [...item.blockers, { id: blockerId, reason, owner, raisedAt: at }],
-    transitions:
-      item.status === "blocked"
-        ? item.transitions
-        : [
-            ...item.transitions,
-            {
-              from: { stage: item.stage, status: item.status },
-              to: { stage: item.stage, status: "blocked" },
-              at,
-              by,
-            },
-          ],
+    transitions: t ? [...item.transitions, t] : item.transitions,
   };
   const next = putItem(state, updated);
-  return appendEvent(next, "blocker.raised", by, { id, blocker: blockerId, reason, owner }, at);
+  return appendEvent(
+    next,
+    "blocker.raised",
+    by,
+    { id, blocker: blockerId, reason, owner, transition: t && { from: t.from, to: t.to } },
+    at,
+  );
 }
 
 function lastTransitionTo(item: WorkItem, status: ItemStatus): Transition | undefined {
@@ -329,25 +333,29 @@ export function clearBlocker(
     dropRole = true;
   }
   const { role: _r, ...noRole } = item;
+  const t: Transition | null = stillBlocked
+    ? null
+    : {
+        from: { stage: item.stage, status: "blocked" },
+        to: { stage: toStage, status: toStatus },
+        at,
+        by,
+      };
   const updated: WorkItem = {
     ...(dropRole && !stillBlocked ? (noRole as WorkItem) : item),
     blockers,
     stage: stillBlocked ? item.stage : toStage,
     status: stillBlocked ? "blocked" : toStatus,
-    transitions: stillBlocked
-      ? item.transitions
-      : [
-          ...item.transitions,
-          {
-            from: { stage: item.stage, status: "blocked" },
-            to: { stage: toStage, status: toStatus },
-            at,
-            by,
-          },
-        ],
+    transitions: t ? [...item.transitions, t] : item.transitions,
   };
   const next = putItem(state, updated);
-  return appendEvent(next, "blocker.cleared", by, { id, blocker: blockerId }, at);
+  return appendEvent(
+    next,
+    "blocker.cleared",
+    by,
+    { id, blocker: blockerId, transition: t && { from: t.from, to: t.to } },
+    at,
+  );
 }
 
 /** Entering a new stage is a new assignment: the role that finished the previous stage is cleared so the planner picks the right one (a reviewer, not the author). */

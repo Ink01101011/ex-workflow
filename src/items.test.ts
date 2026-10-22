@@ -14,7 +14,7 @@ import {
   stageOf,
 } from "./items.ts";
 import { WorkflowError } from "./errors.ts";
-import type { Role, Stage } from "./types.ts";
+import type { Role, Stage, WorkflowState } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const stages: Stage[] = [
@@ -139,6 +139,27 @@ test("evidence and blockers", () => {
     () => clearBlocker(s, "A", "A-b9", "po"),
     (e) => code(e) === "invalid-input",
   );
+});
+
+const tr = (s: WorkflowState) =>
+  (s.events.at(-1)!.payload as Record<string, unknown>)["transition"];
+
+test("blocker events carry the item transition they caused, or null", () => {
+  let s = addItem(base(), { id: "A", title: "First" }, "po", T0);
+  s = raiseBlocker(s, "A", "one", "po", "dev", T0);
+  assert.deepEqual(tr(s), {
+    from: { stage: "backlog", status: "todo" },
+    to: { stage: "backlog", status: "blocked" },
+  });
+  s = raiseBlocker(s, "A", "two", "po", "dev", T0);
+  assert.equal(tr(s), null);
+  s = clearBlocker(s, "A", "A-b1", "po", T0);
+  assert.equal(tr(s), null);
+  s = clearBlocker(s, "A", "A-b2", "po", T0);
+  assert.deepEqual(tr(s), {
+    from: { stage: "backlog", status: "blocked" },
+    to: { stage: "backlog", status: "todo" },
+  });
 });
 
 test("clearing a blocker on an in_progress item re-queues it in the stage it was pulled from", () => {

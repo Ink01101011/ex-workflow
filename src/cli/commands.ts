@@ -18,6 +18,7 @@ import { openIteration } from "../planner.ts";
 import { registerRole } from "../roles.ts";
 import { lastEvent } from "../state.ts";
 import { scrum } from "../scrum/index.ts";
+import { kanban } from "../kanban/index.ts";
 import type {
   Accounting,
   Action,
@@ -29,10 +30,13 @@ import type {
   WorkflowState,
 } from "../types.ts";
 
-const METHODOLOGIES: Record<string, () => Methodology> = { scrum: scrum as () => Methodology };
+const METHODOLOGIES: Record<string, () => Methodology> = {
+  scrum: scrum as () => Methodology,
+  kanban: kanban as () => Methodology,
+};
 
 export const USAGE = [
-  "exwf init <scrum> --config <file> [--roles <file>]",
+  "exwf init <scrum|kanban> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
   "exwf next [--max n]                  exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m",
   "exwf ceremony <name> [input.json] [--by who]",
@@ -188,7 +192,10 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const res = planNext(state, methodologyOf(state), opts);
       await saveState(cwd, res.state);
       for (const b of res.briefs) await saveBrief(cwd, b);
-      return { exit: 0, out: { ok: true, reason: res.reason ?? null, briefs: res.briefs } };
+      return {
+        exit: 0,
+        out: { ok: true, reason: res.reason ?? null, skipped: res.skipped, briefs: res.briefs },
+      };
     }
     case "complete": {
       if (!rest[0] || !rest[1]) return { exit: 2, out: { ok: false, usage: USAGE } };
@@ -252,6 +259,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
     }
     case "status": {
       const state = await loadState(cwd);
+      const m = methodologyOf(state);
       const counts: Record<ItemStatus, number> = {
         todo: 0,
         in_progress: 0,
@@ -271,6 +279,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
           counts,
           pending: state.pending,
           lastEvent: lastEvent(state),
+          report: m.report ? m.report(state) : null,
         },
       };
     }
