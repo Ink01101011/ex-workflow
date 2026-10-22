@@ -166,3 +166,58 @@ test("cadencesDue counts completions since the last cadence event", () => {
   );
   assert.deepEqual(m.report!(s), { cadencesDue: cadencesDue(s) });
 });
+
+test("replay agrees with the state on stage and status after rework, a cleared blocker and an answered escalation", () => {
+  let s = init({ methodology: m, config: {}, now: T(0) }).state;
+  for (const id of ["A", "B", "C"]) {
+    s = addItem(s, { id, title: id, acceptance: ["ok"] }, "human", T(1));
+    s = moveItem(s, id, { stage: "ready", status: "todo" }, "human", T(2));
+  }
+  s = next(s, m, { now: T(3) }).state; // A, B, C into dev
+  s = complete(s, m, hand("A"), acct("A", T(4)), T(4)).state; // A to review
+  s = complete(
+    s,
+    m,
+    hand("B", { verdict: "blocked", notes: "waiting on api" }),
+    acct("B", T(5)),
+    T(5),
+  ).state;
+  s = complete(
+    s,
+    m,
+    hand("C", { verdict: "escalate", open_questions: ["which table?"], produced: [] }),
+    acct("C", T(5)),
+    T(5),
+  ).state;
+  s = clearBlocker(s, "B", "B-b1", "human", T(6));
+  s = next(s, m, { now: T(7) }).state; // A in review, B back in dev, the question in dev
+  s = complete(
+    s,
+    m,
+    hand("A", { verdict: "rework", notes: "add tests" }),
+    acct("A", T(8)),
+    T(8),
+  ).state; // review sends A back
+  s = complete(
+    s,
+    m,
+    hand("C-q1", { role: "service-request-manager", produced: [], notes: "use v7" }),
+    { ...acct("C-q1", T(8)), role: "service-request-manager" },
+    T(8),
+  ).state; // the answer
+  s = next(s, m, { now: T(9) }).state; // A and C back in dev
+  const r = replay(s.events, "ready", "done");
+  assert.deepEqual([...r.items.keys()].sort(), Object.keys(s.items).sort());
+  for (const [id, it] of Object.entries(s.items)) {
+    const got = r.items.get(id)!;
+    assert.equal(got.stage, it.stage, `stage of ${id}`);
+    assert.equal(got.status, it.status, `status of ${id}`);
+  }
+  // the scenario really exercised each path
+  assert.equal(s.items["C-q1"]!.status, "done");
+  assert.ok(
+    s.items["A"]!.transitions.some((t) => t.from.stage === "review" && t.to.stage === "ready"),
+  );
+  assert.equal(s.items["B"]!.blockers[0]!.clearedAt !== undefined, true);
+  console.log(JSON.stringify(s.items["A"]!.transitions.map((t) => [t.from, t.to])));
+});
