@@ -63,6 +63,8 @@ kanbanMetrics(s2); // lead time, cycle time per column, throughput, WIP, flow ef
 
 Cadences are ceremonies: `replenishment`, `delivery-planning`, `service-delivery-review` (WIP, policies, SLEs), `operations-review` (blockers, aging WIP), `risk-review` (fixed-date risk, stale blockers), `strategy-review` (classes of service). `exwf status` reports which cadences are due (`config.cadences.<name>.everyTurns`). `test/kanban.e2e.test.ts` is a full week with an expedite, an escalation and a blocker.
 
+`next()` also returns `skipped`: each ready card it did not pull, with `reason` (`entry-policy`, `wip`, `resource-cap` or `budget`) and a `detail`; the commitment column's policies gate the pull out of it. Ordering is by class band (question, expedite, fixed-date, standard, intangible) and, with `fairness.aging` on (the default), a card passed over `fairness.maxDeferralRounds` times (default 5) moves up, so an intangible card is not starved.
+
 ## CLI
 
 State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage exits 2.
@@ -72,7 +74,7 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 | `init <scrum\|kanban> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
 | `add <item.json>` | `{ ok, item }` |
 | `edit <id> <patch.json>` | `{ ok, item }` |
-| `next [--max n]` | `{ ok, reason, briefs }`; writes `.workflow/briefs/<id>.json` |
+| `next [--max n]` | `{ ok, reason, skipped, briefs }`; writes `.workflow/briefs/<id>.json` |
 | `complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--role r]` | `{ ok, item, warnings }` |
 | `ceremony <name> [input.json] [--by who]` | `{ ok, warnings, lastEvent }` |
 | `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` |
@@ -117,6 +119,7 @@ Minor items deferred past 0.2.0-stage:
 - Evidence can go stale across a rework cycle.
 - The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget ratchets down from 45238 B (spec target 40960 B).
 - Kanban WIP limits bound active cards (`in_progress`, `blocked`, `awaiting_human`); cards the engine advanced into a column's queue are reported as `queued` and surfaced by operations-review, not refused.
+- Kanban `wipBypass` is the total number of extra slots a column grants while any expedite is active, not one per expedite.
 - Kanban cadences use `item.completed` counts as turns; a wall-clock cadence schedule is the host's job.
 - Minor test gaps: retro duplicate-ref rejection, `writeAtomic` failure path, thin CLI usage and `decide` tests.
 
