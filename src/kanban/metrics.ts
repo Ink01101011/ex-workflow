@@ -81,7 +81,7 @@ export function kanbanMetrics(state: WorkflowState): KanbanMetrics {
     .map((i) => Date.parse(i.committedAt!));
   let throughput: number[] = [];
   if (commits.length > 0) {
-    const start = Math.min(...commits);
+    const start = commits.reduce((lo, x) => (x < lo ? x : lo), commits[0]!);
     const n = Math.floor((Date.parse(r.lastAt) - start) / cfg.throughputWindowMs) + 1;
     throughput = Array.from({ length: n }, () => 0);
     for (const i of delivered) {

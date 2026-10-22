@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../methodology.ts";
-import { addItem, clearBlocker } from "../items.ts";
+import { addItem, clearBlocker, moveItem, raiseBlocker } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
 import { kanban } from "./index.ts";
@@ -131,4 +131,62 @@ test("metrics read only events, stages and config", () => {
   assert.equal(zero.flowEfficiency, 0);
   assert.deepEqual(zero.sleCompliance, {});
   assert.deepEqual(zero.wipByColumn, { options: 0, ready: 0, dev: 0, review: 0, done: 0 });
+});
+
+test("question items are neither commitments nor deliveries", () => {
+  const { end } = week();
+  const before = kanbanMetrics(end);
+  let s = addItem(
+    end,
+    { id: "Q", title: "q", type: "question", stage: "ready" },
+    "service-request-manager",
+    T(19),
+  );
+  s = moveItem(s, "Q", { stage: "done", status: "done" }, "human", T(19));
+  const after = kanbanMetrics(s);
+  assert.deepEqual(after.leadTimeMs, before.leadTimeMs);
+  assert.deepEqual(after.throughput, before.throughput);
+  assert.deepEqual(after.sleCompliance, before.sleCompliance);
+  assert.equal(after.flowEfficiency, before.flowEfficiency);
+  assert.deepEqual(after.wipByColumn, before.wipByColumn);
+  assert.equal(
+    after.cumulativeFlow["2026-10-22:done"],
+    before.cumulativeFlow["2026-10-22:done"]! + 1,
+  );
+});
+
+test("cumulative flow spans UTC days", () => {
+  const d1 = "2026-10-22T23:50:00.000Z";
+  const d2 = "2026-10-23T00:10:00.000Z";
+  let s = init({ methodology: m, config, now: d1 }).state;
+  s = addItem(s, { id: "A", title: "a", acceptance: ["ok"] }, "service-request-manager", d1);
+  s = addItem(s, { id: "B", title: "b", acceptance: ["ok"] }, "service-request-manager", d1);
+  s = c["replenishment"]!(s, {
+    by: "service-request-manager",
+    now: "2026-10-22T23:55:00.000Z",
+    items: ["A", "B"],
+  }).state;
+  s = next(s, m, { now: d2 }).state;
+  assert.deepEqual(kanbanMetrics(s).cumulativeFlow, {
+    "2026-10-22:options": 2,
+    "2026-10-22:ready": 2,
+    "2026-10-22:dev": 0,
+    "2026-10-22:review": 0,
+    "2026-10-22:done": 0,
+    "2026-10-23:options": 2,
+    "2026-10-23:ready": 2,
+    "2026-10-23:dev": 2,
+    "2026-10-23:review": 0,
+    "2026-10-23:done": 0,
+  }); // both cards are pulled into dev by the single next() call
+});
+
+test("an open blocker is measured to the last event", () => {
+  const { mid } = week();
+  let s = raiseBlocker(mid, "F", "waiting", "human", "human", T(12)); // never cleared
+  s = addItem(s, { id: "Z", title: "z" }, "service-request-manager", T(17)); // last event
+  const mm = kanbanMetrics(s);
+  // B: T5 -> T8 (3 min, cleared) + F: T12 -> T17 (5 min, open, measured to last event)
+  assert.equal(mm.blockerTimeMs, 8 * MIN);
+  assert.equal(mm.meanBlockerTimeMs, 4 * MIN);
 });
