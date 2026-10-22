@@ -4,6 +4,7 @@ import { timSort } from "exsorted";
 import { init } from "../methodology.ts";
 import { addItem, editItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
+import { complete } from "../complete.ts";
 import { WorkflowError } from "../errors.ts";
 import { DEFAULT_COLUMNS, validateKanbanConfig } from "./config.ts";
 import { activeExpedites, commitmentColumn, deliveryColumn, onBoard } from "./columns.ts";
@@ -283,4 +284,77 @@ test("a commitment-column policy is enforced on the pull and the refusal is visi
     ["A"],
   );
   assert.deepEqual(r.skipped, []);
+});
+
+test("an escalation question is pulled past a content policy on the commitment column", () => {
+  const m = kanban();
+  const columns = DEFAULT_COLUMNS.map((c) =>
+    c.id === "ready" ? { ...c, policies: [{ kind: "estimate-present" as const }] } : c,
+  );
+  let s = init({ methodology: m, config: { columns }, now: T0 }).state;
+  s = addItem(s, { id: "A", title: "a", acceptance: ["ok"], weight: 2 }, "human", T0);
+  s = moveItem(s, "A", { stage: "ready", status: "todo" }, "human", T1);
+  const t = (n: number) => new Date(Date.parse(T1) + n * 60_000).toISOString();
+  const hand = (item: string, role: string, over: object = {}) => ({
+    item,
+    role,
+    produced: [{ kind: "test-output" as const, ref: "ci" }],
+    notes: "ok",
+    do_not: [],
+    open_questions: [],
+    ...over,
+  });
+  const acct = (item: string, role: string, at: string) => ({
+    item,
+    role,
+    model: "small",
+    tokensIn: 1,
+    tokensOut: 1,
+    durationMs: 1,
+    startedAt: at,
+    endedAt: at,
+  });
+  const skippedIds: string[] = [];
+  let r = next(s, m, { now: t(1) });
+  skippedIds.push(...r.skipped.map((x) => x.id));
+  s = complete(
+    r.state,
+    m,
+    hand("A", "worker", { verdict: "escalate", open_questions: ["which table?"], produced: [] }),
+    acct("A", "worker", t(2)),
+    t(2),
+  ).state;
+  r = next(s, m, { now: t(3) });
+  skippedIds.push(...r.skipped.map((x) => x.id));
+  assert.deepEqual(
+    r.briefs.map((b) => b.item.id),
+    ["A-q1"],
+  );
+  const role = getItem(r.state, "A-q1").role!;
+  s = complete(
+    r.state,
+    m,
+    hand("A-q1", role, { produced: [], notes: "v7" }),
+    acct("A-q1", role, t(4)),
+    t(4),
+  ).state;
+  r = next(s, m, { now: t(5) });
+  skippedIds.push(...r.skipped.map((x) => x.id));
+  assert.deepEqual(
+    r.briefs.map((b) => b.item.id),
+    ["A"],
+  );
+  s = complete(r.state, m, hand("A", "worker"), acct("A", "worker", t(6)), t(6)).state;
+  r = next(s, m, { now: t(7) });
+  s = complete(
+    r.state,
+    m,
+    hand("A", "worker", { produced: [] }),
+    acct("A", "worker", t(8)),
+    t(8),
+  ).state;
+  assert.equal(getItem(s, "A").status, "done");
+  assert.equal(getItem(s, "A").stage, "done");
+  assert.equal(getItem(s, "A-q1").status, "done");
+  assert.ok(!skippedIds.includes("A-q1"));
 });

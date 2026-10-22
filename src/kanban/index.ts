@@ -1,6 +1,6 @@
 import { timSort } from "exsorted";
 import type { CoreTerm, Methodology, PlannerOptions, Policy, WorkItem } from "../types.ts";
-import { addedAt, cadencesDue } from "./board.ts";
+import { cadencesDue } from "./board.ts";
 import { kanbanCeremonies } from "./ceremonies.ts";
 import { ACTIVE, activeExpedites, commitmentColumn, enteredStageAt, onBoard } from "./columns.ts";
 import { configOf, validateKanbanConfig, type KanbanConfig } from "./config.ts";
@@ -135,18 +135,37 @@ export function kanban(): Methodology<KanbanConfig> {
       const commit = commitmentColumn(state);
       const after = state.stages[state.stages.findIndex((s) => s.id === commit.id) + 1];
       const bypass = cfg.classesOfService.expedite?.wipBypass ?? 1;
+      // one pass over the events: times, planner.resolved prefix counts and item.added times
+      const times: number[] = [];
+      const resolvedBefore: number[] = [0]; // resolvedBefore[i] = resolved events among events[0..i)
+      const added = new Map<string, string>();
+      for (const e of state.events) {
+        times.push(Date.parse(e.at));
+        resolvedBefore.push(
+          resolvedBefore[resolvedBefore.length - 1]! + (e.type === "planner.resolved" ? 1 : 0),
+        );
+        if (e.type === "item.added") added.set((e.payload as { id: string }).id, e.at);
+      }
+      /** planner.resolved events after the last event at or before `t` (events are time-ordered). */
+      const deferralsSince = (t: number): number => {
+        let lo = 0;
+        let hi = times.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (times[mid]! <= t) lo = mid + 1;
+          else hi = mid;
+        }
+        return resolvedBefore[times.length]! - resolvedBefore[lo]!;
+      };
       const po: PlannerOptions = {
         schedulerMode: "throughput",
         fairnessPolicy: cfg.fairness.aging ? "aging" : "none",
         deadlineStrategy: "earliest-first",
         dispatchStage: (item) => (item.stage === commit.id && after ? after.id : undefined),
         priorityOf: (item) => {
-          const since = Date.parse(enteredStageAt(item) ?? addedAt(state, item.id));
-          const deferrals = state.events.filter(
-            (e) => e.type === "planner.resolved" && Date.parse(e.at) >= since,
-          ).length;
+          const since = Date.parse(enteredStageAt(item) ?? added.get(item.id) ?? "");
           return priorityByClass(item, {
-            deferrals,
+            deferrals: deferralsSince(Number.isFinite(since) ? since : 0),
             aging: cfg.fairness.aging,
             maxDeferralRounds: cfg.fairness.maxDeferralRounds,
           });

@@ -238,6 +238,25 @@ test("skipped reports a wip skip with the stage id, in the result and in the pla
   assert.deepEqual((ev.payload as { skipped: unknown }).skipped, res.skipped);
 });
 
+test("an entry policy does not apply to a question item", () => {
+  const stages = hookStages.map((st) =>
+    st.id === "work" ? { ...st, entryPolicy: [{ kind: "estimate-present" as const }] } : st,
+  );
+  let s = createState({ methodology: "kanban", config: {}, stages, roles: [devRole], now: H0 });
+  s = addItem(s, { id: "Q", title: "q", type: "question" }, "h", H0);
+  s = addItem(s, { id: "A", title: "a" }, "h", H0);
+  const m = hooked({ dispatchStage: (i) => (i.stage === "queue" ? "work" : undefined) });
+  const res = plan(s, m, { now: H0 });
+  assert.deepEqual(
+    res.dispatched.map((d) => d.id),
+    ["Q"],
+  );
+  assert.deepEqual(
+    res.skipped.map((x) => [x.id, x.reason]),
+    [["A", "entry-policy"]],
+  );
+});
+
 test("priorityOf overrides item.priority and tieBreaker orders equal priorities", () => {
   const byC = hooked({ priorityOf: (i) => (i.id === "C" ? 100 : i.priority) });
   assert.deepEqual(
