@@ -35,7 +35,7 @@ const measured = {
 };
 const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
 const NOTE =
-  "budgets set at measured size (owner decision, 2026-10-19 for core+scrum, Phase 2 for core+kanban); spec target was 40960 per methodology; ratchets down only; core+scrum raised 45244 -> 45668, dist/index.mjs 1031 -> 1092, dist/scrum/index.mjs 369 -> 404 on 2026-10-22 for the Phase 2 planner hooks and the blocker.raised/blocker.cleared transition payloads (+424 B core+scrum, measured: +330 B hooks at ac350c4, +94 B payloads at e04cb76); core+scrum 45668 -> 46190 and core+kanban 55726 -> 56956 on 2026-10-22 for plan() skipped-reason reporting (+522 B core) and class-band ordering with aging promotion (+706 B kanban), measured";
+  "budgets set at measured size (owner decision, 2026-10-19 for core+scrum, Phase 2 for core+kanban); spec target was 40960 per methodology; ratchets down only; core+scrum raised 45244 -> 45668, dist/index.mjs 1031 -> 1092, dist/scrum/index.mjs 369 -> 404 on 2026-10-22 for the Phase 2 planner hooks and the blocker.raised/blocker.cleared transition payloads (+424 B core+scrum, measured: +330 B hooks at ac350c4, +94 B payloads at e04cb76); core+scrum 45668 -> 46190 and core+kanban 55726 -> 56956 on 2026-10-22 for plan() skipped-reason reporting (+522 B core) and class-band ordering with aging promotion (+706 B kanban), measured; core+scrum 46190 -> 46213 and core+kanban 56956 -> 57199 for the question entry-policy exemption and index-based deferral counting, measured";
 const budgets = {};
 for (const k of Object.keys(measured)) {
   budgets[k] = current[k] ?? (k.startsWith("core+") ? TARGET : measured[k]);
