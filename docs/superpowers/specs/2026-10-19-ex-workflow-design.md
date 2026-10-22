@@ -768,3 +768,21 @@ Decisions taken during implementation and the final whole-branch review; they re
 | Size | Budget is measured as `core+scrum` by bundling `scripts/measure-entry.ts`; target 40 KB; `size-budget.json` ratchets down only. |
 | Tests | `scripts/run-tests.mjs` collects `*.test.ts` so Node 18/20 run the suite. |
 | Out of Phase 1 | `ex-workflow/schema` JSON Schema and on-load schema validation; Kanban and Waterfall modules; `archive`; custom ceremonies as data. |
+
+## 18. Phase 2 implementation addenda (Kanban)
+
+Decisions taken while implementing §9; they refine §5, §7 and §9.
+
+| Topic | Decision |
+|---|---|
+| Planner hooks | `PlannerOptions` gained `dispatchStage` as a per-item function, `priorityOf`, `tieBreaker`, `wipCounts`, `wipLimitOf`. Kanban uses them for: pull from the commitment column into the next column; expedite = max priority, intangible = min priority; tie-break by class rank then column age (FIFO by aging); blocked and awaiting_human cards hold WIP slots; expedite bypass = `wipLimit + wipBypass`. |
+| WIP semantics | A column's `wipLimit` bounds its active cards (`in_progress`, `blocked`, `awaiting_human`). The engine's `complete()` advances a finished card into the next column's queue even when that column is at its limit; the queue is visible as `queued` in `board()` and in operations-review, and nothing new is pulled into a full column. The commitment column's queue is bounded at replenishment by `wip-respected` over all open cards. |
+| Pull | Cards enter the board only through `replenishment` (Options → commitment column); the planner pulls everything after that. `pull-not-push` rejects any other entry through the cadence; direct `addItem` into a later column is unsupported. |
+| Policies | A column's `policies` are its exit policies (checked when a card leaves); the delivery column may have none (`policy-explicit` exempts it). |
+| Classes of service | Captured at commitment in the `cadence.replenishment` payload (class, deadline) so metrics per class derive from events; a card never replenished counts as `standard`. |
+| One expedite | `candidates()` admits at most `maxExpedite − active expedites` expedite cards per `next()` call (oldest first); `one-expedite` refuses replenishing a second expedite while one is on the board. |
+| Questions | Escalation questions are born in the commitment column and are dispatched like any card (max priority), but are excluded from lead time, throughput and SLE metrics. |
+| Cadences | Each cadence is a ceremony emitting `cadence.<name>` with a structured payload; `cadencesDue(state)` counts `item.completed` events since the last one against `config.cadences.<name>.everyTurns`; `Methodology.report` surfaces it through `exwf status`. `service-delivery-review` keeps `state.stages` and `config.columns` / `config.classesOfService` in sync and records before/after. |
+| Metrics clock | Open measurements (aging WIP, open blockers) are taken at the last event's time so `metrics(state)` stays a pure function of events. Cumulative flow counts distinct items that entered a column by the end of each day that has an event. |
+| Blocker events | `blocker.raised` and `blocker.cleared` carry `transition: { from, to } \| null` (the status change they made, if any) so the event log alone reconstructs blocked time and re-queues; the Kanban replay applies it like an `item.transition` and never re-derives `clearBlocker`'s routing. |
+| Out of Phase 2 | Waterfall module (Phase 3); `ex-workflow/schema`; queue limits per column; wall-clock cadence scheduling. |
