@@ -85,10 +85,17 @@ export interface PlanOptions {
   now?: string;
   fallbackTokensPerWeight?: number;
 }
-export type PlanReason = "no-candidates" | "budget-exhausted" | "wip-full";
+export type PlanReason = "no-candidates" | "budget-exhausted" | "wip-full" | "policy-blocked";
+/** A ready item the planner did not pull, and why. */
+export interface Skipped {
+  id: string;
+  reason: "entry-policy" | "wip" | "resource-cap" | "budget";
+  detail: string;
+}
 export interface PlanResult {
   state: WorkflowState;
   dispatched: WorkItem[];
+  skipped: Skipped[];
   reason?: PlanReason;
 }
 
@@ -104,7 +111,8 @@ export function plan(
     i.dependsOn.every((d) => state.items[d]?.status === "done" || all.some((c) => c.id === d)),
   );
   const readyAll = all.filter((i) => i.dependsOn.every((d) => state.items[d]?.status === "done"));
-  if (candidates.length === 0) return { state, dispatched: [], reason: "no-candidates" };
+  if (candidates.length === 0)
+    return { state, dispatched: [], skipped: [], reason: "no-candidates" };
 
   const po = methodology.plannerOptions(state);
   const options: ExFlowOptions<NodeData> = {
@@ -160,6 +168,7 @@ export function plan(
   const limit = Math.min(opts.max ?? Infinity, po.concurrencyCap ?? Infinity);
 
   const dispatched: WorkItem[] = [];
+  const skipped: Skipped[] = [];
   let reason: PlanReason | undefined;
   let next = state;
   for (const item of ready) {
@@ -171,7 +180,15 @@ export function plan(
       typeof po.dispatchStage === "function" ? po.dispatchStage(item) : po.dispatchStage;
     const target = item.status === "todo" && pulledTo !== undefined ? pulledTo : item.stage;
     const stage = stageOf(state, target);
-    if (evaluatePolicies(state, item, stage.entryPolicy).length > 0) continue;
+    const violations = evaluatePolicies(state, item, stage.entryPolicy);
+    if (violations.length > 0) {
+      skipped.push({
+        id: item.id,
+        reason: "entry-policy",
+        detail: violations.map((v) => v.message).join("; "),
+      });
+      continue;
+    }
     const limitHere = po.wipLimitOf ? po.wipLimitOf(stage, item) : stage.wipLimit;
     if (
       limitHere !== undefined &&
@@ -180,18 +197,33 @@ export function plan(
         limitHere
     ) {
       reason = "wip-full";
+      skipped.push({
+        id: item.id,
+        reason: "wip",
+        detail: `stage "${stage.id}" is at its WIP limit of ${limitHere}`,
+      });
       continue;
     }
     const role = assignRole(state, item);
     const cls = role.resourceClass ?? role.id;
     if (caps[cls] !== undefined && (perClass[cls] ?? 0) >= caps[cls]!) {
       reason = "wip-full";
+      skipped.push({
+        id: item.id,
+        reason: "resource-cap",
+        detail: `resource class "${cls}" is at its cap of ${caps[cls]}`,
+      });
       continue;
     }
     if (tokensLeft !== undefined) {
       const est = estimateTokens(state, item.weight, opts.fallbackTokensPerWeight);
       if (est > tokensLeft) {
         reason = "budget-exhausted";
+        skipped.push({
+          id: item.id,
+          reason: "budget",
+          detail: `needs about ${est} tokens, ${tokensLeft} left in the iteration`,
+        });
         continue;
       }
       tokensLeft -= est;
@@ -204,14 +236,18 @@ export function plan(
     };
     dispatched.push(next.items[item.id]!);
   }
+  if (reason === undefined && skipped.some((x) => x.reason === "entry-policy"))
+    reason = "policy-blocked";
   if (reason === undefined && dispatched.length < readyAll.length) reason = "wip-full";
   if (dispatched.length === 0 && reason === undefined) reason = "no-candidates";
   next = appendEvent(
     next,
     "planner.resolved",
     "planner",
-    { dispatched: dispatched.map((d) => d.id), reason: reason ?? null, metrics },
+    { dispatched: dispatched.map((d) => d.id), reason: reason ?? null, skipped, metrics },
     at,
   );
-  return reason ? { state: next, dispatched, reason } : { state: next, dispatched };
+  return reason
+    ? { state: next, dispatched, skipped, reason }
+    : { state: next, dispatched, skipped };
 }

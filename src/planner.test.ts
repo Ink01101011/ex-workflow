@@ -227,6 +227,17 @@ test("dispatchStage as a function pulls queued items into the stage it names", (
   assert.equal(res.reason, "wip-full");
 });
 
+test("skipped reports a wip skip with the stage id, in the result and in the planner.resolved event", () => {
+  const m = hooked({ dispatchStage: (i) => (i.stage === "queue" ? "work" : undefined) });
+  const res = plan(threeQueued(), m, { now: H0 });
+  assert.deepEqual(res.skipped.map((x) => x.id).sort(), ["B", "C"]);
+  assert.ok(res.skipped.every((x) => x.reason === "wip"));
+  assert.match(res.skipped[0]!.detail, /"work"/);
+  const ev = res.state.events[res.state.events.length - 1]!;
+  assert.equal(ev.type, "planner.resolved");
+  assert.deepEqual((ev.payload as { skipped: unknown }).skipped, res.skipped);
+});
+
 test("priorityOf overrides item.priority and tieBreaker orders equal priorities", () => {
   const byC = hooked({ priorityOf: (i) => (i.id === "C" ? 100 : i.priority) });
   assert.deepEqual(

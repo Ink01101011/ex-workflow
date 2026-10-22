@@ -192,7 +192,10 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const res = planNext(state, methodologyOf(state), opts);
       await saveState(cwd, res.state);
       for (const b of res.briefs) await saveBrief(cwd, b);
-      return { exit: 0, out: { ok: true, reason: res.reason ?? null, briefs: res.briefs } };
+      return {
+        exit: 0,
+        out: { ok: true, reason: res.reason ?? null, skipped: res.skipped, briefs: res.briefs },
+      };
     }
     case "complete": {
       if (!rest[0] || !rest[1]) return { exit: 2, out: { ok: false, usage: USAGE } };
