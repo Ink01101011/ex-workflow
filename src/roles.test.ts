@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { createState } from "./state.ts";
 import {
   approversFor,
+  canDo,
   hasCapability,
   registerRole,
+  requireCap,
   requireCapabilities,
   retireRole,
   rolesWith,
@@ -132,4 +134,37 @@ test("role ids are validated by registerRole and createState", () => {
       id,
     );
   }
+});
+
+test("canDo and requireCap: human may do anything, roles need one of the capabilities", () => {
+  const s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: [{ id: "a", name: "a", entryPolicy: [], exitPolicy: [] }],
+    roles: [
+      {
+        id: "mgr",
+        name: "m",
+        modelTier: "large",
+        capabilities: ["manage-flow"],
+        canApprove: [],
+        inputs: [],
+        outputs: [],
+        do_not: [],
+      },
+    ],
+    now: "2026-10-22T00:00:00.000Z",
+  });
+  assert.equal(canDo(s, "human", "deliver"), true);
+  assert.equal(canDo(s, "mgr", "deliver", "manage-flow"), true);
+  assert.equal(canDo(s, "mgr", "deliver"), false);
+  assert.equal(canDo(s, "nobody", "deliver"), false);
+  assert.doesNotThrow(() => requireCap(s, "mgr", "manage-flow"));
+  assert.throws(
+    () => requireCap(s, "mgr", "deliver"),
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "missing-capability" &&
+      /run this as one of: human/.test(e.fix),
+  );
 });

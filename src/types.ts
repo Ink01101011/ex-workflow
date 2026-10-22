@@ -299,13 +299,21 @@ export type Ceremony = (state: WorkflowState, input: CeremonyInput) => ApplyResu
 
 export interface PlannerOptions {
   schedulerMode: "level" | "throughput";
-  /** Stage a todo item is pulled into when dispatched; omitted = stay in its current stage. */
-  dispatchStage?: string;
+  /** Stage a todo item is pulled into when dispatched; a function decides per item; omitted/undefined = stay in its current stage. */
+  dispatchStage?: string | ((item: WorkItem) => string | undefined);
   concurrencyCap?: number;
   fairnessPolicy?: "none" | "aging";
   maxDeferralRounds?: number;
   deadlineStrategy?: "earliest-first" | "latest-first";
   weightStrategy?: "higher-first" | "lower-first";
+  /** Priority the planner orders by; defaults to item.priority. */
+  priorityOf?(item: WorkItem): number | undefined;
+  /** Orders items of equal priority (after deadline/weight strategies); e.g. class of service, then age. */
+  tieBreaker?(a: WorkItem, b: WorkItem): number;
+  /** Statuses that occupy a stage's wipLimit slot; default ["in_progress"]. */
+  wipCounts?: ItemStatus[];
+  /** Per-item replacement for the target stage's wipLimit (e.g. an expedite bypass); undefined = no limit. */
+  wipLimitOf?(stage: Stage, item: WorkItem): number | undefined;
 }
 
 export interface Methodology<C = unknown> {
@@ -325,6 +333,8 @@ export interface Methodology<C = unknown> {
   humanDefaults: { gates: "all" | "none" | string[] };
   /** Called after complete(); lets the methodology react (e.g. close a sprint when the budget is gone). */
   afterComplete?(state: WorkflowState, itemId: string, now: string): WorkflowState;
+  /** Methodology-specific status for hosts (e.g. cadences due); printed by `exwf status`. */
+  report?(state: WorkflowState): Record<string, unknown>;
 }
 
 // ---- errors ----------------------------------------------------------

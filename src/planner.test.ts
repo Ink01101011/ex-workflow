@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
-import { addItem, getItem, moveItem } from "./items.ts";
+import { addItem, getItem, moveItem, raiseBlocker } from "./items.ts";
 import { assignRole, openIteration, plan, resourceCapsFor, toExNodes } from "./planner.ts";
 import { WorkflowError } from "./errors.ts";
-import type { Methodology, Role, Stage, WorkflowState } from "./types.ts";
+import type { Methodology, PlannerOptions, Role, Stage, WorkflowState } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const stages: Stage[] = [
@@ -165,5 +165,124 @@ test("plan wraps ex-flow errors", () => {
   assert.throws(
     () => plan(s, fakeMethodology(), { now: T0 }),
     (e: unknown) => e instanceof WorkflowError && e.code === "planner-error",
+  );
+});
+
+const H0 = "2026-10-22T00:00:00.000Z";
+const hookStages: Stage[] = [
+  { id: "queue", name: "Queue", entryPolicy: [], exitPolicy: [] },
+  { id: "work", name: "Work", wipLimit: 1, entryPolicy: [], exitPolicy: [] },
+  { id: "done", name: "Done", entryPolicy: [], exitPolicy: [] },
+];
+const devRole: Role = {
+  id: "dev",
+  name: "dev",
+  modelTier: "small",
+  capabilities: ["deliver"],
+  canApprove: [],
+  inputs: [],
+  outputs: [],
+  do_not: [],
+};
+const hooked = (over: Partial<PlannerOptions>): Methodology => ({
+  name: "kanban",
+  vocabulary: {} as Methodology["vocabulary"],
+  validateConfig: (c) => c,
+  defaultStages: () => hookStages,
+  defaultRoles: () => [devRole],
+  requiredCapabilities: ["deliver"],
+  exclusiveCapabilities: [],
+  plannerOptions: () => ({ schedulerMode: "level", ...over }),
+  candidates: (s) =>
+    Object.values(s.items).filter((i) => i.status === "todo" || i.status === "review"),
+  invariants: () => [],
+  ceremonies: {},
+  rules: [],
+  metrics: () => ({}),
+  humanDefaults: { gates: "none" },
+});
+function threeQueued() {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: hookStages,
+    roles: [devRole],
+    now: H0,
+  });
+  s = addItem(s, { id: "A", title: "a", priority: 5 }, "h", H0);
+  s = addItem(s, { id: "B", title: "b", priority: 1 }, "h", H0);
+  s = addItem(s, { id: "C", title: "c", priority: 1 }, "h", H0);
+  return s;
+}
+
+test("dispatchStage as a function pulls queued items into the stage it names", () => {
+  const m = hooked({ dispatchStage: (i) => (i.stage === "queue" ? "work" : undefined) });
+  const res = plan(threeQueued(), m, { now: H0 });
+  assert.deepEqual(
+    res.dispatched.map((d) => d.id),
+    ["A"],
+  ); // work.wipLimit is 1
+  assert.equal(res.state.items["A"]!.stage, "work");
+  assert.equal(res.state.items["A"]!.status, "in_progress");
+  assert.equal(res.reason, "wip-full");
+});
+
+test("priorityOf overrides item.priority and tieBreaker orders equal priorities", () => {
+  const byC = hooked({ priorityOf: (i) => (i.id === "C" ? 100 : i.priority) });
+  assert.deepEqual(
+    plan(threeQueued(), byC, { now: H0 }).dispatched.map((d) => d.id),
+    ["C", "A", "B"],
+  );
+  const reverseId = hooked({ tieBreaker: (a, b) => b.id.localeCompare(a.id) });
+  assert.deepEqual(
+    plan(threeQueued(), reverseId, { now: H0 }).dispatched.map((d) => d.id),
+    ["A", "C", "B"],
+  );
+});
+
+test("wipCounts makes blocked work occupy a slot and wipLimitOf lets an item bypass it", () => {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: hookStages,
+    roles: [devRole],
+    now: H0,
+  });
+  s = addItem(s, { id: "A", title: "a", stage: "work" }, "h", H0);
+  s = raiseBlocker(s, "A", "waiting", "owner", "h", H0);
+  s = addItem(s, { id: "B", title: "b" }, "h", H0);
+  const pull = { dispatchStage: () => "work" } as const;
+  assert.deepEqual(
+    plan(s, hooked(pull), { now: H0 }).dispatched.map((d) => d.id),
+    ["B"],
+  );
+  const counted = hooked({ ...pull, wipCounts: ["in_progress", "blocked"] });
+  const res = plan(s, counted, { now: H0 });
+  assert.deepEqual(res.dispatched, []);
+  assert.equal(res.reason, "wip-full");
+  const bypass = hooked({
+    ...pull,
+    wipCounts: ["in_progress", "blocked"],
+    wipLimitOf: (st, i) => (i.id === "B" ? (st.wipLimit ?? 0) + 1 : st.wipLimit),
+  });
+  assert.deepEqual(
+    plan(s, bypass, { now: H0 }).dispatched.map((d) => d.id),
+    ["B"],
+  );
+});
+
+test("an item queued in a full stage is not counted against itself", () => {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: hookStages,
+    roles: [devRole],
+    now: H0,
+  });
+  s = addItem(s, { id: "A", title: "a", stage: "work" }, "h", H0);
+  const m = hooked({ wipCounts: ["todo", "in_progress"] });
+  assert.deepEqual(
+    plan(s, m, { now: H0 }).dispatched.map((d) => d.id),
+    ["A"],
   );
 });

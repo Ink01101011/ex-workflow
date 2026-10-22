@@ -6,7 +6,7 @@ import { moveItem, stageOf } from "./items.ts";
 import { evaluatePolicies } from "./policies.ts";
 import { roleOf, rolesWith } from "./roles.ts";
 import { appendEvent, nowOf } from "./state.ts";
-import type { Iteration, Methodology, Role, WorkItem, WorkflowState } from "./types.ts";
+import type { ItemStatus, Iteration, Methodology, Role, WorkItem, WorkflowState } from "./types.ts";
 
 type NodeData = { id: string };
 
@@ -58,7 +58,11 @@ export function resourceCapsFor(state: WorkflowState): Record<string, number> {
   return caps;
 }
 
-export function toExNodes(items: WorkItem[], state: WorkflowState): ExNode<NodeData>[] {
+export function toExNodes(
+  items: WorkItem[],
+  state: WorkflowState,
+  priorityOf?: (item: WorkItem) => number | undefined,
+): ExNode<NodeData>[] {
   const present = new Set(items.map((i) => i.id));
   return items.map((i) => {
     const role = assignRole(state, i);
@@ -68,7 +72,8 @@ export function toExNodes(items: WorkItem[], state: WorkflowState): ExNode<NodeD
       dependsOn: i.dependsOn.filter((d) => present.has(d)),
       resourceClass: role.resourceClass ?? role.id,
     };
-    if (i.priority !== undefined) node.priority = i.priority;
+    const pr = priorityOf ? priorityOf(i) : i.priority;
+    if (pr !== undefined) node.priority = pr;
     if (i.weight !== undefined) node.weight = i.weight;
     if (i.deadline !== undefined) node.deadline = Date.parse(i.deadline);
     return node;
@@ -111,12 +116,16 @@ export function plan(
   if (po.maxDeferralRounds !== undefined) options.maxDeferralRounds = po.maxDeferralRounds;
   if (po.deadlineStrategy !== undefined) options.deadlineStrategy = po.deadlineStrategy;
   if (po.weightStrategy !== undefined) options.weightStrategy = po.weightStrategy;
+  if (po.tieBreaker !== undefined) {
+    const tb = po.tieBreaker;
+    options.tieBreaker = (a, b) => tb(state.items[a.data.id]!, state.items[b.data.id]!);
+  }
 
   let firstBatch: string[];
   let metrics: unknown;
   try {
     const flow = new ExFlow<NodeData>(options);
-    for (const n of toExNodes(candidates, state)) flow.addEntity(n);
+    for (const n of toExNodes(candidates, state, po.priorityOf)) flow.addEntity(n);
     const details = flow.resolveExecutionDetails();
     firstBatch = (details.plan.batches[0] ?? []).map((r) => r.id);
     metrics = details.metrics;
@@ -137,6 +146,8 @@ export function plan(
     .map((id) => state.items[id]!)
     .filter((i) => i.dependsOn.every((d) => state.items[d]?.status === "done"));
   const inProgress = Object.values(state.items).filter((i) => i.status === "in_progress");
+  const wipCounts = new Set<ItemStatus>(po.wipCounts ?? ["in_progress"]);
+  const occupying = Object.values(state.items).filter((i) => wipCounts.has(i.status));
   const perClass: Record<string, number> = {};
   for (const i of inProgress) {
     const r = i.role ? roleOf(state, i.role) : undefined;
@@ -156,15 +167,17 @@ export function plan(
       reason = "wip-full";
       break;
     }
-    const target =
-      item.status === "todo" && po.dispatchStage !== undefined ? po.dispatchStage : item.stage;
+    const pulledTo =
+      typeof po.dispatchStage === "function" ? po.dispatchStage(item) : po.dispatchStage;
+    const target = item.status === "todo" && pulledTo !== undefined ? pulledTo : item.stage;
     const stage = stageOf(state, target);
     if (evaluatePolicies(state, item, stage.entryPolicy).length > 0) continue;
+    const limitHere = po.wipLimitOf ? po.wipLimitOf(stage, item) : stage.wipLimit;
     if (
-      stage.wipLimit !== undefined &&
-      inProgress.filter((i) => i.stage === stage.id).length +
+      limitHere !== undefined &&
+      occupying.filter((i) => i.stage === stage.id && i.id !== item.id).length +
         dispatched.filter((d) => d.stage === stage.id).length >=
-        stage.wipLimit
+        limitHere
     ) {
       reason = "wip-full";
       continue;

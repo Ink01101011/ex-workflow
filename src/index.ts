@@ -10,6 +10,8 @@ export {
   approversFor,
   requireCapabilities,
   separationLost,
+  canDo,
+  requireCap,
 } from "./roles.ts";
 export {
   assertId,

@@ -14,11 +14,11 @@ import {
 import { applyAction } from "../methodology.ts";
 import { assertPolicies } from "../policies.ts";
 import { openIteration } from "../planner.ts";
-import { approverIds, hasCapability, roleOf } from "../roles.ts";
+import { approverIds, canDo, requireCap } from "../roles.ts";
+export { canDo };
 import { appendEvent, nowOf } from "../state.ts";
 import type {
   Budget,
-  Capability,
   Ceremony,
   CeremonyInput,
   ItemStatus,
@@ -32,25 +32,6 @@ import type {
   WorkflowState,
 } from "../types.ts";
 import { closeSprint, configOf } from "./index.ts";
-
-export function canDo(state: WorkflowState, by: string, ...caps: Capability[]): boolean {
-  if (by === "human") return true;
-  const role = roleOf(state, by);
-  return !!role && caps.some((c) => hasCapability(role, c));
-}
-
-function requireCap(state: WorkflowState, by: string, ...caps: Capability[]): void {
-  if (!canDo(state, by, ...caps)) {
-    const holders = Object.values(state.roles)
-      .filter((r) => caps.some((c) => hasCapability(r, c)))
-      .map((r) => r.id);
-    fail(
-      "missing-capability",
-      `"${by}" lacks capability ${caps.map((c) => `"${c}"`).join(" or ")}`,
-      `run this as one of: ${holders.join(", ") || "human"}`,
-    );
-  }
-}
 
 const STATUSES: ItemStatus[] = [
   "todo",
