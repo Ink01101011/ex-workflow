@@ -19,6 +19,14 @@ function lastClosed(state: WorkflowState): Iteration | undefined {
   }
   return undefined;
 }
+/** Canonical identity of a Definition of Done policy, independent of JSON key order. */
+const policyKey = (p: Policy): string =>
+  p.kind === "evidence"
+    ? `evidence:${p.evidenceKind}`
+    : p.kind === "custom"
+      ? `custom:${p.id}`
+      : p.kind;
+
 export function scrumRules(): Rule[] {
   const oneOpen: Rule = {
     id: "one-open-sprint",
@@ -153,13 +161,10 @@ export function scrumRules(): Rule[] {
         ];
       if (!Array.isArray(p.dodChanges) || p.allowWeaken === true) return [];
       const next = p.dodChanges as Policy[];
-      const removed = configOf(s).definitionOfDone.filter(
-        (q) => !next.some((n) => JSON.stringify(n) === JSON.stringify(q)),
-      );
+      const kept = new Set(next.map(policyKey));
+      const removed = configOf(s).definitionOfDone.filter((q) => !kept.has(policyKey(q)));
       if (removed.length === 0) return [];
-      const describe = removed.map((q) =>
-        q.kind === "evidence" ? `evidence ${q.evidenceKind}` : q.kind,
-      );
+      const describe = removed.map((q) => policyKey(q).replace(":", " "));
       return [
         v(
           "dod-not-weakened",

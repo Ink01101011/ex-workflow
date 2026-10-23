@@ -260,6 +260,16 @@ test("dod-not-weakened between sprints", () => {
     ),
     [],
   );
+  // the same policies written with their keys in another order are not a removal
+  assert.deepEqual(
+    run(
+      s,
+      retroAction({
+        dodChanges: [{ evidenceKind: "test-output", kind: "evidence" }],
+      }),
+    ),
+    [],
+  );
 });
 
 test("carryover-reestimated", () => {
