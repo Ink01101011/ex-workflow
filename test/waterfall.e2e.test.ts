@@ -168,11 +168,14 @@ test("one waterfall project with a change request", () => {
     "developer",
   );
   s = c["kickoff"]!(s, { by: pm, now: tick(), phase: "verification" }).state;
-  s = add(
-    s,
-    { id: "CR-1", title: "export needs pdf too", type: "change-request", affects: ["R2"] },
-    "qa",
-  );
+  const cr1: NewItem = {
+    id: "CR-1",
+    title: "export needs pdf too",
+    type: "change-request",
+    affects: ["R2"],
+  };
+  assert.throws(() => add(s, cr1, "qa"), isRule("change-needs-impact-analysis")); // refused at add (#24)
+  s = addItem(s, cr1, "qa", tick()); // direct addItem stays unguarded: the board still checks
   assert.throws(
     () => c["changeControlBoard"]!(s, { by: pm, now: tick(), change: "CR-1", decision: "approve" }),
     isRule("change-needs-impact-analysis"),

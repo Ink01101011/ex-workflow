@@ -311,6 +311,19 @@ test("add and edit are checked by methodology rules and surface rule violations"
   assert.equal(out<{ error: { code: string } }>(rn).error.code, "no-op");
 });
 
+test("waterfall: add of a change-request without impactAnalysis is refused", async () => {
+  const { root, w } = await project();
+  const wcfg = await w("waterfall.json", {});
+  assert.equal((await runCommand(["init", "waterfall", "--config", wcfg], root)).exit, 0);
+  const cr = await w("cr.json", { id: "CR-1", title: "change", type: "change-request" });
+  const r = await runCommand(["add", cr, "--by", "developer"], root);
+  assert.equal(r.exit, 1);
+  const e = out<{ error: { code: string; rule: string; fix: string } }>(r).error;
+  assert.equal(e.code, "rule-violation");
+  assert.equal(e.rule, "change-needs-impact-analysis");
+  assert.match(e.fix, /impactAnalysis/);
+});
+
 test("waterfall: init → add → kickoff → next/complete ×2 → status → gateReview → decide → frozen edit refused", async () => {
   const { root, w } = await project();
   const wcfg = await w("waterfall.json", {});

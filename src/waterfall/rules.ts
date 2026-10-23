@@ -1,14 +1,6 @@
 import { authorOf } from "../gates.ts";
 import { approverIds, rolesWith } from "../roles.ts";
-import type {
-  Action,
-  ImpactAnalysis,
-  NewItem,
-  Phase,
-  Rule,
-  Violation,
-  WorkflowState,
-} from "../types.ts";
+import type { Action, NewItem, Phase, Rule, Violation, WorkflowState } from "../types.ts";
 import { configOf } from "./config.ts";
 import {
   itemsInPhase,
@@ -55,6 +47,30 @@ const frozenFix = (item: string, phase: string) =>
 function changeOf(s: WorkflowState, a: Action) {
   const item = itemById(s, payloadOf(a)["change"]);
   return item && item.type === "change-request" ? item : undefined;
+}
+
+/** Shape check shared by add/edit and the change control board. */
+function impactShape(s: WorkflowState, id: string, ia: unknown): Violation[] {
+  const rule = "change-needs-impact-analysis";
+  const fix = `editItem("${id}", { impactAnalysis: { summary: "what changes and why", reopen: ["<phase>"], weight: <points> } })`;
+  if (ia === undefined) {
+    return configOf(s).changeControl.requiresImpactAnalysis
+      ? [v(rule, `change "${id}" has no impact analysis`, fix, id)]
+      : [];
+  }
+  const out: Violation[] = [];
+  const o = isObj(ia) ? ia : {};
+  if (typeof o["summary"] !== "string" || o["summary"].trim() === "")
+    out.push(v(rule, `change "${id}" impactAnalysis.summary is empty`, fix, id));
+  if (!Array.isArray(o["reopen"]) || !o["reopen"].every((x) => typeof x === "string"))
+    out.push(
+      v(rule, `change "${id}" impactAnalysis.reopen must be a string[] of phase ids`, fix, id),
+    );
+  if (typeof o["weight"] !== "number" || !Number.isFinite(o["weight"]) || o["weight"] < 0)
+    out.push(
+      v(rule, `change "${id}" impactAnalysis.weight must be a non-negative number`, fix, id),
+    );
+  return out;
 }
 
 export function waterfallRules(): Rule[] {
@@ -199,55 +215,25 @@ export function waterfallRules(): Rule[] {
     id: "change-needs-impact-analysis",
     severity: "error",
     check(s, a) {
+      if (a.type === "item.add") {
+        const item = payloadOf(a)["item"] as NewItem | undefined;
+        if (!isObj(item) || item.type !== "change-request") return [];
+        return impactShape(s, String(item.id), item.impactAnalysis);
+      }
+      if (a.type === "item.edit") {
+        const patch = payloadOf(a)["patch"];
+        const cr = itemById(s, payloadOf(a)["id"]);
+        if (!cr || cr.type !== "change-request" || !isObj(patch) || !("impactAnalysis" in patch))
+          return [];
+        return impactShape(s, cr.id, patch["impactAnalysis"]);
+      }
       if (a.type !== "ceremony.changeControlBoard") return [];
       const cr = changeOf(s, a);
       if (!cr) return [];
-      const cfg = configOf(s).changeControl;
-      const ia = cr.impactAnalysis as ImpactAnalysis | undefined;
-      const fix = `editItem("${cr.id}", { impactAnalysis: { summary: "what changes and why", reopen: ["<phase>"], weight: <points> } })`;
-      if (ia === undefined) {
-        return cfg.requiresImpactAnalysis
-          ? [
-              v(
-                "change-needs-impact-analysis",
-                `change "${cr.id}" has no impact analysis`,
-                fix,
-                cr.id,
-              ),
-            ]
-          : [];
-      }
-      const out: Violation[] = [];
-      if (!isObj(ia) || typeof ia.summary !== "string" || ia.summary.trim() === "")
-        out.push(
-          v(
-            "change-needs-impact-analysis",
-            `change "${cr.id}" impactAnalysis.summary is empty`,
-            fix,
-            cr.id,
-          ),
-        );
-      if (!Array.isArray(ia.reopen) || !ia.reopen.every((x) => typeof x === "string"))
-        out.push(
-          v(
-            "change-needs-impact-analysis",
-            `change "${cr.id}" impactAnalysis.reopen must be a string[] of phase ids`,
-            fix,
-            cr.id,
-          ),
-        );
-      if (typeof ia.weight !== "number" || !Number.isFinite(ia.weight) || ia.weight < 0)
-        out.push(
-          v(
-            "change-needs-impact-analysis",
-            `change "${cr.id}" impactAnalysis.weight must be a non-negative number`,
-            fix,
-            cr.id,
-          ),
-        );
-      if (out.length) return out;
+      const out = impactShape(s, cr.id, cr.impactAnalysis);
+      if (out.length || cr.impactAnalysis === undefined) return out;
       const approve = payloadOf(a)["decision"] === "approve";
-      for (const id of ia.reopen) {
+      for (const id of cr.impactAnalysis.reopen) {
         const p = phaseById(s, id);
         if (!p)
           out.push(
@@ -267,6 +253,63 @@ export function waterfallRules(): Rule[] {
               cr.id,
             ),
           );
+      }
+      return out;
+    },
+  };
+
+  const traceIds: Rule = {
+    id: "trace-ids-valid",
+    severity: "error",
+    check(s, a) {
+      let id: string;
+      let traces: unknown;
+      let ia: unknown;
+      let isCr: boolean;
+      if (a.type === "item.add") {
+        const item = payloadOf(a)["item"] as NewItem | undefined;
+        if (!isObj(item)) return [];
+        id = String(item.id);
+        traces = item.traces;
+        ia = item.impactAnalysis;
+        isCr = item.type === "change-request";
+      } else if (a.type === "item.edit") {
+        const cur = itemById(s, payloadOf(a)["id"]);
+        const patch = payloadOf(a)["patch"];
+        if (!cur || !isObj(patch)) return [];
+        id = cur.id;
+        traces = patch["traces"];
+        ia = patch["impactAnalysis"];
+        isCr = cur.type === "change-request";
+      } else return [];
+      const out: Violation[] = [];
+      if (Array.isArray(traces)) {
+        const cfg = configOf(s).traceability;
+        const ok = [cfg.from, ...cfg.to].flatMap((p) =>
+          itemsInPhase(s, p)
+            .filter((i) => i.type !== "question" && i.type !== "change-request")
+            .map((i) => i.id),
+        );
+        const fix = `traceable items: ${ok.length ? ok.join(", ") : "(none yet)"}`;
+        for (const t of traces) {
+          if (typeof t !== "string") continue;
+          const target = itemById(s, t);
+          if (!target || target.status === "dropped")
+            out.push(v("trace-ids-valid", `item "${id}" traces unknown item "${t}"`, fix, id));
+        }
+      }
+      if (isCr && isObj(ia) && Array.isArray(ia["reopen"])) {
+        for (const r of ia["reopen"]) {
+          if (typeof r === "string" && !phaseById(s, r))
+            out.push(
+              v(
+                "trace-ids-valid",
+                `change "${id}" impactAnalysis.reopen names unknown phase "${r}"`,
+                `phases are: ${phaseIds(s)}`,
+                id,
+              ),
+            );
+        }
       }
       return out;
     },
@@ -375,5 +418,5 @@ export function waterfallRules(): Rule[] {
     },
   };
 
-  return [sequential, gateBefore, immutable, impact, traced, deliverables, notAuthor];
+  return [sequential, gateBefore, immutable, impact, traced, deliverables, notAuthor, traceIds];
 }
