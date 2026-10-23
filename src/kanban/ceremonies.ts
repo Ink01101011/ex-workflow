@@ -1,4 +1,5 @@
 import { fail } from "../errors.ts";
+import { applyLessonInput, parseLessonInput } from "../lessons.ts";
 import { getItem, moveItem, patchItem, stageOf } from "../items.ts";
 import { applyAction } from "../methodology.ts";
 import { assertPolicies } from "../policies.ts";
@@ -170,6 +171,7 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
           "null removes the service level",
         );
     }
+    const parsed = parseLessonInput(state, input, "service-delivery-review");
     return act(state, "ceremony.service-delivery-review", input, (s, now) => {
       const cfg = configOf(s);
       let stages = s.stages;
@@ -218,11 +220,21 @@ export function kanbanCeremonies(methodology: () => Methodology): Record<string,
         };
       }
       s = { ...s, stages, config: { ...cfg, columns, classesOfService } };
+      const out = applyLessonInput(s, parsed, input.by, now);
       return appendEvent(
-        s,
+        out.state,
         "cadence.service-delivery-review",
         input.by,
-        { wip: wipChanges, policies: policyChanges, sle: sleChanges },
+        {
+          wip: wipChanges,
+          policies: policyChanges,
+          sle: sleChanges,
+          lessons: out.created,
+          adopted: out.adopted.slice(out.created.length),
+          dismissed: out.dismissed,
+          agreements: out.agreements,
+          retired: out.retired,
+        },
         now,
       );
     });

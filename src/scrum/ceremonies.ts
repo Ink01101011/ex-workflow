@@ -1,7 +1,7 @@
 import { timSort } from "exsorted";
 import { estimateTokens, remaining } from "../budget.ts";
-import { applyAgreement, retireAgreement } from "../agreements.ts";
 import { fail } from "../errors.ts";
+import { applyLessonInput, parseLessonInput } from "../lessons.ts";
 import {
   addItem,
   editItem,
@@ -24,8 +24,6 @@ import type {
   CeremonyInput,
   ItemStatus,
   Iteration,
-  Lesson,
-  LessonChange,
   Methodology,
   NewItem,
   Policy,
@@ -520,138 +518,30 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         `sprint ${last.id} already has a retrospective`,
         "plan the next sprint",
       );
-    const newLessons = (input["lessons"] ?? []) as Array<{
-      text: string;
-      scope: Lesson["scope"];
-      from?: string;
-      item?: string;
-      suggestedChange?: LessonChange;
-    }>;
-    const roleIds = ["human", ...Object.keys(state.roles)];
-    for (const l of newLessons) {
-      if (l.from !== undefined && (typeof l.from !== "string" || !roleIds.includes(l.from)))
-        fail(
-          "invalid-input",
-          `lesson from ${JSON.stringify(l.from)} is not a role`,
-          `from is "human" or one of the roles: ${Object.keys(state.roles).join(", ") || "(none)"}`,
-        );
-      if (l.item !== undefined) {
-        if (typeof l.item !== "string")
-          fail(
-            "invalid-input",
-            "lesson item must be an item id",
-            "name an item with addItem first",
-          );
-        getItem(state, l.item);
-      }
-    }
-    const retireRaw: unknown = input["retire"] ?? [];
-    if (
-      !Array.isArray(retireRaw) ||
-      !retireRaw.every((x) => typeof x === "string") ||
-      retireRaw.some((x, i) => retireRaw.indexOf(x) !== i)
-    )
-      fail(
-        "invalid-input",
-        "retro.retire must be a list of distinct agreement texts",
-        'e.g. { "retire": ["review in a fresh worker"] }; each agreement once',
-      );
-    const retire = retireRaw as string[];
-    const adopt = (input["adopt"] ?? []) as Array<{ id: string; suggestedChange?: LessonChange }>;
-    const dismiss = (input["dismiss"] ?? []) as string[];
+    const parsed = parseLessonInput(state, input, "retro");
     const dod = input["dodChanges"] as Policy[] | undefined;
-    const refs = [...adopt.map((a) => a.id), ...dismiss];
-    const dupe = refs.find((r, i) => refs.indexOf(r) !== i);
-    if (dupe)
-      fail(
-        "invalid-input",
-        `lesson "${dupe}" is referenced more than once`,
-        "adopt or dismiss each lesson once",
-      );
-    for (const ref of refs) {
-      const l = state.lessons.find((x) => x.id === ref);
-      if (!l)
-        fail(
-          "invalid-input",
-          `no lesson "${ref}"`,
-          `raised lessons: ${
-            state.lessons
-              .filter((x) => x.status === "raised")
-              .map((x) => x.id)
-              .join(", ") || "(none)"
-          }`,
-        );
-      if (l.status !== "raised")
-        fail(
-          "invalid-input",
-          `lesson "${ref}" is already ${l.status}`,
-          "only raised lessons can be adopted or dismissed",
-        );
-    }
     return act(state, "ceremony.retro", input, (s, now) => {
-      const adopted: string[] = [];
-      const agreements: string[] = [];
       const backlogAdded: string[] = [];
       let dodChanged = false;
-      const applyChange = (c: LessonChange | undefined) => {
-        if (!c) return;
-        if (c.kind === "agreement") {
-          s = applyAgreement(s, c, input.by, now);
-          agreements.push(c.text);
-        } else if (c.kind === "dod") {
-          const cur = configOf(s).definitionOfDone;
-          if (!cur.some((p) => JSON.stringify(p) === JSON.stringify(c.policy))) {
-            dodChanged = true;
-            s = setDod(s, [...cur, c.policy]);
-          }
-        } else if (c.kind === "backlog") {
-          s = addItem(
-            s,
+      const out = applyLessonInput(s, parsed, input.by, now, (cur, c) => {
+        if (c.kind === "dod") {
+          const defs = configOf(cur).definitionOfDone;
+          if (defs.some((p) => JSON.stringify(p) === JSON.stringify(c.policy))) return cur;
+          dodChanged = true;
+          return setDod(cur, [...defs, c.policy]);
+        }
+        if (c.kind === "backlog") {
+          backlogAdded.push(c.item.id);
+          return addItem(
+            cur,
             { ...c.item, stage: "backlog", tags: [...(c.item.tags ?? []), "retro"] },
             input.by,
             now,
           );
-          backlogAdded.push(c.item.id);
         }
-      };
-      for (const l of newLessons) {
-        const id = `L${s.lessons.length + 1}`;
-        const lesson: Lesson = {
-          id,
-          at: now,
-          text: l.text,
-          scope: l.scope,
-          status: "adopted",
-          from: l.from ?? input.by,
-        };
-        if (l.item !== undefined) lesson.item = l.item;
-        if (l.suggestedChange) lesson.suggestedChange = l.suggestedChange;
-        s = { ...s, lessons: [...s.lessons, lesson] };
-        adopted.push(id);
-        applyChange(l.suggestedChange);
-      }
-      for (const a of adopt) {
-        s = {
-          ...s,
-          lessons: s.lessons.map((x) =>
-            x.id === a.id
-              ? {
-                  ...x,
-                  status: "adopted" as const,
-                  ...(a.suggestedChange ? { suggestedChange: a.suggestedChange } : {}),
-                }
-              : x,
-          ),
-        };
-        adopted.push(a.id);
-        applyChange(a.suggestedChange ?? s.lessons.find((x) => x.id === a.id)?.suggestedChange);
-      }
-      for (const d of dismiss)
-        s = {
-          ...s,
-          lessons: s.lessons.map((x) => (x.id === d ? { ...x, status: "dismissed" as const } : x)),
-        };
-      for (const text of retire) s = retireAgreement(s, text, input.by, now);
+        return cur;
+      });
+      s = out.state;
       if (dod) {
         dodChanged = true;
         s = setDod(s, dod);
@@ -662,10 +552,10 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         input.by,
         {
           sprint: last.id,
-          adopted,
-          dismissed: dismiss,
-          agreements,
-          retired: retire,
+          adopted: out.adopted,
+          dismissed: out.dismissed,
+          agreements: out.agreements,
+          retired: out.retired,
           dodChanged,
           backlogAdded,
         },
