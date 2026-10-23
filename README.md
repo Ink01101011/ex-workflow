@@ -7,10 +7,10 @@ State is plain JSON, every operation is `(state, action) -> state`, and every er
 ## Install
 
 ```sh
-pnpm add ex-workflow@stage
+npm install ex-workflow
 ```
 
-Pre-releases are published under the `stage` dist-tag (currently `0.6.0-stage`); `latest` is reserved for 0.1.0.
+`npm install ex-workflow` resolves to 1.0.0 (`pnpm add ex-workflow` likewise). Stage pre-releases may still appear under the `stage` dist-tag.
 
 Node >= 18. Runs on macOS, Linux and Windows.
 
@@ -65,6 +65,8 @@ Cadences are ceremonies: `replenishment`, `delivery-planning`, `service-delivery
 
 `next()` also returns `skipped`: each ready card it did not pull, with `reason` (`entry-policy`, `wip`, `resource-cap` or `budget`) and a `detail`; the commitment column's policies gate the pull out of it (escalation `question` cards are exempt, as from exit policies and gates). Ordering is by class band (question, expedite, fixed-date, standard, intangible) and, with `fairness.aging` on (the default), priority stays primary inside a window of `fairness.maxDeferralRounds` passes (default 5); each full window a card is passed over promotes it one step above any priority difference, and an intangible card reaching the first window is ranked as standard, so nothing is starved.
 
+`service-delivery-review` also takes `lessons`, `adopt`, `dismiss` and `retire`, with the Scrum retro semantics for agreements.
+
 ### Waterfall
 
 ```ts
@@ -89,6 +91,8 @@ impact analysis). Requirements must trace to design and verification items befor
 generates the `traceability-matrix` deliverable. Edits to baselined items are refused by the rules when
 they go through `applyAction` or the CLI. `test/waterfall.e2e.test.ts` is a full project with a
 change-request that reopens two baselined phases.
+
+`add` and `edit` validate `traces` ids and the impact analysis of a change-request, and `status` phase rows carry `missingTraces`.
 
 ## CLI
 
@@ -167,7 +171,7 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Status
 
-0.6.0-stage closes the Phase 6 backlog: every item the 1.0 definition named is either fixed or an accepted limitation (see [Accepted limitations](#accepted-limitations)). 0.5.0-stage closes the engine gaps from the workflowAI dogfood (Scrum budget gates, configuration between iterations, accounting corrections, agreements that can be replaced or retired, question briefs with their parent); see [CHANGELOG.md](CHANGELOG.md). 0.4.0-stage added `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+1.0.0 (2026-10-24) closes the Phase 7 engine gaps (#23-#27) and freezes the public API (exports, CLI commands, schema documents, event kinds — test/api-surface.json) with a compatibility test over state files from every stage release; from here versioning is semver and `latest` is the supported line. 0.6.0-stage closed the Phase 6 backlog: every item the 1.0 definition named is either fixed or an accepted limitation (see [Accepted limitations](#accepted-limitations)). 0.5.0-stage closes the engine gaps from the workflowAI dogfood (Scrum budget gates, configuration between iterations, accounting corrections, agreements that can be replaced or retired, question briefs with their parent); see [CHANGELOG.md](CHANGELOG.md). 0.4.0-stage added `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
 
 ## Accepted limitations
 
@@ -202,15 +206,17 @@ There is no hosted CI. A husky pre-commit hook runs the local gate on every comm
 minified build, the dist identity check and the size ratchet, and `prepublishOnly` runs it
 before any publish. oxfmt and oxlint need Node ^20.19 or >=22.12 on the developer machine; the
 package itself supports Node >=18 (verified on ubuntu, macOS and Windows x Node 18/20/22
-before the hosted workflow was removed). Schema drift is guarded by `pnpm schema:check` alone, not by a test, because the generator needs Node >=22 and the test suite must run on >=18.
+before the hosted workflow was removed). `pnpm test` includes the compatibility fixtures (`test/fixtures/compat`, `state.json` files written by the published 0.1.0, 0.2.0, 0.3.0, 0.4.0 and 0.6.0 stage releases; 0.5.0-stage was never published); `node scripts/gen-compat-fixtures.mjs` regenerates them (network needed). Schema drift is guarded by `pnpm schema:check` alone, not by a test, because the generator needs Node >=22 and the test suite must run on >=18.
 
 ## Publishing
 
-For the owner. The `stage` dist-tag keeps `latest` free for 0.1.0:
+For the owner. A release moves `latest`:
 
 ```sh
-pnpm run ci && npm publish --tag stage
+pnpm run ci && npm publish
 ```
+
+Use `npm publish --tag stage` only for a pre-release.
 
 ## Design principles
 
