@@ -102,9 +102,21 @@ test("B10: a second rework resets freshness again; another item's rework does no
   assert.equal(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)).length, 1);
 });
 
-test("B10: evidence attached in the same completion as the rework (same timestamp) still counts", () => {
+test("B10: freshness follows event order, not timestamps: evidence before the rework event is stale even at the same instant, evidence after it counts", () => {
   let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
-  s = addEvidence(s, "A", { kind: "test-output", ref: "ci", by: "dev" }, T1);
-  s = appendEvent(s, "item.rework", "dev", { id: "A", by: "dev", notes: "n" }, T1);
+  // the rework completion attaches the reviewer's evidence, then emits item.rework, at one `at`
+  s = addEvidence(s, "A", { kind: "test-output", ref: "reviewer-notes", by: "qa" }, T1);
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "n" }, T1);
+  assert.equal(
+    evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)).length,
+    1,
+    "pre-rework evidence does not count",
+  );
+  // the author's next completion at the same injected instant counts
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci-2", by: "dev" }, T1);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
+  // another item's rework leaves A alone
+  s = addItem(s, { id: "B", title: "b" }, "po", T1);
+  s = appendEvent(s, "item.rework", "qa", { id: "B", by: "qa", notes: "n" }, T1);
   assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
 });
