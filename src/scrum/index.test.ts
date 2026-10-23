@@ -373,3 +373,14 @@ test("autoClose false keeps an exhausted sprint in closing until review closes i
   assert.notEqual(s2.iterations[0]!.endedAt, undefined);
   assert.equal(s2.events.at(-1)!.type, "sprint.closed");
 });
+
+test("plannerOptions carries estimateMode and fallbackTokensPerWeight from the config", () => {
+  const { state } = init({
+    methodology: scrum(),
+    config: { ...config, estimateMode: "per-call", fallbackTokensPerWeight: 1234 },
+    now: T0,
+  });
+  const po = scrum().plannerOptions!(state);
+  assert.equal(po.estimateMode, "per-call");
+  assert.equal(po.fallbackTokensPerWeight, 1234);
+});

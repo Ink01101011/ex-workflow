@@ -582,3 +582,17 @@ test("a done handoff with open questions is accepted with an open-questions-igno
   assert.deepEqual(esc.warnings, []);
   assert.deepEqual(openQuestions(esc.state), []);
 });
+
+test("openQuestions is last-wins: a rework then a done without questions drops the item", () => {
+  let s = complete(started(), m(), handoff({ open_questions: ["which PO?"] }), acc(), T0).state;
+  assert.equal(openQuestions(s).length, 1);
+  s = {
+    ...s,
+    items: {
+      ...s.items,
+      A: { ...s.items["A"]!, stage: "todo", status: "in_progress", role: "dev" },
+    },
+  };
+  s = complete(s, m(), handoff({ open_questions: [] }), acc(), T0).state;
+  assert.deepEqual(openQuestions(s), []);
+});

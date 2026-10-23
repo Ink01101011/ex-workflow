@@ -498,6 +498,19 @@ test("#10 an item carried over from the review stage re-enters at review on the 
   assert.equal(n.briefs[0]!.priorHandoffs.length, 1);
 });
 
+test("#10 commit resumes a carried-over review item at review and reports it as resumed", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(s, m, h("A"), a("A", 50), T0).state;
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  s = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+  s = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["B"] }).state;
+  const r = c["commit"]!(s, { by: "product-owner", now: T1, items: ["A"], goalImpact: "none" });
+  assert.equal(r.state.items["A"]!.stage, "review");
+  assert.equal(r.state.items["A"]!.status, "review");
+  assert.deepEqual((r.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+});
+
 test("#11 refine reestimate confirms a weight and satisfies carryover-reestimated", () => {
   let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["B"] }).state;
   s = c["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state;

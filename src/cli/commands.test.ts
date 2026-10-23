@@ -19,6 +19,7 @@ async function project() {
   });
   return { root, w, cfg };
 }
+const T_RAISED = "2026-10-19T00:00:00.000Z";
 const out = <T>(r: { out: unknown }) => r.out as T;
 
 test("init refuses twice and unknown commands exit 2", async () => {
@@ -729,6 +730,37 @@ test("unblock clears an open blocker with a note and re-queues the item", async 
   const state = JSON.parse(await readFile(path.join(root, ".workflow", "state.json"), "utf8"));
   const ev = state.events.filter((e: { type: string }) => e.type === "blocker.cleared").at(-1);
   assert.equal(ev.payload.note, "fixed");
+});
+
+test("unblock --blocker clears only the named open blocker; an unknown id is refused", async () => {
+  const { root, w, cfg } = await project();
+  await oneItemDone(root, w, cfg);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [],
+    notes: "stuck",
+    do_not: [],
+    open_questions: [],
+    verdict: "blocked",
+  });
+  assert.equal((await runCommand(["complete", "A", h, ...doneFlags], root)).exit, 0);
+  const statePath = path.join(root, ".workflow", "state.json");
+  const st = JSON.parse(await readFile(statePath, "utf8"));
+  st.items["A"].blockers.push({ id: "A-b2", reason: "second", owner: "human", raisedAt: T_RAISED });
+  await writeFile(statePath, JSON.stringify(st));
+  const unknown = await runCommand(["unblock", "A", "--blocker", "nope"], root);
+  assert.equal(unknown.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(unknown).error.code, "invalid-input");
+  const r = await runCommand(["unblock", "A", "--blocker", "A-b2"], root);
+  assert.equal(r.exit, 0);
+  assert.equal(out<{ item: { status: string } }>(r).item.status, "blocked");
+  const after = JSON.parse(await readFile(statePath, "utf8"));
+  const open = after.items["A"].blockers.filter((b: { clearedAt?: string }) => !b.clearedAt);
+  assert.deepEqual(
+    open.map((b: { id: string }) => b.id),
+    ["A-b1"],
+  );
 });
 
 test("complete warns about ignored open questions and status lists them", async () => {

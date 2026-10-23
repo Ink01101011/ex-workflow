@@ -64,6 +64,16 @@ test("one-open-sprint and sprint-budget-fixed", () => {
     }),
     ["error:sprint-budget-fixed"],
   );
+  const budgetViolation = scrumRules()
+    .flatMap((r) =>
+      r.check(retro, {
+        type: "ceremony.plan",
+        by: "scrum-master",
+        payload: { goal: "g2", items: ["B"], budget: { tokens: 5000 } },
+      }),
+    )
+    .find((v) => v.rule === "sprint-budget-fixed")!;
+  assert.match(budgetViolation.fix, /exwf config set/);
   assert.deepEqual(
     run(retro, {
       type: "ceremony.plan",
