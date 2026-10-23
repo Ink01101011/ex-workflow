@@ -15,6 +15,7 @@ import {
 } from "./phases.ts";
 import { waterfallRoles } from "./roles.ts";
 import { waterfallStages } from "./stages.ts";
+import { traceabilityMatrix } from "./traceability.ts";
 
 export {
   validateWaterfallConfig,
@@ -46,6 +47,10 @@ export {
 } from "./phases.ts";
 export { waterfallStages } from "./stages.ts";
 export { waterfallRoles } from "./roles.ts";
+export { traceabilityMatrix, missingTraces } from "./traceability.ts";
+export type { TraceabilityMatrix, TraceRow } from "./traceability.ts";
+export { baselinePhase, reopenPhases } from "./baseline.ts";
+export type { ReopenResult } from "./baseline.ts";
 
 export const WATERFALL_VOCABULARY: Record<CoreTerm, string> = {
   backlog: "Requirements Baseline",
@@ -157,7 +162,7 @@ export function waterfall(): Methodology<WaterfallConfig> {
     rules: [],
     metrics: () => ({}),
     humanDefaults: { gates: "all" },
-    report: (state) => ({ ...phaseReport(state) }),
+    report: (state) => ({ ...phaseReport(state), coverage: traceabilityMatrix(state).coverage }),
     afterComplete(state, itemId, _now) {
       // an item added to the phase after kickoff is not in the iteration's committed list: count its spend now
       const it = openIteration(state);
