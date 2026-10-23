@@ -4,7 +4,7 @@
 
 Pre-release under the `stage` dist-tag. Phase 6 (backlog zero) fixes or explicitly accepts all 24 items the 1.0 definition named; the decisions are in the design spec, section 22, and the accepted limitations are in the README.
 
-- Stale-lock takeover (B01): the lock is re-stat'd (inode and mtime) immediately before `unlink`; a changed lock aborts the takeover with the existing lock-held error. The residual window between the stat and the unlink is accepted.
+- Stale-lock takeover (B01): the lock is re-stat'd (inode and mtime) immediately before `unlink`; a lock changed between the staleness check and the unlink is not taken over; the takeover is retried and the lock-held error follows after the retry cap. The residual window between the stat and the unlink is accepted.
 - Completion rules (B02): `complete()` runs the methodology rules through `applyAction` with action type `item.complete` after validation, so rule hooks see completions; `checkGate` still answers `gate-unmet` for a conflict of interest.
 - Gate approval (B05): `decide(approve)` honours a `needs-review` verdict from the item's last `item.completed` event and advances to the review stage.
 - Scrum status (B04): `exwf status` reports a `report` for Scrum (`{ closing, sprint, reason, inFlight }`), so a sprint left in `closing` is flagged.
@@ -19,7 +19,7 @@ Pre-release under the `stage` dist-tag. Phase 6 (backlog zero) fixes or explicit
 - Waterfall lessons (B21): phase retrospective lessons carry `from` and `item`, as in Scrum (`from` defaults to the retro's `by`).
 - Valueless flags (B24): a value-taking flag given without a value is `invalid-input` naming the flag; `--estimate` is the only boolean flag.
 
-Compatibility: no `state.json` schema change and no new event kind; every `.workflow/state.json` written by an earlier stage loads unchanged. The generated `WaterfallConfig` schema document gains one optional key, `fallbackTokensPerWeight`. Behaviour changes, all deliberate: rules run on `item.complete` (B02); `decide(approve)` honours `needs-review` (B05); `ceremony commit` is refused into a closing sprint (B07); a freshly reworked item needs fresh evidence before it passes (B10); a blocked or awaiting-human carryover in review resumes at review (B22); `plan auto` applies tokens and turns together (B20); a value-taking flag without a value is refused (B24); Scrum's `status.report` is no longer `null`.
+Compatibility: no `state.json` schema change and no new event kind; every `.workflow/state.json` written by an earlier stage loads unchanged. The generated `WaterfallConfig` schema document gains one optional key, `fallbackTokensPerWeight`. Behaviour changes, all deliberate: rules run on `item.complete` (B02); custom rules on `item.complete` can refuse a completion (`rule-violation`) and their warnings are returned; `decide(approve)` honours `needs-review` (B05); `ceremony commit` is refused into a closing sprint (B07); a freshly reworked item needs fresh evidence before it passes (B10); a blocked or awaiting-human carryover in review resumes at review (B22); `plan auto` applies tokens and turns together (B20); a value-taking flag without a value is refused (B24); Scrum's `status.report` is no longer `null`.
 
 ## 0.5.0-stage (unreleased)
 

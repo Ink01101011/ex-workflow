@@ -173,7 +173,7 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 The 1.0 definition requires every known gap to be fixed or accepted as a documented limitation. These are the accepted ones (design spec, section 22). Each has one line of reasoning.
 
-- Stale-lock takeover (B01): the re-stat narrows the race to the gap between the stat and the `unlink`, which no portable call closes; on Windows `ino` is 0, so only the mtime is compared.
+- Stale-lock takeover (B01): the re-stat narrows the race to the gap between the stat and the `unlink`, which no portable call closes; `ino` may be 0 (FAT/exFAT, some shares), in which case only the mtime is compared.
 - Conflict of interest (B02): `"conflict-of-interest"` stays a declared, reserved `ErrorCode` that is never thrown, and the core rule matching action type `complete` stays dormant; `checkGate` already refuses the case as `gate-unmet`, and removing the code would narrow a public type.
 - Blockers (B03): a blocker is owned by a human, and clearing it would need a link from the follow-up that the schema does not carry; `exwf unblock` is the path.
 - Scrum stage ids (B06): `backlog`, `sprint` and `review` are owned by the module (about twenty uses); init refuses a config that lacks them.
@@ -188,9 +188,11 @@ The 1.0 definition requires every known gap to be fixed or accepted as a documen
 - Phase budgets (B18): a phase budget reuses `Iteration` and `status` shows `openIteration`; the naming is accepted, and `fallbackTokensPerWeight` covers the no-history case.
 - Phase retrospective (B19): baselines and config are locked in Waterfall, so only `agreement` lessons apply; `dod` and `backlog` suggestions are stored for the host.
 - Accounting outside sprints (B23): a line whose `endedAt` lies outside every sprint window has no sprint to charge.
-- Waterfall deliverables (T06): `deliverables-present` aggregates raw item evidence while stage gates use fresh evidence; the two diverge only when one config uses both.
-- Rework in flight (T06): an item reworked mid-flight in a state written before 0.6.0-stage needs fresh evidence before it can pass.
-- Flag values (B24): a value that starts with `--` cannot be passed as a flag value, so the parser reads it as the next flag.
+- Waterfall deliverables (B10): `deliverables-present` aggregates raw item evidence while stage gates use fresh evidence; the two diverge only when one config uses both.
+- Rework in flight (B10): an item reworked mid-flight in a state written before 0.6.0-stage needs fresh evidence before it can pass.
+- Flag values (B24): CLI flags take `--flag value` only; a value beginning with `--` must come via a JSON input file; `--flag=value` is not supported.
+- Stale lock unlink: `withStateLock` retries without reaching the retry cap when a stale lock's unlink keeps failing (EPERM, read-only directory); delete the file by hand.
+- Scrum `status.report.reason`: it is always `budget`; the engine has no other closing cause yet.
 
 ## Development gate
 
