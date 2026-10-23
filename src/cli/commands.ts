@@ -19,6 +19,7 @@ import { registerRole } from "../roles.ts";
 import { lastEvent } from "../state.ts";
 import { scrum } from "../scrum/index.ts";
 import { kanban } from "../kanban/index.ts";
+import { waterfall } from "../waterfall/index.ts";
 import type {
   Accounting,
   Action,
@@ -33,10 +34,11 @@ import type {
 const METHODOLOGIES: Record<string, () => Methodology> = {
   scrum: scrum as () => Methodology,
   kanban: kanban as () => Methodology,
+  waterfall: waterfall as () => Methodology,
 };
 
 export const USAGE = [
-  "exwf init <scrum|kanban> --config <file> [--roles <file>]",
+  "exwf init <scrum|kanban|waterfall> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
   "exwf next [--max n]                  exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m",
   "exwf ceremony <name> [input.json] [--by who]",
