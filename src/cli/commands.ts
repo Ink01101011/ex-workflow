@@ -13,8 +13,8 @@ import { complete } from "../complete.ts";
 import { correctAccounting, type AccountingPatch } from "../accounting.ts";
 import { WorkflowError, fail } from "../errors.ts";
 import { decide } from "../gates.ts";
-import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
-import { applyAction, init, validateAction } from "../methodology.ts";
+import { addItem, clearBlocker, editItem, getItem, type ItemPatch } from "../items.ts";
+import { applyAction, changeConfig, init, validateAction } from "../methodology.ts";
 import { openIteration, type PlanOptions } from "../planner.ts";
 import { registerRole } from "../roles.ts";
 import {
@@ -53,6 +53,7 @@ export const USAGE = [
   "exwf account <item> [--line n] [--tokens-in n] [--tokens-out n] [--duration-ms n] [--model m] [--by who]",
   "exwf ceremony <name> [input.json] [--by who]",
   "exwf decide <pendingId> approve|reject [--by who] [--note text]",
+  "exwf config set <patch.json> [--by who]       exwf unblock <item> [--blocker id] [--note text] [--by who]",
   "exwf status | board | metrics | pending | lessons",
   "exwf validate <action.json>          exwf role add <manifest.json> | role list",
 ];
@@ -129,11 +130,14 @@ const WRITERS = new Set([
   "account",
   "ceremony",
   "decide",
+  "unblock",
 ]);
 
 export async function runCommand(argv: string[], cwd: string): Promise<CommandResult> {
   const [cmd, sub] = parseArgs(argv).positional;
-  const writes = cmd !== undefined && (WRITERS.has(cmd) || (cmd === "role" && sub === "add"));
+  const writes =
+    cmd !== undefined &&
+    (WRITERS.has(cmd) || (cmd === "role" && sub === "add") || (cmd === "config" && sub === "set"));
   try {
     return writes ? await withStateLock(cwd, () => execute(argv, cwd)) : await execute(argv, cwd);
   } catch (e) {
@@ -329,6 +333,46 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
           lastEvent: lastEvent(res.state),
         },
       };
+    }
+    case "config": {
+      if (rest[0] !== "set" || !rest[1]) return { exit: 2, out: { ok: false, usage: USAGE } };
+      const state = await loadState(cwd);
+      const patch = await readJson<Record<string, unknown>>(path.resolve(cwd, rest[1]));
+      const res = changeConfig(state, methodologyOf(state), patch, by, now);
+      await saveState(cwd, res.state);
+      return {
+        exit: 0,
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          changed: (lastEvent(res.state)!.payload as { changed: string[] }).changed,
+          config: res.state.config,
+        },
+      };
+    }
+    case "unblock": {
+      if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
+      const id = rest[0];
+      const state = await loadState(cwd);
+      const open = getItem(state, id)
+        .blockers.filter((b) => !b.clearedAt)
+        .map((b) => b.id);
+      if (open.length === 0)
+        fail(
+          "invalid-input",
+          `item ${id} has no open blocker`,
+          "nothing to clear; check exwf board",
+        );
+      const blockers = flags["blocker"] !== undefined ? [flags["blocker"]] : open;
+      const note = flags["note"];
+      const res = applyAction(
+        state,
+        methodologyOf(state),
+        { type: "blocker.clear", by, payload: { id, blockers, note: note ?? null } },
+        (s) => blockers.reduce((acc, b) => clearBlocker(acc, id, b, by, now, note), s),
+      );
+      await saveState(cwd, res.state);
+      return { exit: 0, out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) } };
     }
     case "decide": {
       if (!rest[0] || (rest[1] !== "approve" && rest[1] !== "reject"))

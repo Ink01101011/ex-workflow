@@ -644,3 +644,89 @@ test("complete refuses 0 tokens without --estimate; account corrects the placeho
   );
   assert.equal((await runCommand(["account"], root)).exit, 2);
 });
+
+async function oneItemDone(
+  root: string,
+  w: (n: string, d: unknown) => Promise<string>,
+  cfg: string,
+) {
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
+  await runCommand(["next"], root);
+  return a;
+}
+const doneFlags = [
+  "--tokens-in",
+  "100",
+  "--tokens-out",
+  "50",
+  "--duration-ms",
+  "1000",
+  "--model",
+  "haiku",
+];
+
+test("config set changes the budget between sprints (the #8 repro) and is refused while a sprint is open", async () => {
+  const { root, w, cfg } = await project();
+  await oneItemDone(root, w, cfg);
+  const patch = await w("patch.json", { sprintBudget: { tokens: 1500000 } });
+  const open = await runCommand(["config", "set", patch], root);
+  assert.equal(open.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(open).error.code, "invalid-input");
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  assert.equal((await runCommand(["complete", "A", h, ...doneFlags], root)).exit, 0);
+  const rev = await w("rev.json", { accepted: true, goalMet: true });
+  assert.equal((await runCommand(["ceremony", "review", rev, "--by", "human"], root)).exit, 0);
+  const retro = await w("retro.json", { lessons: [] });
+  assert.equal(
+    (await runCommand(["ceremony", "retro", retro, "--by", "scrum-master"], root)).exit,
+    0,
+  );
+  const set = await runCommand(["config", "set", patch], root);
+  assert.equal(set.exit, 0);
+  assert.deepEqual(out<{ changed: string[] }>(set).changed, ["sprintBudget"]);
+  const b = await w("b.json", { id: "B", title: "b", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", b, "--by", "product-owner"], root);
+  const plan2 = await w("plan2.json", { goal: "g2", items: ["B"], budget: { tokens: 1500000 } });
+  assert.equal(
+    (await runCommand(["ceremony", "plan", plan2, "--by", "scrum-master"], root)).exit,
+    0,
+  );
+  assert.equal((await runCommand(["config", "bogus"], root)).exit, 2);
+});
+
+test("unblock clears an open blocker with a note and re-queues the item", async () => {
+  const { root, w, cfg } = await project();
+  await oneItemDone(root, w, cfg);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [],
+    notes: "stuck",
+    do_not: [],
+    open_questions: [],
+    verdict: "blocked",
+  });
+  const rc = await runCommand(["complete", "A", h, ...doneFlags], root);
+  assert.equal(rc.exit, 0);
+  assert.equal(out<{ item: { status: string } }>(rc).item.status, "blocked");
+  const r = await runCommand(["unblock", "A", "--note", "fixed"], root);
+  assert.equal(r.exit, 0);
+  assert.equal(out<{ item: { status: string } }>(r).item.status, "todo");
+  const again = await runCommand(["unblock", "A"], root);
+  assert.equal(again.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(again).error.code, "invalid-input");
+  const state = JSON.parse(await readFile(path.join(root, ".workflow", "state.json"), "utf8"));
+  const ev = state.events.filter((e: { type: string }) => e.type === "blocker.cleared").at(-1);
+  assert.equal(ev.payload.note, "fixed");
+});

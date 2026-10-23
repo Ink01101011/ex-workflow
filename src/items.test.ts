@@ -155,11 +155,18 @@ test("blocker events carry the item transition they caused, or null", () => {
   assert.equal(tr(s), null);
   s = clearBlocker(s, "A", "A-b1", "po", T0);
   assert.equal(tr(s), null);
-  s = clearBlocker(s, "A", "A-b2", "po", T0);
+  assert.deepEqual(s.events.at(-1)!.payload, {
+    id: "A",
+    blocker: "A-b1",
+    transition: null,
+    note: null,
+  });
+  s = clearBlocker(s, "A", "A-b2", "po", T0, "fixed");
   assert.deepEqual(tr(s), {
     from: { stage: "backlog", status: "blocked" },
     to: { stage: "backlog", status: "todo" },
   });
+  assert.equal((s.events.at(-1)!.payload as { note: unknown }).note, "fixed");
 });
 
 test("clearing a blocker on an in_progress item re-queues it in the stage it was pulled from", () => {

@@ -377,6 +377,10 @@ export interface Methodology<C = unknown> {
   humanDefaults: { gates: "all" | "none" | string[] };
   /** Called after complete(); lets the methodology react (e.g. close a sprint when the budget is gone). */
   afterComplete?(state: WorkflowState, itemId: string, now: string): WorkflowState;
+  /** Config keys that cannot change after init (changeConfig refuses them). */
+  lockedConfigKeys?: string[];
+  /** Called by changeConfig after the new config is stored; keeps derived state (e.g. stage policies) in step. */
+  afterConfigChange?(state: WorkflowState, now: string): WorkflowState;
   /** Methodology-specific status for hosts (e.g. cadences due); printed by `exwf status`. */
   report?(state: WorkflowState): Record<string, unknown>;
   /** Called by decide() after a pending entry is resolved; lets the methodology act on it (e.g. baseline a phase gate, apply a change-request decision). */

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { init } from "../methodology.ts";
+import { changeConfig, init } from "../methodology.ts";
 import { addItem, getItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { WorkflowError } from "../errors.ts";
@@ -222,4 +222,14 @@ test("phaseReport lists phases, the current and open phase, pending gates and re
     phasesOf(s).map((p) => (p.id === "requirements" ? { ...p, status: "open" } : p)),
   );
   assert.equal(phaseReport(s).open, "requirements");
+});
+
+test("waterfall refuses to change phases after init but accepts humanGates between phases", () => {
+  const { state } = init({ methodology: waterfall(), config: {}, now: T0 });
+  assert.throws(
+    () => changeConfig(state, waterfall(), { phases: [] }, "human", T1),
+    (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+  );
+  const r = changeConfig(state, waterfall(), { humanGates: [] }, "human", T1);
+  assert.deepEqual((r.state.config as { humanGates: unknown }).humanGates, []);
 });

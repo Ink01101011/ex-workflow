@@ -3,7 +3,7 @@ import { getItem, moveItem, patchItem, stripItemFields } from "../items.ts";
 import { openIteration } from "../planner.ts";
 import { appendEvent } from "../state.ts";
 import type { CoreTerm, Methodology, PlannerOptions, WorkItem, WorkflowState } from "../types.ts";
-import { scrumCeremonies } from "./ceremonies.ts";
+import { scrumCeremonies, setDod } from "./ceremonies.ts";
 import { validateScrumConfig, type ScrumConfig } from "./config.ts";
 import { scrumMetrics, type ScrumMetrics } from "./metrics.ts";
 import { scrumRoles } from "./roles.ts";
@@ -170,6 +170,9 @@ export function scrum(): Methodology<ScrumConfig> {
     rules: scrumRules(),
     metrics: (state) => ({ ...scrumMetrics(state) }),
     humanDefaults: { gates: ["sprint-review"] },
+    afterConfigChange(state) {
+      return setDod(state, configOf(state).definitionOfDone);
+    },
     afterComplete(state, _itemId, now) {
       const it = openIteration(state);
       if (!it || (!it.closing && !isExhausted(it.budget, it.spent))) return state;

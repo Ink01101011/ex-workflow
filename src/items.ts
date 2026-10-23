@@ -303,6 +303,7 @@ export function clearBlocker(
   blockerId: string,
   by: string,
   now?: string,
+  note?: string,
 ): WorkflowState {
   const item = getItem(state, id);
   const idx = item.blockers.findIndex((b) => b.id === blockerId && !b.clearedAt);
@@ -354,7 +355,7 @@ export function clearBlocker(
     next,
     "blocker.cleared",
     by,
-    { id, blocker: blockerId, transition: t && { from: t.from, to: t.to } },
+    { id, blocker: blockerId, transition: t && { from: t.from, to: t.to }, note: note ?? null },
     at,
   );
 }

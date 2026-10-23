@@ -70,7 +70,7 @@ export function scrumRules(): Rule[] {
           "sprint-budget-fixed",
           "error",
           "sprint length is fixed by config.sprintBudget",
-          "change sprintBudget in the config between sprints instead of per plan",
+          "change sprintBudget between sprints with changeConfig / exwf config set, not per plan",
         ),
       ];
     },

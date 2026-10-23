@@ -39,5 +39,5 @@ export { complete } from "./complete.ts";
 export { correctAccounting } from "./accounting.ts";
 export type { AccountingPatch } from "./accounting.ts";
 export { coreRulesFor } from "./rules.ts";
-export { applyAction, validateAction, init } from "./methodology.ts";
+export { applyAction, validateAction, init, changeConfig } from "./methodology.ts";
 export type { InitInput } from "./methodology.ts";

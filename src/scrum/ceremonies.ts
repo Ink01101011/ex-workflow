@@ -172,7 +172,7 @@ function attachQuestions(
 }
 
 /** Set the Definition of Done in the config and on the review stage. */
-function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
+export function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
   return {
     ...state,
     config: { ...configOf(state), definitionOfDone: policies },
