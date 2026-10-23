@@ -93,9 +93,10 @@ if (!check) {
         `FAIL ${OUT} is stale (first difference at line ${i + 1}):\n  fresh:     ${a[i]}\n  committed: ${b[i]}`,
       );
       console.error("run `pnpm schema:gen` and commit the result");
-      process.exit(1);
+      process.exitCode = 1;
+    } else {
+      console.log(`ok ${OUT} matches the types`);
     }
-    console.log(`ok ${OUT} matches the types`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
