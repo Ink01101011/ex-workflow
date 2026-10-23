@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createState, appendEvent } from "./state.ts";
 import { addItem, moveItem } from "./items.ts";
 import { synthesizeBrief, next } from "./brief.ts";
+import { complete } from "./complete.ts";
 import type { Gate, Methodology, Role, Stage } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
@@ -143,4 +144,46 @@ test("next plans and returns one brief per dispatched item", () => {
   assert.equal(res.briefs.length, 1);
   assert.equal(res.briefs[0]!.item.status, "in_progress");
   assert.equal(res.briefs[0]!.role.id, "dev");
+});
+
+test("a question brief carries its parent's handoff and do_not; other briefs have no parent", () => {
+  const lead: Role = { ...dev, id: "lead", name: "Lead", capabilities: ["escalate"], do_not: [] };
+  let s = createState({ methodology: "kanban", config: {}, stages, roles: [dev, lead], now: T0 });
+  s = addItem(s, { id: "A", title: "a" }, "po", T0);
+  const first = next(s, m(), { now: T0 });
+  assert.equal("parent" in first.briefs[0]!, false);
+  s = complete(
+    first.state,
+    m(),
+    {
+      item: "A",
+      role: "dev",
+      verdict: "escalate",
+      notes: "spec unclear at §3",
+      produced: [{ kind: "code", ref: "src/a.ts" }],
+      do_not: ["touch b"],
+      open_questions: ["q1", "q2"],
+    },
+    {
+      item: "A",
+      role: "dev",
+      model: "haiku",
+      tokensIn: 10,
+      tokensOut: 5,
+      durationMs: 1,
+      startedAt: T0,
+      endedAt: T0,
+    },
+    T0,
+  ).state;
+  const q = next(s, m(), { now: T0 }).briefs.find((b) => b.item.id === "A-q1")!;
+  assert.deepEqual(q.parent, {
+    item: "A",
+    role: "dev",
+    notes: "spec unclear at §3",
+    produced: [{ kind: "code", ref: "src/a.ts" }],
+    open_questions: ["q1", "q2"],
+    do_not: ["touch b"],
+  });
+  assert.ok(q.do_not.includes("touch b"));
 });

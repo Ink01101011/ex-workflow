@@ -730,3 +730,47 @@ test("unblock clears an open blocker with a note and re-queues the item", async 
   const ev = state.events.filter((e: { type: string }) => e.type === "blocker.cleared").at(-1);
   assert.equal(ev.payload.note, "fixed");
 });
+
+test("complete warns about ignored open questions and status lists them", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
+  await runCommand(["next"], root);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: ["which PO?"],
+  });
+  const rc = await runCommand(
+    [
+      "complete",
+      "A",
+      h,
+      "--tokens-in",
+      "100",
+      "--tokens-out",
+      "50",
+      "--duration-ms",
+      "1000",
+      "--model",
+      "haiku",
+    ],
+    root,
+  );
+  assert.equal(rc.exit, 0);
+  assert.equal(
+    out<{ warnings: Array<{ rule: string }> }>(rc).warnings[0]!.rule,
+    "open-questions-ignored",
+  );
+  const st = out<{ openQuestions: Array<{ item: string; questions: string[] }> }>(
+    await runCommand(["status"], root),
+  );
+  assert.equal(st.openQuestions[0]!.item, "A");
+  assert.deepEqual(st.openQuestions[0]!.questions, ["which PO?"]);
+});

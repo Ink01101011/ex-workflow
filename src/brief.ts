@@ -12,6 +12,7 @@ interface CompletedPayload {
   produced: Handoff["produced"];
   notes: string;
   do_not: string[];
+  open_questions?: string[];
 }
 
 function completions(
@@ -95,7 +96,41 @@ export function synthesizeBrief(
     budgetRemaining: it ? remaining(it.budget, it.spent) : {},
   };
   if (gate) brief.gateAhead = gate;
+  if (item.type === "question" && item.parent) {
+    const p = lastCompletion(state, item.parent);
+    if (p) {
+      brief.parent = {
+        item: item.parent,
+        role: p.role,
+        notes: p.notes,
+        produced: p.produced,
+        open_questions: p.open_questions ?? [],
+        do_not: p.do_not,
+      };
+      for (const d of p.do_not) if (!doNot.includes(d)) doNot.push(d);
+    }
+  }
   return brief;
+}
+
+/** Open questions of finished items: the last completion per item, verdict done/needs-review, with open_questions left unanswered. */
+export function openQuestions(
+  state: WorkflowState,
+): Array<{ item: string; role: string; questions: string[]; at: string }> {
+  const last = new Map<string, CompletedPayload & { at: string }>();
+  for (const ev of state.events) {
+    if (ev.type !== "item.completed") continue;
+    const p = ev.payload as CompletedPayload;
+    last.delete(p.id);
+    last.set(p.id, { ...p, at: ev.at });
+  }
+  return [...last.values()]
+    .filter(
+      (p) =>
+        (p.verdict === "done" || p.verdict === "needs-review") &&
+        (p.open_questions ?? []).length > 0,
+    )
+    .map((p) => ({ item: p.id, role: p.role, questions: p.open_questions ?? [], at: p.at }));
 }
 
 export interface NextResult {

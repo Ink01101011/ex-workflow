@@ -322,6 +322,15 @@ export interface Brief {
   relatedBugs: Array<{ id: string; title: string; affects: string[] }>;
   budgetRemaining: Budget;
   gateAhead?: Gate;
+  /** for a question item: the escalating item's last handoff */
+  parent?: {
+    item: string;
+    role: string;
+    notes: string;
+    produced: Handoff["produced"];
+    open_questions: string[];
+    do_not: string[];
+  };
 }
 
 export type CoreTerm =

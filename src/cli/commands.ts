@@ -8,7 +8,7 @@ import {
   statePath,
   withStateLock,
 } from "../adapters/file.ts";
-import { next as planNext } from "../brief.ts";
+import { next as planNext, openQuestions } from "../brief.ts";
 import { complete } from "../complete.ts";
 import { correctAccounting, type AccountingPatch } from "../accounting.ts";
 import { WorkflowError, fail } from "../errors.ts";
@@ -415,6 +415,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
           openIteration: openIteration(state) ?? null,
           counts,
           pending: state.pending,
+          openQuestions: openQuestions(state),
           lastEvent: lastEvent(state),
           report: m.report ? m.report(state) : null,
         },

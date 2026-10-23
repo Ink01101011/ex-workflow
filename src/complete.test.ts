@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
 import { addItem, clearBlocker, getItem } from "./items.ts";
-import { next, synthesizeBrief } from "./brief.ts";
+import { next, openQuestions, synthesizeBrief } from "./brief.ts";
 import { complete } from "./complete.ts";
 import { authorOf, decide } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
@@ -558,4 +558,27 @@ test("a completion with 0 tokens is refused unless it is a declared estimate", (
   );
   const res = complete(s, m(), handoff(), { ...zero, estimate: true }, T0);
   assert.equal(res.state.accounting.at(-1)!.estimate, true);
+});
+
+test("a done handoff with open questions is accepted with an open-questions-ignored warning", () => {
+  const res = complete(started(), m(), handoff({ open_questions: ["which PO?"] }), acc(), T0);
+  assert.equal(res.state.items["A"]!.status, "review");
+  assert.deepEqual(
+    res.warnings.map((w) => w.rule),
+    ["open-questions-ignored"],
+  );
+  assert.equal(res.warnings[0]!.item, "A");
+  assert.match(res.warnings[0]!.fix, /escalate/);
+  assert.deepEqual(openQuestions(res.state), [
+    { item: "A", role: "dev", questions: ["which PO?"], at: T0 },
+  ]);
+  const esc = complete(
+    started(),
+    m(),
+    handoff({ verdict: "escalate", open_questions: ["q"] }),
+    acc(),
+    T0,
+  );
+  assert.deepEqual(esc.warnings, []);
+  assert.deepEqual(openQuestions(esc.state), []);
 });
