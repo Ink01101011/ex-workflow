@@ -882,7 +882,7 @@ The 1.0 definition (owner, 2026-10-23) requires every README "Known backlog" ite
 | B15 | Minor test gaps | FIX: `writeAtomic` failure path, `decide` reject and unknown-pending cases, a usage exit-2 test per command. The retro duplicate-ref test already exists. |
 | B16 | Waterfall traceability keyed by phase ids | ACCEPT: already recorded in §19; §10's `traceability` type line is corrected to phase ids. |
 | B17 | Waterfall `editItem`/`addItem` bypass `baseline-immutable` when called directly | ACCEPT: the low-level primitives bypass rules in every methodology by design; `applyAction` and the CLI enforce them. |
-| B18 | Phase budgets reuse `Iteration`; fallback needs `next()` option | SPLIT: `openIteration` naming accepted; `WaterfallConfig.fallbackTokensPerWeight` (optional) feeds the planner like Scrum's. `state.config` is `unknown` in the schema, so no regeneration. |
+| B18 | Phase budgets reuse `Iteration`; fallback needs `next()` option | SPLIT: `openIteration` naming accepted; `WaterfallConfig.fallbackTokensPerWeight` (optional) feeds the planner like Scrum's. The generated `WaterfallConfig` schema document gains the key (additive regeneration, as Scrum's `estimateMode` in Phase 5); `state.config` itself stays `unknown`. |
 | B19 | Phase retrospective applies agreements only | ACCEPT: baselines and config are locked in Waterfall; `dod`/`backlog` changes are stored for the host. |
 | B20 | `plan auto` honours turns only without tokens | FIX: `selectAuto` applies both limits. |
 | B21 | Waterfall lessons lack `from`/`item` | FIX: per-lesson `from` and `item` honoured as in Scrum (default `from` = the retro's `by`). |
