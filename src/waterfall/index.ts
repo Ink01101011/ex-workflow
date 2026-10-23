@@ -14,6 +14,7 @@ import {
   phasesOf,
 } from "./phases.ts";
 import { waterfallRoles } from "./roles.ts";
+import { waterfallRules } from "./rules.ts";
 import { waterfallStages } from "./stages.ts";
 import { traceabilityMatrix } from "./traceability.ts";
 
@@ -47,6 +48,7 @@ export {
 } from "./phases.ts";
 export { waterfallStages } from "./stages.ts";
 export { waterfallRoles } from "./roles.ts";
+export { waterfallRules } from "./rules.ts";
 export { traceabilityMatrix, missingTraces } from "./traceability.ts";
 export type { TraceabilityMatrix, TraceRow } from "./traceability.ts";
 export { baselinePhase, reopenPhases } from "./baseline.ts";
@@ -159,7 +161,7 @@ export function waterfall(): Methodology<WaterfallConfig> {
       ];
     },
     ceremonies: {},
-    rules: [],
+    rules: waterfallRules(),
     metrics: () => ({}),
     humanDefaults: { gates: "all" },
     report: (state) => ({ ...phaseReport(state), coverage: traceabilityMatrix(state).coverage }),
