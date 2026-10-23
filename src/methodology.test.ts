@@ -190,6 +190,14 @@ test("changeConfig between iterations re-validates, records config.changed and r
     codeOf(() => changeConfig(s, mm, { sprintBudget: {} }, "human", T2)),
     "config-invalid",
   );
+  assert.throws(
+    () => changeConfig(s, mm, { autoclose: false }, "human", T2),
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "invalid-input" &&
+      /autoclose/.test(e.message) &&
+      /known keys/.test(e.fix),
+  );
   assert.equal(
     codeOf(() =>
       changeConfig(s, mm, { productGoal: (s.config as ScrumConfig).productGoal }, "human", T2),

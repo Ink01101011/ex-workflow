@@ -103,6 +103,13 @@ export function changeConfig(
     );
   const before = (state.config ?? {}) as Record<string, unknown>;
   const after = methodology.validateConfig({ ...before, ...patch }) as Record<string, unknown>;
+  const unknown = Object.keys(patch).filter((k) => !Object.hasOwn(after, k));
+  if (unknown.length)
+    fail(
+      "invalid-input",
+      `unknown config key(s) ${unknown.join(", ")}`,
+      `known keys: ${Object.keys(after).join(", ")}`,
+    );
   const changed = Object.keys(patch).filter(
     (k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]),
   );

@@ -48,3 +48,10 @@ test("retireAgreement removes and records; an unknown text fails", () => {
   assert.equal(e.code, "invalid-input");
   assert.match(e.fix, /current agreements/);
 });
+
+test("applyAgreement replacing an agreement with itself is a no-op without an event", () => {
+  const b = base();
+  const s = applyAgreement(b, { text: "a", replaces: "a" }, "sm", T);
+  assert.deepEqual(s.agreements, ["a", "b"]);
+  assert.deepEqual(s.events, b.events);
+});

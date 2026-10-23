@@ -20,6 +20,7 @@ export function applyAgreement(
   by: string,
   now: string,
 ): WorkflowState {
+  if (change.replaces === change.text) return state;
   let s = state;
   if (change.replaces !== undefined) {
     if (typeof change.replaces !== "string" || !s.agreements.includes(change.replaces))
