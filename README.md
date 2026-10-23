@@ -1,6 +1,6 @@
 # ex-workflow
 
-Methodology engine for AI teams. Scrum, Kanban and Waterfall (Scrum and Kanban today; Waterfall follows) are modelled as data (stages, roles, policies, gates, ceremonies) and driven by a pure state machine on top of the [`ex-flow`](https://www.npmjs.com/package/ex-flow) DAG planner. The program decides, the LLM executes: which item may move, who may approve, whether a sprint may close is enforced by the engine, not by a prompt.
+Methodology engine for AI teams. Scrum, Kanban and Waterfall are modelled as data (stages, roles, policies, gates, ceremonies) and driven by a pure state machine on top of the [`ex-flow`](https://www.npmjs.com/package/ex-flow) DAG planner. The program decides, the LLM executes: which item may move, who may approve, whether a sprint may close is enforced by the engine, not by a prompt.
 
 State is plain JSON, every operation is `(state, action) -> state`, and every error names the rule, the item and a concrete fix. Core performs no I/O; a small file adapter and the `exwf` CLI sit on top. Runtime dependencies are exactly `ex-flow` and `exsorted`.
 
@@ -10,7 +10,7 @@ State is plain JSON, every operation is `(state, action) -> state`, and every er
 pnpm add ex-workflow@stage
 ```
 
-Pre-releases are published under the `stage` dist-tag (currently `0.2.0-stage`); `latest` is reserved for 0.1.0.
+Pre-releases are published under the `stage` dist-tag (currently `0.3.0-stage`); `latest` is reserved for 0.1.0.
 
 Node >= 18. Runs on macOS, Linux and Windows.
 
@@ -65,20 +65,45 @@ Cadences are ceremonies: `replenishment`, `delivery-planning`, `service-delivery
 
 `next()` also returns `skipped`: each ready card it did not pull, with `reason` (`entry-policy`, `wip`, `resource-cap` or `budget`) and a `detail`; the commitment column's policies gate the pull out of it (escalation `question` cards are exempt, as from exit policies and gates). Ordering is by class band (question, expedite, fixed-date, standard, intangible) and, with `fairness.aging` on (the default), priority stays primary inside a window of `fairness.maxDeferralRounds` passes (default 5); each full window a card is passed over promotes it one step above any priority difference, and an intangible card reaching the first window is ranked as standard, so nothing is starved.
 
+### Waterfall
+
+```ts
+import { init, addItem, applyAction, next, complete, decide } from "ex-workflow";
+import { waterfall } from "ex-workflow/waterfall";
+
+const m = waterfall();
+let { state } = init({ methodology: m, config: {} }); // six classic phases, every gate human-approved
+const r1 = { id: "R1", title: "login", phase: "requirements", acceptance: ["user can log in"] };
+state = applyAction(state, m, { type: "item.add", by: "business-analyst", payload: { item: r1 } }, (s) =>
+  addItem(s, r1, "business-analyst"),
+).state;
+state = m.ceremonies["kickoff"]!(state, { by: "project-manager", phase: "requirements" }).state;
+// next() → complete() as with any methodology; items go work → review → done
+state = m.ceremonies["gateReview"]!(state, { by: "project-manager", phase: "requirements" }).state; // pending decision
+state = decide(state, state.pending[0]!.id, "approve", "human", "ok", undefined, m); // baselines the phase
+```
+
+Phases open one at a time (`kickoff`), close through a gate (`gateReview`, human-approved by default) that
+baselines their items, and reopen only through an approved change-request (`changeControlBoard`, with an
+impact analysis). Requirements must trace to design and verification items before those gates; the engine
+generates the `traceability-matrix` deliverable. Edits to baselined items are refused by the rules when
+they go through `applyAction` or the CLI. `test/waterfall.e2e.test.ts` is a full project with a
+change-request that reopens two baselined phases.
+
 ## CLI
 
 State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage exits 2.
 
 | Command | Returns |
 |---|---|
-| `init <scrum\|kanban> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
-| `add <item.json>` | `{ ok, item }` |
-| `edit <id> <patch.json>` | `{ ok, item }` |
+| `init <scrum\|kanban\|waterfall> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
+| `add <item.json>` | `{ ok, warnings, item }` (checked by the methodology rules) |
+| `edit <id> <patch.json>` | `{ ok, warnings, item }` (checked by the methodology rules) |
 | `next [--max n]` | `{ ok, reason, skipped, briefs }`; writes `.workflow/briefs/<id>.json` |
 | `complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--role r]` | `{ ok, item, warnings }` |
 | `ceremony <name> [input.json] [--by who]` | `{ ok, warnings, lastEvent }` |
-| `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` |
-| `status` | `{ ok, methodology, openIteration, counts, pending, lastEvent, report }` (`report` is the methodology's own status, e.g. Kanban's cadences due; `null` for Scrum) |
+| `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` (runs the methodology's `afterDecide`, e.g. a Waterfall phase baseline) |
+| `status` | `{ ok, methodology, openIteration, counts, pending, lastEvent, report }` (`report` is the methodology's own status: Kanban's cadences due, Waterfall's phases, pending gates and traceability coverage; `null` for Scrum) |
 | `board` | `{ ok, columns }` |
 | `metrics` | `{ ok, metrics }` |
 | `pending` / `lessons` | the arrays |
@@ -104,11 +129,11 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Status
 
-0.2.0-stage adds the Kanban module. Waterfall follows. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+0.3.0-stage adds the Waterfall module; all three methodologies ship. `ex-workflow/schema` is still pending. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
 
 ## Known backlog
 
-Minor items deferred past 0.2.0-stage:
+Minor items deferred past 0.3.0-stage:
 
 - Stale-lock takeover can race when a lock is older than 60 s.
 - `decide(approve)` ignores a `needs-review` verdict.
@@ -122,6 +147,10 @@ Minor items deferred past 0.2.0-stage:
 - Kanban `wipBypass` is the total number of extra slots a column grants while any expedite is active, not one per expedite.
 - Kanban cadences use `item.completed` counts as turns; a wall-clock cadence schedule is the host's job.
 - Minor test gaps: retro duplicate-ref rejection, `writeAtomic` failure path, thin CLI usage and `decide` tests.
+- Waterfall traceability is keyed by phase ids, not item types (spec §10 wording); links are read in both directions.
+- Waterfall `editItem`/`addItem` called directly (not through `applyAction` or the CLI) bypass `baseline-immutable`.
+- Waterfall phase budgets reuse `Iteration`; `exwf status` shows the open phase as `openIteration`. With no accounting history the planner estimates 20000 tokens per weight unit, so a small phase budget dispatches nothing until `next({ fallbackTokensPerWeight })` is passed or history exists.
+- Phase retrospective applies `agreement` lessons only; other suggested changes are stored for the host.
 
 ## Development gate
 
@@ -142,7 +171,7 @@ pnpm run ci && npm publish --tag stage
 
 ## Design principles
 
-1. One engine, three methodologies (Scrum and Kanban today; Waterfall follows), modelled as completely as the canonical texts describe them (Scrum Guide 2020; the Kanban Method's six practices, cadences, classes of service and flow metrics; classic phase-gate Waterfall with change control and traceability).
+1. One engine, three methodologies, modelled as completely as the canonical texts describe them (Scrum Guide 2020; the Kanban Method's six practices, cadences, classes of service and flow metrics; classic phase-gate Waterfall with change control and traceability).
 2. The program decides, the LLM executes. Which item may move, who may approve, whether a stage may start: engine, not prompt.
 3. Roles are data. Methodologies reference capabilities, never role names.
 4. Pure, serialisable state. Every operation is `(state, action) -> state` or `(state) -> view`. No I/O in core.

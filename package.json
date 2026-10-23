@@ -1,6 +1,6 @@
 {
   "name": "ex-workflow",
-  "version": "0.2.0-stage",
+  "version": "0.3.0-stage",
   "description": "Methodology engine for AI teams: Scrum, Kanban and Waterfall as data-driven state machines on top of ex-flow",
   "license": "MIT",
   "type": "module",
@@ -61,6 +61,16 @@
         "default": "./dist/kanban/index.cjs"
       }
     },
+    "./waterfall": {
+      "import": {
+        "types": "./dist/waterfall/index.d.ts",
+        "default": "./dist/waterfall/index.mjs"
+      },
+      "require": {
+        "types": "./dist/waterfall/index.d.cts",
+        "default": "./dist/waterfall/index.cjs"
+      }
+    },
     "./adapters": {
       "import": {
         "types": "./dist/adapters/index.d.ts",
@@ -99,6 +109,9 @@
       ],
       "kanban": [
         "dist/kanban/index.d.ts"
+      ],
+      "waterfall": [
+        "dist/waterfall/index.d.ts"
       ],
       "adapters": [
         "dist/adapters/index.d.ts"

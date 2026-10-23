@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.2.0-stage (unreleased)
+## 0.3.0-stage (unreleased)
+
+Pre-release under the `stage` dist-tag.
+
+- Waterfall module (`ex-workflow/waterfall`): ordered phases with deliverables and gates, kickoff / gateReview / changeControlBoard / phaseRetrospective ceremonies, human-approved baselines with versions (`state.baselines`), change-requests with impact analysis that reopen exactly the listed phases (and suspend a later open phase), bidirectional traceability with an engine-generated `traceability-matrix`, seven rules, and phase metrics from events (completion, budget variance, requirement coverage, defects per phase, change-request counts, rework weight).
+- Core: `WorkItem.phase` / `impactAnalysis`, `Phase.budget` / `produced`, `WorkflowState.baselines`, planner hook `roleFor`, `Methodology.afterDecide` with `decide(..., methodology?)`, `item.added` payload carries `phase` and `parent`.
+- CLI: `exwf init waterfall`; `add` and `edit` run through the methodology rules; `decide` runs the methodology's `afterDecide`; `status` prints the phase report.
+- Size: `core+waterfall` measured and budgeted next to `core+scrum` and `core+kanban` (set at measured size; see size-budget.json).
+
+## 0.2.0-stage (2026-10-22)
 
 Pre-release under the `stage` dist-tag.
 

@@ -14,7 +14,11 @@ export function openIteration(state: WorkflowState): Iteration | undefined {
   return state.iterations.find((it) => it.endedAt === undefined);
 }
 
-export function assignRole(state: WorkflowState, item: WorkItem): Role {
+export function assignRole(
+  state: WorkflowState,
+  item: WorkItem,
+  roleFor?: (item: WorkItem) => string | undefined,
+): Role {
   if (item.role) {
     const r = roleOf(state, item.role);
     if (!r)
@@ -22,6 +26,18 @@ export function assignRole(state: WorkflowState, item: WorkItem): Role {
         "unknown-role",
         `item "${item.id}" is assigned to unknown role "${item.role}"`,
         "editItem with an existing role id",
+      );
+    return r;
+  }
+  const picked = roleFor ? roleFor(item) : undefined;
+  if (picked !== undefined) {
+    const r = roleOf(state, picked);
+    if (!r)
+      fail(
+        "unknown-role",
+        `the methodology picked unknown role "${picked}" for item "${item.id}"`,
+        `registered roles: ${Object.keys(state.roles).join(", ") || "(none)"}`,
+        { items: [item.id] },
       );
     return r;
   }
@@ -62,10 +78,11 @@ export function toExNodes(
   items: WorkItem[],
   state: WorkflowState,
   priorityOf?: (item: WorkItem) => number | undefined,
+  roleFor?: (item: WorkItem) => string | undefined,
 ): ExNode<NodeData>[] {
   const present = new Set(items.map((i) => i.id));
   return items.map((i) => {
-    const role = assignRole(state, i);
+    const role = assignRole(state, i, roleFor);
     const node: ExNode<NodeData> = {
       id: i.id,
       data: { id: i.id },
@@ -133,7 +150,7 @@ export function plan(
   let metrics: unknown;
   try {
     const flow = new ExFlow<NodeData>(options);
-    for (const n of toExNodes(candidates, state, po.priorityOf)) flow.addEntity(n);
+    for (const n of toExNodes(candidates, state, po.priorityOf, po.roleFor)) flow.addEntity(n);
     const details = flow.resolveExecutionDetails();
     firstBatch = (details.plan.batches[0] ?? []).map((r) => r.id);
     metrics = details.metrics;
@@ -206,7 +223,7 @@ export function plan(
       });
       continue;
     }
-    const role = assignRole(state, item);
+    const role = assignRole(state, item, po.roleFor);
     const cls = role.resourceClass ?? role.id;
     if (caps[cls] !== undefined && (perClass[cls] ?? 0) >= caps[cls]!) {
       reason = "wip-full";

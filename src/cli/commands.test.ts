@@ -254,3 +254,169 @@ test("status.report is null for scrum", async () => {
   await runCommand(["init", "scrum", "--config", cfg], root);
   assert.equal(out<{ report: unknown }>(await runCommand(["status"], root)).report, null);
 });
+
+test("add and edit are checked by methodology rules and surface rule violations", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a2.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  const ra = await runCommand(["add", a, "--by", "product-owner"], root);
+  assert.equal(ra.exit, 0);
+  assert.equal(out<{ item: { id: string } }>(ra).item.id, "A");
+  const p = await w("p2.json", { title: "a renamed" });
+  const re = await runCommand(["edit", "A", p, "--by", "product-owner"], root);
+  assert.equal(re.exit, 0);
+  assert.equal(out<{ item: { title: string } }>(re).item.title, "a renamed");
+  const same = await w("p3.json", { title: "a renamed" });
+  const rn = await runCommand(["edit", "A", same, "--by", "product-owner"], root);
+  assert.equal(rn.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(rn).error.code, "no-op");
+});
+
+test("waterfall: init → add → kickoff → next/complete ×2 → status → gateReview → decide → frozen edit refused", async () => {
+  const { root, w } = await project();
+  const wcfg = await w("waterfall.json", {});
+  const r0 = await runCommand(["init", "waterfall", "--config", wcfg], root);
+  assert.equal(r0.exit, 0);
+  assert.deepEqual(
+    out<{ state: { methodology: string; stages: string[]; roles: string[] } }>(r0).state,
+    {
+      methodology: "waterfall",
+      stages: ["work", "review", "done"],
+      roles: [
+        "project-manager",
+        "developer",
+        "business-analyst",
+        "architect",
+        "qa",
+        "release-manager",
+      ],
+    },
+  );
+  const noPhase = await w("np.json", { id: "X", title: "x" });
+  const rx = await runCommand(["add", noPhase, "--by", "business-analyst"], root);
+  assert.equal(rx.exit, 1);
+  assert.equal(out<{ error: { code: string; rule: string } }>(rx).error.rule, "phase-sequential");
+  const r1 = await w("r1.json", {
+    id: "R1",
+    title: "login",
+    phase: "requirements",
+    acceptance: ["ok"],
+  });
+  assert.equal((await runCommand(["add", r1, "--by", "business-analyst"], root)).exit, 0);
+  const k = await w("k.json", { phase: "requirements" });
+  const rk = await runCommand(["ceremony", "kickoff", k, "--by", "project-manager"], root);
+  assert.equal(rk.exit, 0);
+  assert.equal(out<{ lastEvent: { type: string } }>(rk).lastEvent.type, "phase.opened");
+  const rn = await runCommand(["next"], root);
+  const briefs = out<{
+    briefs: Array<{ item: { id: string; stage: string }; role: { id: string } }>;
+  }>(rn).briefs;
+  assert.deepEqual(
+    briefs.map((b) => [b.item.id, b.item.stage, b.role.id]),
+    [["R1", "work", "business-analyst"]],
+  );
+  const h1 = await w("wh1.json", {
+    item: "R1",
+    role: "business-analyst",
+    produced: [{ kind: "srs", ref: "docs/srs.md" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  const rc = await runCommand(
+    [
+      "complete",
+      "R1",
+      h1,
+      "--tokens-in",
+      "10",
+      "--tokens-out",
+      "5",
+      "--duration-ms",
+      "100",
+      "--model",
+      "small",
+    ],
+    root,
+  );
+  assert.equal(rc.exit, 0);
+  assert.equal(out<{ item: { stage: string; status: string } }>(rc).item.stage, "review");
+  const rn2 = await runCommand(["next"], root);
+  assert.deepEqual(
+    out<{ briefs: Array<{ role: { id: string } }> }>(rn2).briefs.map((b) => b.role.id),
+    ["qa"],
+  );
+  const h2 = await w("wh2.json", {
+    item: "R1",
+    role: "qa",
+    produced: [],
+    notes: "reviewed",
+    do_not: [],
+    open_questions: [],
+  });
+  assert.equal(
+    (
+      await runCommand(
+        [
+          "complete",
+          "R1",
+          h2,
+          "--tokens-in",
+          "10",
+          "--tokens-out",
+          "5",
+          "--duration-ms",
+          "100",
+          "--model",
+          "small",
+        ],
+        root,
+      )
+    ).exit,
+    0,
+  );
+  type Report = {
+    phases: Array<{ id: string; status: string; readyForGate: boolean }>;
+    current: string | null;
+    open: string | null;
+    pendingGates: unknown[];
+    coverage: { traced: number; total: number };
+  };
+  let report = out<{ report: Report }>(await runCommand(["status"], root)).report;
+  assert.deepEqual(
+    [report.current, report.open, report.phases[0]!.status, report.phases[0]!.readyForGate],
+    ["requirements", "requirements", "open", true],
+  );
+  const g = await w("g.json", { phase: "requirements" });
+  const rg = await runCommand(["ceremony", "gateReview", g, "--by", "project-manager"], root);
+  assert.equal(rg.exit, 0);
+  assert.equal(out<{ lastEvent: { type: string } }>(rg).lastEvent.type, "phase.gate-pending");
+  const pending = out<{ pending: Array<{ id: string; kind: string }> }>(
+    await runCommand(["pending"], root),
+  ).pending;
+  assert.deepEqual(
+    pending.map((p) => [p.id, p.kind]),
+    [["p1", "gate"]],
+  );
+  const rd = await runCommand(["decide", "p1", "approve", "--by", "human", "--note", "ok"], root);
+  assert.equal(rd.exit, 0);
+  report = out<{ report: Report }>(await runCommand(["status"], root)).report;
+  assert.deepEqual(
+    [report.current, report.open, report.phases[0]!.status, report.pendingGates, report.coverage],
+    ["design", null, "baselined", [], { traced: 0, total: 1 }],
+  );
+  const patch = await w("wp.json", { title: "login (v2)" });
+  const re = await runCommand(["edit", "R1", patch, "--by", "business-analyst"], root);
+  assert.equal(re.exit, 1);
+  const error = out<{ error: { code: string; rule: string; fix: string } }>(re).error;
+  assert.equal(error.code, "rule-violation");
+  assert.equal(error.rule, "baseline-immutable");
+  assert.match(error.fix, /change-request/);
+  const rm = await runCommand(["metrics"], root);
+  assert.equal(
+    out<{ metrics: { phaseCompletion: Record<string, number> } }>(rm).metrics.phaseCompletion[
+      "requirements"
+    ],
+    100,
+  );
+});

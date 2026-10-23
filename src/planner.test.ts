@@ -316,3 +316,53 @@ test("an item queued in a full stage is not counted against itself", () => {
     ["A"],
   );
 });
+
+test("roleFor picks the dispatch role before the deliver default; unknown ids fail resolvingly", () => {
+  let s = createState({
+    methodology: "waterfall",
+    config: {},
+    stages,
+    roles: [r("dev", ["deliver"]), r("arch", ["deliver"]), r("qa", ["review"])],
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "human", T0);
+  s = addItem(s, { id: "B", title: "b" }, "human", T0);
+  const item = getItem(s, "A");
+  assert.equal(assignRole(s, item).id, "dev");
+  assert.equal(assignRole(s, item, () => "arch").id, "arch");
+  assert.equal(assignRole(s, item, () => undefined).id, "dev");
+  assert.throws(
+    () => assignRole(s, item, () => "nobody"),
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "unknown-role" &&
+      /"nobody"/.test(e.message) &&
+      /dev, arch, qa/.test(e.fix),
+  );
+  const m: Methodology = {
+    name: "waterfall",
+    vocabulary: {} as Methodology["vocabulary"],
+    validateConfig: (c) => c,
+    defaultStages: () => stages,
+    defaultRoles: () => [],
+    requiredCapabilities: [],
+    exclusiveCapabilities: [],
+    plannerOptions: () => ({
+      schedulerMode: "level",
+      roleFor: (i) => (i.id === "B" ? "arch" : undefined),
+    }),
+    candidates: (st) => Object.values(st.items).filter((i) => i.status === "todo"),
+    invariants: () => [],
+    ceremonies: {},
+    rules: [],
+    metrics: () => ({}),
+    humanDefaults: { gates: "none" },
+  };
+  const res = plan(s, m, { now: T0 });
+  assert.deepEqual(Object.fromEntries(res.dispatched.map((d) => [d.id, d.role])), {
+    A: "dev",
+    B: "arch",
+  });
+  const nodes = toExNodes([item], s, undefined, () => "arch");
+  assert.equal(nodes[0]!.resourceClass, "arch");
+});

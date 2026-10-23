@@ -37,6 +37,15 @@ export interface Transition {
   by: string;
 }
 
+/** Change-request: what the change touches and what it costs (waterfall change control). */
+export interface ImpactAnalysis {
+  summary: string;
+  /** phase ids to reopen when the change is approved (each must be baselined or open) */
+  reopen: string[];
+  /** estimated rework weight (story points / size) */
+  weight: number;
+}
+
 export interface WorkItem {
   id: string;
   type: ItemType;
@@ -60,6 +69,10 @@ export interface WorkItem {
   tags?: string[];
   /** bug / change-request: ids of items whose finished work this invalidates */
   affects?: string[];
+  /** waterfall: Phase.id this item belongs to; questions and follow-ups inherit their parent's */
+  phase?: string;
+  /** change-request: impact analysis required before the change control board decides */
+  impactAnalysis?: ImpactAnalysis;
 }
 
 /** Fields a caller supplies to addItem; the rest are defaulted. */
@@ -206,12 +219,23 @@ export interface Lesson {
   suggestedChange?: LessonChange;
 }
 
+/** A deliverable recorded on a phase (gateReview input or engine-generated). */
+export interface Produced {
+  kind: string;
+  ref: string;
+  by: string;
+  at: string;
+}
 export interface Phase {
   id: string;
   name: string;
   deliverables: string[];
   gate: Gate;
   status: "pending" | "open" | "baselined" | "reopened";
+  /** planned budget; spent is tracked on the Iteration kickoff opens for the phase */
+  budget?: Budget;
+  /** phase-level deliverables (item evidence counts too) */
+  produced?: Produced[];
 }
 export interface Baseline {
   phase: string;
@@ -233,6 +257,8 @@ export interface WorkflowState {
   iterations: Iteration[];
   phases?: Phase[];
   baseline?: Baseline;
+  /** waterfall: every baseline ever taken, oldest first; `baseline` is the last one */
+  baselines?: Baseline[];
   events: Event[];
   accounting: Accounting[];
   pending: PendingHuman[];
@@ -314,6 +340,8 @@ export interface PlannerOptions {
   wipCounts?: ItemStatus[];
   /** Per-item replacement for the target stage's wipLimit (e.g. an expedite bypass); undefined = no limit. */
   wipLimitOf?(stage: Stage, item: WorkItem): number | undefined;
+  /** Role id to dispatch a todo item to (e.g. the phase's deliverer); undefined = default (item.role, then reviewer/deliverer by capability). */
+  roleFor?(item: WorkItem): string | undefined;
 }
 
 export interface Methodology<C = unknown> {
@@ -335,6 +363,15 @@ export interface Methodology<C = unknown> {
   afterComplete?(state: WorkflowState, itemId: string, now: string): WorkflowState;
   /** Methodology-specific status for hosts (e.g. cadences due); printed by `exwf status`. */
   report?(state: WorkflowState): Record<string, unknown>;
+  /** Called by decide() after a pending entry is resolved; lets the methodology act on it (e.g. baseline a phase gate, apply a change-request decision). */
+  afterDecide?(
+    state: WorkflowState,
+    entry: PendingHuman,
+    decision: "approve" | "reject",
+    by: string,
+    note: string,
+    now: string,
+  ): WorkflowState;
 }
 
 // ---- errors ----------------------------------------------------------

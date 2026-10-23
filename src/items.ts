@@ -137,6 +137,8 @@ export function addItem(
       stage: item.stage,
       weight: item.weight ?? null,
       priority: item.priority ?? null,
+      phase: item.phase ?? null,
+      parent: item.parent ?? null,
     },
     now,
   );

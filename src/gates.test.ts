@@ -4,7 +4,7 @@ import { createState } from "./state.ts";
 import { addEvidence, addItem, getItem, moveItem } from "./items.ts";
 import { authorOf, checkGate, decide, raisePending } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
-import type { Gate, Role, Stage } from "./types.ts";
+import type { Gate, Methodology, PendingHuman, Role, Stage, WorkflowState } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const gate: Gate = {
@@ -121,4 +121,43 @@ test("a reviewer dispatched into the gated stage is not the author; the earlier-
   s = moveItem(s, "A", { stage: "verify", status: "in_progress" }, "qa", T0);
   assert.equal(authorOf(s, getItem(s, "A")), "dev");
   assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "qa"), { outcome: "pass" });
+});
+
+test("decide hands the removed pending entry to methodology.afterDecide", () => {
+  let s = createState({
+    methodology: "waterfall",
+    config: {},
+    stages,
+    roles: [r("pm", ["approve-gate"], ["qa-gate"])],
+    now: T0,
+  });
+  s = raisePending(s, { kind: "gate", gate: "qa-gate", question: "baseline?" }, T0);
+  assert.equal(s.pending[0]!.id, "p1");
+  assert.equal(s.pending[0]!.item, undefined);
+  const seen: Array<[PendingHuman, string, string, string]> = [];
+  const m = {
+    afterDecide(
+      state: WorkflowState,
+      entry: PendingHuman,
+      decision: string,
+      by: string,
+      note: string,
+      now: string,
+    ) {
+      seen.push([entry, decision, by, note]);
+      return { ...state, agreements: [...state.agreements, `decided ${entry.id} ${now}`] };
+    },
+  } as unknown as Methodology;
+  const s2 = decide(s, "p1", "approve", "human", "ok", "2026-10-19T01:00:00.000Z", m);
+  assert.deepEqual(s2.pending, []);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]![0].id, "p1");
+  assert.equal(seen[0]![0].gate, "qa-gate");
+  assert.deepEqual(seen[0]!.slice(1), ["approve", "human", "ok"]);
+  assert.deepEqual(s2.agreements, ["decided p1 2026-10-19T01:00:00.000Z"]);
+  assert.equal(s2.events[s2.events.length - 1]!.type, "pending.decided");
+  // without a methodology nothing else happens
+  const s3 = decide(s, "p1", "reject", "human", "no", T0);
+  assert.deepEqual(s3.pending, []);
+  assert.deepEqual(s3.agreements, []);
 });
