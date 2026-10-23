@@ -56,3 +56,41 @@ test("no traceability configured: empty matrix", () => {
     coverage: { traced: 0, total: 0 },
   });
 });
+
+test("change-requests are never rows nor links (#25)", () => {
+  let s = init({ methodology: waterfall(), config: {}, now: T0 }).state;
+  s = addItem(s, { id: "R1", title: "r1", phase: "requirements" }, "human", T0);
+  s = addItem(s, { id: "D1", title: "d1", phase: "design", traces: ["R1"] }, "human", T0);
+  s = addItem(
+    s,
+    {
+      id: "CR-1",
+      title: "cr",
+      type: "change-request",
+      phase: "requirements",
+      impactAnalysis: { summary: "s", reopen: [], weight: 1 },
+    },
+    "human",
+    T0,
+  );
+  s = addItem(
+    s,
+    {
+      id: "CR-2",
+      title: "cr2",
+      type: "change-request",
+      phase: "design",
+      traces: ["R1"],
+      impactAnalysis: { summary: "s", reopen: [], weight: 1 },
+    },
+    "human",
+    T0,
+  );
+  const m = traceabilityMatrix(s);
+  assert.deepEqual(
+    m.rows.map((r) => r.item),
+    ["R1"],
+  );
+  assert.deepEqual(m.rows[0]!.links["design"], ["D1"]);
+  assert.deepEqual(m.coverage, { traced: 0, total: 1 }); // verification still unlinked
+});

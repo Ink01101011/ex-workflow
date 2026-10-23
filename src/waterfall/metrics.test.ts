@@ -203,10 +203,9 @@ test("waterfall metrics from events: completion, budget variance, coverage, defe
     tick(),
   );
   assert.equal(waterfallMetrics(s).phaseCompletion["requirements"], 100);
-  // events only
+  // membership and spend from events only; coverage is live, so the items stay
   const stripped = {
     ...s,
-    items: {},
     iterations: [],
     accounting: [],
     phases: undefined,
@@ -215,4 +214,34 @@ test("waterfall metrics from events: completion, budget variance, coverage, defe
     pending: [],
   } as unknown as WorkflowState;
   assert.deepEqual(waterfallMetrics(stripped), waterfallMetrics(s));
+});
+
+test("metrics and status report share one live coverage, change-requests excluded (#25)", () => {
+  let s = init({
+    methodology: m,
+    config: { phases: [{ id: "requirements" }, { id: "design" }] },
+    now: T0,
+  }).state;
+  s = addItem(s, { id: "R1", title: "r1", phase: "requirements" }, "human", tick());
+  s = addItem(s, { id: "D1", title: "d1", phase: "design", traces: ["R1"] }, "human", tick());
+  for (const id of ["CR-1", "CR-2", "CR-3"])
+    s = addItem(
+      s,
+      {
+        id,
+        title: id,
+        type: "change-request",
+        phase: "requirements",
+        impactAnalysis: { summary: "s", reopen: [], weight: 1 },
+      },
+      "human",
+      tick(),
+    );
+  const mx = waterfallMetrics(s);
+  assert.deepEqual(
+    [mx.requirementsTraced, mx.requirementsTotal, mx.requirementCoverage],
+    [1, 1, 1],
+  );
+  const rep = m.report!(s) as unknown as { coverage: { traced: number; total: number } };
+  assert.deepEqual(rep.coverage, { traced: 1, total: 1 });
 });

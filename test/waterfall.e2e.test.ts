@@ -379,9 +379,9 @@ test("one waterfall project with a change request", () => {
     ],
     [1, 1, 0, 1, 3, 2],
   );
+  // membership and spend replay from events; coverage is live, so the items stay
   const stripped = {
     ...s,
-    items: {},
     iterations: [],
     accounting: [],
     phases: undefined,
