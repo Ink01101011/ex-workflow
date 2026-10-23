@@ -38,7 +38,7 @@ function base() {
   return s;
 }
 
-test("rules are seven, in spec order", () => {
+test("rules are eight, in spec order", () => {
   assert.deepEqual(
     waterfallRules().map((r) => r.id),
     [
@@ -49,6 +49,7 @@ test("rules are seven, in spec order", () => {
       "requirement-traced",
       "deliverables-present",
       "approver-not-author",
+      "trace-ids-valid",
     ],
   );
 });
@@ -277,4 +278,108 @@ test("approver-not-author: gate reviewers and change deciders must not be the au
     r.check(s, ceremony("changeControlBoard", "human", { change: "CR-1", decision: "approve" })),
     [],
   );
+});
+
+test("trace-ids-valid: unknown traces refused on add and edit, with the traceable ids", () => {
+  const s = base();
+  const r = rules["trace-ids-valid"]!;
+  const add = (item: Record<string, unknown>) =>
+    r.check(s, { type: "item.add", by: "human", payload: { item } });
+  const vs = add({ id: "D1", title: "d", phase: "design", traces: ["NOPE", "R1"] });
+  assert.equal(vs.length, 1);
+  assert.equal(vs[0]!.message, 'item "D1" traces unknown item "NOPE"');
+  assert.equal(vs[0]!.item, "D1");
+  assert.equal(vs[0]!.fix, "traceable items: R1, R2");
+  assert.deepEqual(add({ id: "D1", title: "d", phase: "design", traces: ["R1"] }), []);
+  let s2 = addItem(s, { id: "D0", title: "d0", phase: "design" }, "architect", T0);
+  assert.deepEqual(
+    r.check(s2, {
+      type: "item.add",
+      by: "human",
+      payload: { item: { id: "D1", title: "d", phase: "design", traces: ["D0"] } },
+    }),
+    [],
+  );
+  const edit = (patch: Record<string, unknown>) =>
+    r.check(s2, { type: "item.edit", by: "human", payload: { id: "D0", patch } });
+  assert.deepEqual(edit({ title: "x" }), []);
+  assert.match(edit({ traces: ["ZZ"] })[0]!.message, /traces unknown item "ZZ"/);
+  assert.match(edit({ traces: ["ZZ"] })[0]!.fix, /traceable items: R1, R2, D0/);
+  s2 = { ...s2, items: { ...s2.items, R2: { ...s2.items["R2"]!, status: "dropped" } } };
+  assert.match(edit({ traces: ["R2"] })[0]!.message, /unknown item "R2"/);
+  const empty = init({ methodology: waterfall(), config: {}, now: T0 }).state;
+  assert.equal(
+    r.check(empty, {
+      type: "item.add",
+      by: "human",
+      payload: { item: { id: "D1", title: "d", phase: "design", traces: ["X"] } },
+    })[0]!.fix,
+    "traceable items: (none yet)",
+  );
+});
+
+test("trace-ids-valid: change-request reopen must be configured phases", () => {
+  const s = base();
+  const r = rules["trace-ids-valid"]!;
+  const vs = r.check(s, {
+    type: "item.add",
+    by: "human",
+    payload: {
+      item: {
+        id: "CR-1",
+        title: "c",
+        type: "change-request",
+        impactAnalysis: { summary: "s", reopen: ["nophase", "design"], weight: 1 },
+      },
+    },
+  });
+  assert.equal(vs.length, 1);
+  assert.match(vs[0]!.message, /unknown phase "nophase"/);
+  assert.match(vs[0]!.fix, /^phases are: requirements, design/);
+});
+
+test("change-needs-impact-analysis also runs at add and edit of a change-request", () => {
+  const s = base();
+  const r = rules["change-needs-impact-analysis"]!;
+  const add = (state: WorkflowState, item: Record<string, unknown>) =>
+    r.check(state, { type: "item.add", by: "human", payload: { item } });
+  const vs = add(s, { id: "CR-1", title: "c", type: "change-request" });
+  assert.equal(vs.length, 1);
+  assert.match(vs[0]!.message, /no impact analysis/);
+  assert.match(vs[0]!.fix, /summary, reopen, weight|summary: .*reopen: .*weight/);
+  assert.deepEqual(add(s, { id: "R3", title: "r" }), []);
+  assert.deepEqual(
+    add(s, {
+      id: "CR-1",
+      title: "c",
+      type: "change-request",
+      impactAnalysis: { summary: "s", reopen: ["requirements"], weight: 1 },
+    }),
+    [],
+  );
+  assert.match(
+    add(s, {
+      id: "CR-1",
+      title: "c",
+      type: "change-request",
+      impactAnalysis: { summary: "", reopen: [], weight: 1 },
+    })[0]!.message,
+    /summary is empty/,
+  );
+  const lax = init({
+    methodology: waterfall(),
+    config: { changeControl: { requiresImpactAnalysis: false } },
+    now: T0,
+  }).state;
+  assert.deepEqual(add(lax, { id: "CR-1", title: "c", type: "change-request" }), []);
+  const withCr = addItem(s, { id: "CR-2", title: "c", type: "change-request" }, "developer", T0);
+  const edit = (patch: Record<string, unknown>) =>
+    r.check(withCr, { type: "item.edit", by: "human", payload: { id: "CR-2", patch } });
+  assert.deepEqual(edit({ title: "x" }), []);
+  assert.match(
+    edit({ impactAnalysis: { summary: " ", reopen: [], weight: 1 } })[0]!.message,
+    /summary/,
+  );
+  assert.match(edit({ impactAnalysis: undefined })[0]!.message, /no impact analysis/);
+  assert.deepEqual(edit({ impactAnalysis: { summary: "s", reopen: [], weight: 0 } }), []);
 });

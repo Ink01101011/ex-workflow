@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "methodology": "scrum",
+  "config": {
+    "sprintBudget": {
+      "tokens": 100000
+    },
+    "productGoal": "ship the checkout",
+    "definitionOfDone": [
+      {
+        "kind": "evidence",
+        "evidenceKind": "test-output"
+      }
+    ],
+    "refinementSharePct": 10,
+    "allowMidSprintAdd": "po-only"
+  },
+  "items": {
+    "A1": {
+      "type": "task",
+      "acceptance": ["it works"],
+      "dependsOn": [],
+      "id": "A1",
+      "title": "first item",
+      "weight": 3,
+      "priority": 5,
+      "stage": "sprint",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": [
+        {
+          "from": {
+            "stage": "backlog",
+            "status": "todo"
+          },
+          "to": {
+            "stage": "sprint",
+            "status": "todo"
+          },
+          "at": "2026-10-23T17:52:23.331Z",
+          "by": "scrum-master"
+        }
+      ],
+      "iteration": "S1"
+    },
+    "A2": {
+      "type": "task",
+      "acceptance": ["it is documented"],
+      "dependsOn": [],
+      "id": "A2",
+      "title": "second item",
+      "priority": 1,
+      "stage": "backlog",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    }
+  },
+  "stages": [
+    {
+      "id": "backlog",
+      "name": "Product Backlog",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "acceptance-written"
+        },
+        {
+          "kind": "estimate-present"
+        }
+      ]
+    },
+    {
+      "id": "sprint",
+      "name": "Sprint Backlog",
+      "entryPolicy": [],
+      "exitPolicy": []
+    },
+    {
+      "id": "in_progress",
+      "name": "In progress",
+      "entryPolicy": [
+        {
+          "kind": "dependencies-done"
+        }
+      ],
+      "exitPolicy": []
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "evidence",
+          "evidenceKind": "test-output"
+        }
+      ],
+      "review": true
+    },
+    {
+      "id": "done",
+      "name": "Increment",
+      "entryPolicy": [],
+      "exitPolicy": []
+    }
+  ],
+  "roles": {
+    "product-owner": {
+      "id": "product-owner",
+      "name": "Product Owner",
+      "modelTier": "large",
+      "capabilities": ["order-backlog", "define-acceptance", "escalate"],
+      "canApprove": ["sprint-review"],
+      "inputs": ["stakeholder-needs", "product-goal"],
+      "outputs": ["ordered-backlog", "acceptance-criteria"],
+      "do_not": ["do not implement items yourself"]
+    },
+    "scrum-master": {
+      "id": "scrum-master",
+      "name": "Scrum Master",
+      "modelTier": "large",
+      "capabilities": ["facilitate", "escalate"],
+      "canApprove": [],
+      "inputs": ["board", "blockers"],
+      "outputs": ["ceremony-records", "lessons"],
+      "do_not": ["do not reorder the Product Backlog", "do not assign work; the planner pulls"]
+    },
+    "developer": {
+      "id": "developer",
+      "name": "Developer",
+      "modelTier": "small",
+      "capabilities": ["deliver", "review", "verify"],
+      "canApprove": [],
+      "inputs": ["brief"],
+      "outputs": ["code", "test-output"],
+      "do_not": ["do not change acceptance criteria", "do not touch items outside your brief"]
+    }
+  },
+  "iterations": [
+    {
+      "id": "S1",
+      "goal": "customers can pay",
+      "budget": {
+        "tokens": 100000
+      },
+      "spent": {
+        "tokens": 0,
+        "turns": 0,
+        "wallclockMs": 0
+      },
+      "startedAt": "2026-10-23T17:52:23.331Z",
+      "committed": ["A1"],
+      "carryover": []
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-23T17:52:23.238Z",
+      "type": "state.created",
+      "by": "system",
+      "payload": {
+        "methodology": "scrum"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-23T17:52:23.267Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A1",
+        "type": "task",
+        "stage": "backlog",
+        "weight": 3,
+        "priority": 5
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-23T17:52:23.299Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A2",
+        "type": "task",
+        "stage": "backlog",
+        "weight": null,
+        "priority": 1
+      }
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-23T17:52:23.331Z",
+      "type": "item.transition",
+      "by": "scrum-master",
+      "payload": {
+        "id": "A1",
+        "from": {
+          "stage": "backlog",
+          "status": "todo"
+        },
+        "to": {
+          "stage": "sprint",
+          "status": "todo"
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-23T17:52:23.331Z",
+      "type": "sprint.opened",
+      "by": "scrum-master",
+      "payload": {
+        "id": "S1",
+        "goal": "customers can pay",
+        "committed": ["A1"],
+        "committedWeight": 3,
+        "budget": {
+          "tokens": 100000
+        }
+      }
+    }
+  ],
+  "accounting": [],
+  "pending": [],
+  "lessons": [],
+  "agreements": []
+}

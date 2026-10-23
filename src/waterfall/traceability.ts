@@ -19,7 +19,7 @@ export interface TraceabilityMatrix {
 const byId = (a: WorkItem, b: WorkItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const artefacts = (state: WorkflowState, phase: string) =>
   timSort(
-    itemsInPhase(state, phase).filter((i) => i.type !== "question"),
+    itemsInPhase(state, phase).filter((i) => i.type !== "question" && i.type !== "change-request"),
     byId,
   );
 

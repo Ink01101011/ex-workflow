@@ -7,6 +7,7 @@ import {
   WORK,
   currentPhase,
   itemsInPhase,
+  lastToPhase,
   missingDeliverables,
   openPhase,
   phaseIndex,
@@ -18,7 +19,7 @@ import { waterfallMetrics } from "./metrics.ts";
 import { waterfallRoles } from "./roles.ts";
 import { waterfallRules } from "./rules.ts";
 import { waterfallStages } from "./stages.ts";
-import { traceabilityMatrix } from "./traceability.ts";
+import { missingTraces, traceabilityMatrix } from "./traceability.ts";
 
 export {
   validateWaterfallConfig,
@@ -89,6 +90,7 @@ export interface PhaseReportRow {
   items: number;
   done: number;
   missingDeliverables: string[];
+  missingTraces: string[];
   readyForGate: boolean;
 }
 export interface PhaseReport {
@@ -102,7 +104,11 @@ export function phaseReport(state: WorkflowState): PhaseReport {
   const phases = phasesOf(state).map((p) => {
     const items = itemsInPhase(state, p.id);
     const done = items.filter((i) => i.status === "done").length;
-    const missing = missingDeliverables(state, p);
+    const toPhase = configOf(state).traceability.to.includes(p.id);
+    const traces = toPhase ? missingTraces(state, p.id) : [];
+    // the gate generates the matrix for the last `to` phase once every trace is present
+    const extra = p.id === lastToPhase(state) && traces.length === 0 ? ["traceability-matrix"] : [];
+    const missing = missingDeliverables(state, p, extra);
     return {
       id: p.id,
       name: p.name,
@@ -110,7 +116,9 @@ export function phaseReport(state: WorkflowState): PhaseReport {
       items: items.length,
       done,
       missingDeliverables: missing,
-      readyForGate: p.status === "open" && done === items.length && missing.length === 0,
+      missingTraces: traces,
+      readyForGate:
+        p.status === "open" && done === items.length && missing.length === 0 && traces.length === 0,
     };
   });
   return {

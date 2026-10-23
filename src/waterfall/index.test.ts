@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { changeConfig, init } from "../methodology.ts";
-import { addItem, getItem } from "../items.ts";
+import { addEvidence, addItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { WorkflowError } from "../errors.ts";
 import { DEFAULT_PHASE_IDS, GATE_ID, validateWaterfallConfig } from "./config.ts";
@@ -215,6 +215,7 @@ test("phaseReport lists phases, the current and open phase, pending gates and re
     items: 2,
     done: 0,
     missingDeliverables: ["srs"],
+    missingTraces: [],
     readyForGate: false,
   });
   s = withPhases(
@@ -300,4 +301,61 @@ test("fallbackTokensPerWeight is validated and lets a small phase budget dispatc
   );
   assert.deepEqual(dispatchedWith({}), []);
   assert.deepEqual(dispatchedWith({ fallbackTokensPerWeight: 1000 }), ["R1"]);
+});
+
+/** Requirements and design baselined, verification open with every item done; R2 is traced only when `traceR2`. */
+function verificationReady(traceR2: boolean) {
+  let s = init({ methodology: waterfall(), config: { humanGates: [] }, now: T0 }).state;
+  s = addItem(s, { id: "R1", title: "r1", phase: "requirements" }, "human", T0);
+  s = addItem(s, { id: "R2", title: "r2", phase: "requirements" }, "human", T0);
+  s = addItem(s, { id: "D1", title: "d1", phase: "design", traces: ["R1", "R2"] }, "human", T0);
+  s = addItem(
+    s,
+    { id: "V1", title: "v1", phase: "verification", traces: traceR2 ? ["R1", "R2"] : ["R1"] },
+    "human",
+    T0,
+  );
+  for (const id of ["R1", "R2", "D1", "V1"])
+    s = moveItem(s, id, { stage: "done", status: "done" }, "human", T0);
+  s = addEvidence(s, "V1", { kind: "test-report", ref: "docs/tests.md", by: "qa" }, T0);
+  return withPhases(
+    s,
+    phasesOf(s).map((p) =>
+      ["requirements", "design"].includes(p.id)
+        ? { ...p, status: "baselined" }
+        : p.id === "verification"
+          ? { ...p, status: "open" }
+          : p,
+    ),
+  );
+}
+const verificationRow = (s: ReturnType<typeof verificationReady>) =>
+  phaseReport(s).phases.find((p) => p.id === "verification")!;
+const gateVerification = (s: ReturnType<typeof verificationReady>) =>
+  waterfall().ceremonies["gateReview"]!(s, {
+    by: "project-manager",
+    now: T1,
+    phase: "verification",
+  });
+
+test("phaseReport readyForGate on the last traceability phase mirrors gateReview (#26)", () => {
+  const ok = verificationReady(true);
+  const row = verificationRow(ok);
+  assert.deepEqual(row.missingDeliverables, []);
+  assert.deepEqual(row.missingTraces, []);
+  assert.equal(row.readyForGate, true);
+  assert.doesNotThrow(() => gateVerification(ok));
+
+  const gap = verificationReady(false);
+  const gapRow = verificationRow(gap);
+  assert.deepEqual(gapRow.missingTraces, ["R2"]);
+  assert.deepEqual(gapRow.missingDeliverables, ["traceability-matrix"]);
+  assert.equal(gapRow.readyForGate, false);
+  assert.throws(
+    () => gateVerification(gap),
+    (e: unknown) =>
+      e instanceof WorkflowError && /requirement-traced|no trace into/.test(e.message),
+  );
+  // a phase outside traceability.to has no missing traces
+  assert.deepEqual(phaseReport(ok).phases[2]!.missingTraces, []);
 });

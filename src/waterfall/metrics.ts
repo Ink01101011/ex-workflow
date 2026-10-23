@@ -1,5 +1,6 @@
 import type { WorkflowState } from "../types.ts";
 import { configOf } from "./config.ts";
+import { traceabilityMatrix } from "./traceability.ts";
 
 export interface WaterfallMetrics {
   phaseCompletion: Record<string, number>;
@@ -20,7 +21,7 @@ export interface WaterfallMetrics {
 
 type Added = { id: string; type: string; phase: string | null; parent: string | null };
 
-/** Phase metrics replayed from events alone (membership from item.added, spend from item.completed). */
+/** Phase metrics: membership and spend replayed from events (item.added, item.completed); requirement coverage read live from the traceability matrix. */
 export function waterfallMetrics(state: WorkflowState): WaterfallMetrics {
   const phases = configOf(state).phases.map((p) => p.id);
   const zero = () => Object.fromEntries(phases.map((p) => [p, 0])) as Record<string, number>;
@@ -32,8 +33,6 @@ export function waterfallMetrics(state: WorkflowState): WaterfallMetrics {
   const phaseOf = new Map<string, string | undefined>();
   const typeOf = new Map<string, string>();
   const status = new Map<string, string>();
-  let traced = 0;
-  let reqTotal = 0;
   let changeRequests = 0;
   let approved = 0;
   let rejected = 0;
@@ -85,12 +84,6 @@ export function waterfallMetrics(state: WorkflowState): WaterfallMetrics {
           planned[phase] = ((p["budget"] as { tokens?: number }) ?? {}).tokens ?? 0;
         break;
       }
-      case "traceability.computed": {
-        const c = p["coverage"] as { traced: number; total: number };
-        traced = c.traced;
-        reqTotal = c.total;
-        break;
-      }
       case "change.decided": {
         if (p["decision"] === "approve") {
           approved += 1;
@@ -110,6 +103,7 @@ export function waterfallMetrics(state: WorkflowState): WaterfallMetrics {
     completion[ph] = n === 0 ? 0 : ((done[ph] ?? 0) / n) * 100;
     variance[ph] = spent[ph]! - planned[ph]!;
   }
+  const { traced, total: reqTotal } = traceabilityMatrix(state).coverage;
   const decided = approved + rejected;
   return {
     phaseCompletion: completion,
