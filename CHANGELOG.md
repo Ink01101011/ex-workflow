@@ -1,8 +1,27 @@
 # Changelog
 
-## 0.4.0-stage (unreleased)
+## 0.5.0-stage (unreleased)
 
-Pre-release under the `stage` dist-tag.
+Pre-release under the `stage` dist-tag. Phase 5 closes the engine gaps the workflowAI scrum-master dogfood raised (issues #8–#21); the decisions are in the design spec, section 21.
+
+- Planner budget gates and `closing` (#16): the planner gates on `turns` and `wallclockMs` as well as `tokens`; a spent dimension skips each ready item with reason `budget` and answers `budget-exhausted`; an iteration in `closing` answers `budget-exhausted`, not `no-candidates`. `ScrumConfig.autoClose: false` keeps an exhausted sprint in `closing` until `review` or `cancel` closes it.
+- Estimate mode, fallback and CLI flag (#21): `ScrumConfig.estimateMode` (`per-weight` or `per-call`) and `ScrumConfig.fallbackTokensPerWeight`; `exwf next --fallback-tokens-per-weight n`.
+- Zero accounting and `exwf account` (#9): `complete()` refuses 0 tokens unless the handoff is declared an estimate (`exwf complete --estimate`); `correctAccounting` and `exwf account` correct one line of an item's accounting, adjust the owning sprint or phase, and record `accounting.corrected`; Scrum metrics fold corrections made after a sprint closed into its frozen `spent`.
+- `metrics.current` (#15): mid-sprint figures for the open sprint (spent, committed and done weight, cost per point, budget utilisation), all zero when no sprint is open.
+- `changeConfig` / `exwf config set` (#8): change the methodology config between iterations, re-validated and recorded as `config.changed`; keys a methodology locks (Kanban `columns` and `classesOfService`, Waterfall `phases`, `traceability` and `humanGates`) are refused.
+- `exwf unblock` (#17): clears a named blocker (`--blocker`) or every open one, with an optional `--note`.
+- Open-questions warning and `status.openQuestions` (#14): a `done` or `needs-review` completion that carries open questions warns `open-questions-ignored`; `exwf status` lists the questions still open.
+- Question brief `parent` (#19): a brief for a question item carries its parent's last completion (handoff, produced, open questions, do-not).
+- Review carryover (#10): an item carried over from the review stage re-enters at `review` on the next `plan` or `commit` and is not re-estimated.
+- `refine.reestimate` (#11): confirm a backlog item's weight without changing it; satisfies the carryover re-estimate rule.
+- `plan auto` skipped (#18): `plan auto` skips a candidate that fails the backlog exit policy or does not fit the remaining budget, keeps walking, and reports each skip in `sprint.opened`.
+- `dod-not-weakened` at retro (#20): a retro between sprints that drops a Definition of Done policy is refused unless `allowWeaken: true`; `dodChanges` replaces the whole list, `suggestedChange { kind: "dod" }` appends one.
+- Agreements replace and retire (#12): a retro lesson's agreement may `replaces` an earlier one, and `retire` lists agreements to remove, matched by exact text; Waterfall's phase retrospective shares the helper.
+- Lesson `from` and `item` (#13): a retro lesson is attributed to a role (or `human`) and may name an item; `from` defaults to the retro's `by`.
+
+Compatibility: every `.workflow/state.json` written by an earlier stage loads unchanged (every new field is optional). Behaviour changes, all deliberate: a 0-token completion now needs `--estimate`; `plan auto` no longer aborts on an incomplete candidate and keeps walking past one that does not fit; a review-stage carryover re-enters at `review`; a retro that drops a DoD policy between sprints needs `allowWeaken: true`; `next` reports `budget-exhausted` for a spent turns budget and for a sprint in `closing`.
+
+## 0.4.0-stage (2026-10-23)
 
 - Schema entry (`ex-workflow/schema`): JSON Schema (draft-07) documents generated from the TypeScript types for `WorkflowState`, `Role` (manifest), `NewItem`, `Handoff`, `ScrumConfig`, `KanbanConfig`, `WaterfallConfig`, plus a dependency-free `validate` / `assertValid` for the subset the generator emits. `pnpm schema:check` fails the build when the types and the committed schema drift.
 - Adapters: `loadState` validates `.workflow/state.json` and every `roles/*.json` manifest against the schema after the version check; a state that fails is never returned.

@@ -10,7 +10,7 @@ State is plain JSON, every operation is `(state, action) -> state`, and every er
 pnpm add ex-workflow@stage
 ```
 
-Pre-releases are published under the `stage` dist-tag (currently `0.3.0-stage`); `latest` is reserved for 0.1.0.
+Pre-releases are published under the `stage` dist-tag (currently `0.5.0-stage`); `latest` is reserved for 0.1.0.
 
 Node >= 18. Runs on macOS, Linux and Windows.
 
@@ -99,18 +99,43 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 | `init <scrum\|kanban\|waterfall> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
 | `add <item.json>` | `{ ok, warnings, item }` (checked by the methodology rules) |
 | `edit <id> <patch.json>` | `{ ok, warnings, item }` (checked by the methodology rules) |
-| `next [--max n]` | `{ ok, reason, skipped, briefs }`; writes `.workflow/briefs/<id>.json` |
-| `complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--role r]` | `{ ok, item, warnings }` |
+| `next [--max n] [--fallback-tokens-per-weight n]` | `{ ok, reason, skipped, briefs }`; writes `.workflow/briefs/<id>.json`. `--fallback-tokens-per-weight` prices a candidate when there is no accounting history (default 20000 per weight unit, or `ScrumConfig.fallbackTokensPerWeight`) |
+| `complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--role r] [--estimate]` | `{ ok, item, warnings }`. Zero tokens is refused unless `--estimate` marks the line as a placeholder; correct it later with `account` |
+| `account <item> [--line n] [--tokens-in n] [--tokens-out n] [--duration-ms n] [--model m] [--by who]` | `{ ok, line, event }`: rewrites one accounting line of an item (the last by default), adjusts the owning sprint or phase, clears the placeholder flag and records `accounting.corrected` |
 | `ceremony <name> [input.json] [--by who]` | `{ ok, warnings, lastEvent }` |
 | `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` (runs the methodology's `afterDecide`, e.g. a Waterfall phase baseline) |
-| `status` | `{ ok, methodology, openIteration, counts, pending, lastEvent, report }` (`report` is the methodology's own status: Kanban's cadences due, Waterfall's phases, pending gates and traceability coverage; `null` for Scrum) |
+| `config set <patch.json> [--by who]` | `{ ok, warnings, changed, config }`: merges a patch into the methodology config between iterations (refused while an iteration is open, and for locked keys) |
+| `unblock <item> [--blocker id] [--note text] [--by who]` | `{ ok, warnings, item }`: clears the named open blocker, or every open one |
+| `status` | `{ ok, methodology, openIteration, counts, pending, openQuestions, lastEvent, report }` (`openQuestions` lists the questions a `done` completion left open; `report` is the methodology's own status: Kanban's cadences due, Waterfall's phases, pending gates and traceability coverage; `null` for Scrum) |
 | `board` | `{ ok, columns }` |
-| `metrics` | `{ ok, metrics }` |
+| `metrics` | `{ ok, metrics }` (Scrum adds `current`, the open sprint's spent, committed and done weight, cost per point and budget utilisation; zeros when no sprint is open) |
 | `pending` / `lessons` | the arrays |
 | `validate <action.json>` | `{ ok: true, violations }` |
 | `role add <manifest.json>` / `role list` | `{ ok, roles }` |
 
 `--by` defaults to `human`.
+
+### Scrum configuration
+
+`init scrum --config <file>` takes a `ScrumConfig`. Three keys were added in 0.5.0-stage, all optional:
+
+- `autoClose` (default `true`): close the sprint automatically when its budget is spent and nothing is in flight. `false` leaves an exhausted sprint in `closing` until `ceremony review` or `ceremony cancel` closes it, so the human gate is never skipped.
+- `estimateMode` (`"per-weight"` by default, or `"per-call"`): how the planner and `plan auto` price a candidate. `per-weight` uses the median tokens per weight unit from history. `per-call` uses the median tokens per completion regardless of weight, which fits a host that bills one all-inclusive total per worker call.
+- `fallbackTokensPerWeight` (default 20000): tokens per weight unit when there is no history.
+
+The planner gates on every budget dimension. `sprintBudget.turns` counts one per completion, so a host with a calls budget sets `turns` and `estimateMode: "per-call"` rather than a `calls` key.
+
+### Scrum retrospective
+
+`ceremony retro <input.json>` runs between sprints. Its input:
+
+- `lessons[]`: `{ text, scope, from?, item?, suggestedChange? }`. `from` is `"human"` or a role id (default: the `--by` who); `item` must name an existing item.
+- `adopt[]` / `dismiss[]`: raised lessons, by id, each once.
+- `retire: string[]`: agreement texts to remove, matched by exact text (never by index). An agreement that is not current fails `invalid-input` and lists the current ones.
+- `suggestedChange` (on a lesson or an adopt entry): `{ kind: "agreement", text, replaces? }` adds a working agreement, and `replaces` retires the earlier agreement with that exact text; `{ kind: "dod", policy }` appends one Definition of Done policy; `{ kind: "backlog", item }` queues work; `{ kind: "skill", note }` is for the host.
+- `dodChanges: Policy[]` replaces the whole Definition of Done. Dropping a current policy is refused by `dod-not-weakened` unless the retro input also sets `allowWeaken: true`.
+
+`ceremony refine` takes `reestimate: string[]`: confirm the weight of backlog items (each gets `item.reestimated`) without changing them. An item carried over from `review` re-enters at review and is not re-estimated.
 
 ### Concurrency
 
@@ -142,20 +167,23 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Status
 
-0.4.0-stage adds `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+0.5.0-stage closes the engine gaps from the workflowAI dogfood (Scrum budget gates, configuration between iterations, accounting corrections, agreements that can be replaced or retired, question briefs with their parent); see [CHANGELOG.md](CHANGELOG.md). 0.4.0-stage added `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
 
 ## Known backlog
 
-Minor items deferred past 0.3.0-stage:
+Minor items deferred past 0.5.0-stage:
 
 - Stale-lock takeover can race when a lock is older than 60 s.
+- `complete()` does not run through `applyAction`, so the core `conflict-of-interest` rule never sees a completion.
+- Blockers are not auto-cleared when a follow-up completes; `exwf unblock` clears them by hand.
+- A sprint left in `closing` with `autoClose: false` is not flagged in `exwf status`; run `ceremony review` to close it.
 - `decide(approve)` ignores a `needs-review` verdict.
 - `setDod` hard-codes the `review` stage id in the Scrum methodology.
 - The `closing` sprint state is not enforced on commit, plan or uncommit.
 - State is written before briefs; a crash between the two leaves them out of step.
 - `roles/*.json` are re-merged on every load.
 - Evidence can go stale across a rework cycle.
-- The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget ratchets down from 45238 B (spec target 40960 B).
+- The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget is 57126 B after Phase 5 (spec target 40960 B).
 - Kanban WIP limits bound active cards (`in_progress`, `blocked`, `awaiting_human`); cards the engine advanced into a column's queue are reported as `queued` and surfaced by operations-review, not refused.
 - Kanban `wipBypass` is the total number of extra slots a column grants while any expedite is active, not one per expedite.
 - Kanban cadences use `item.completed` counts as turns; a wall-clock cadence schedule is the host's job.
