@@ -1,6 +1,6 @@
 {
   "name": "ex-workflow",
-  "version": "0.3.0-stage",
+  "version": "0.4.0-stage",
   "description": "Methodology engine for AI teams: Scrum, Kanban and Waterfall as data-driven state machines on top of ex-flow",
   "license": "MIT",
   "type": "module",
@@ -91,6 +91,16 @@
         "default": "./dist/cli/index.cjs"
       }
     },
+    "./schema": {
+      "import": {
+        "types": "./dist/schema/index.d.ts",
+        "default": "./dist/schema/index.mjs"
+      },
+      "require": {
+        "types": "./dist/schema/index.d.cts",
+        "default": "./dist/schema/index.cjs"
+      }
+    },
     "./types": {
       "import": {
         "types": "./dist/types.d.ts",
@@ -112,6 +122,9 @@
       ],
       "waterfall": [
         "dist/waterfall/index.d.ts"
+      ],
+      "schema": [
+        "dist/schema/index.d.ts"
       ],
       "adapters": [
         "dist/adapters/index.d.ts"
@@ -140,7 +153,9 @@
     "typecheck": "tsc --noEmit",
     "size": "node scripts/size.mjs",
     "check:dist": "node scripts/check-dist.mjs && node scripts/check-exports.mjs",
-    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm minify && pnpm check:dist && pnpm size",
+    "schema:gen": "node scripts/gen-schema.mjs",
+    "schema:check": "node scripts/gen-schema.mjs --check",
+    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm schema:check && pnpm test && pnpm minify && pnpm check:dist && pnpm size",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "pnpm run ci",
     "prepare": "husky"
@@ -154,6 +169,7 @@
     "husky": "^9.1.7",
     "oxfmt": "^0.45.0",
     "oxlint": "^1.19.0",
+    "ts-json-schema-generator": "^2.9.0",
     "tsup": "^8.5.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"

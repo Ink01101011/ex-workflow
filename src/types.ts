@@ -75,6 +75,11 @@ export interface WorkItem {
   impactAnalysis?: ImpactAnalysis;
 }
 
+/** Fields `editItem` / `exwf edit` may change. */
+export type ItemPatch = Partial<
+  Omit<WorkItem, "id" | "stage" | "status" | "transitions" | "evidence" | "blockers">
+>;
+
 /** Fields a caller supplies to addItem; the rest are defaulted. */
 export type NewItem = Pick<WorkItem, "id" | "title"> &
   Partial<
@@ -117,11 +122,16 @@ export interface Budget {
   turns?: number;
   wallclockMs?: number;
 }
+export interface Spent {
+  tokens: number;
+  turns: number;
+  wallclockMs: number;
+}
 export interface Iteration {
   id: string;
   goal: string;
   budget: Budget;
-  spent: Required<Budget>;
+  spent: Spent;
   startedAt: string;
   endedAt?: string;
   committed: string[];

@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, stat, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createState } from "../state.ts";
 import { WorkflowError } from "../errors.ts";
 import { loadState, saveBrief, saveHandoff, saveState, statePath, withStateLock } from "./file.ts";
-import type { Role } from "../types.ts";
+import type { Role, WorkflowState } from "../types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const dev: Role = {
@@ -90,8 +90,24 @@ test("loadState rejects non-object state and malformed role manifests with inval
   await writeFile(path.join(root, ".workflow", "roles", "bad.json"), "{}");
   await assert.rejects(
     loadState(root),
-    (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "invalid-input" &&
+      /\/id missing required property/.test(e.message),
   );
+});
+
+test("saveState refuses a state that fails the schema and writes nothing", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const bad = { ...fresh(), items: { X: { id: "X" } } } as unknown as WorkflowState;
+  await assert.rejects(
+    saveState(root, bad),
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "invalid-input" &&
+      /state\.json does not match its schema: \/items\/X\/type/.test(e.message),
+  );
+  await assert.rejects(stat(statePath(root)));
 });
 
 test("saveBrief and saveHandoff write under .workflow", async () => {
@@ -167,4 +183,41 @@ test("saveBrief and saveHandoff refuse ids that escape .workflow", async () => {
     saveHandoff(root, { item: "../../evil" } as unknown as Parameters<typeof saveHandoff>[1], 1),
     invalid,
   );
+});
+
+test("loadState refuses a state that fails the schema, naming the file and the path", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const bad = { ...fresh(), items: { X: { id: "X" } } };
+  await mkdir(path.join(root, ".workflow"), { recursive: true });
+  await writeFile(statePath(root), JSON.stringify(bad));
+  await assert.rejects(loadState(root), (e: unknown) => {
+    assert.ok(e instanceof WorkflowError);
+    assert.equal(e.code, "invalid-input");
+    assert.match(
+      e.message,
+      /state\.json does not match its schema: \/items\/X\/type missing required property "type"/,
+    );
+    assert.match(e.fix, /\/items\/X\/type/);
+    return true;
+  });
+});
+
+test("loadState refuses a role manifest that fails the schema and does not merge the rest", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveState(root, fresh());
+  const dir = path.join(root, ".workflow", "roles");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    path.join(dir, "qa.json"),
+    JSON.stringify({ ...dev, id: "qa", modelTier: "huge" }),
+  );
+  await assert.rejects(loadState(root), (e: unknown) => {
+    assert.ok(e instanceof WorkflowError);
+    assert.equal(e.code, "invalid-input");
+    assert.match(
+      e.message,
+      /role manifest .*qa\.json does not match its schema: \/modelTier expected one of/,
+    );
+    return true;
+  });
 });

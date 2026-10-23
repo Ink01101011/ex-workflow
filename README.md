@@ -116,6 +116,19 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 
 One writer at a time per `.workflow/`: `exwf` serialises writers with `.workflow/state.lock` (created exclusively, retried for about two seconds, taken over when older than 60 s). If a crashed process left the lock behind and a command reports that another `exwf` holds it, delete the file. Read-only commands do not lock. Use `withStateLock` from `ex-workflow/adapters` when you write state yourself.
 
+### Schema
+
+`ex-workflow/schema` exports JSON Schema (draft-07) documents generated from the TypeScript types — `workflowStateSchema`, `roleSchema`, `newItemSchema`, `itemPatchSchema`, `handoffSchema`, `scrumConfigSchema`, `kanbanConfigSchema`, `waterfallConfigSchema` — and a small validator with no runtime dependencies:
+
+```ts
+import { assertValid, validate, workflowStateSchema } from "ex-workflow/schema";
+
+const errors = validate(workflowStateSchema, JSON.parse(raw)); // SchemaError[] with JSON-pointer paths
+assertValid(workflowStateSchema, JSON.parse(raw), ".workflow/state.json"); // throws WorkflowError("invalid-input")
+```
+
+`exwf` validates `state.json`, role manifests, item files, `exwf edit` patches, `--roles` files and handoff files with these schemas before acting on them, and `saveState` validates a state before writing it, so the CLI cannot write a file the loader would refuse. The documents are standard JSON Schema, so editors and ajv read them too. They are regenerated with `pnpm schema:gen`; `pnpm schema:check` (in `ci` and the pre-commit hook) fails when they drift from the types.
+
 ## Layers
 
 ```
@@ -129,7 +142,7 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Status
 
-0.3.0-stage adds the Waterfall module; all three methodologies ship. `ex-workflow/schema` is still pending. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+0.4.0-stage adds `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
 
 ## Known backlog
 
@@ -155,11 +168,11 @@ Minor items deferred past 0.3.0-stage:
 ## Development gate
 
 There is no hosted CI. A husky pre-commit hook runs the local gate on every commit
-(`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`); `pnpm run ci` adds the
+(`pnpm format:check && pnpm lint && pnpm typecheck && pnpm schema:check && pnpm test`); `pnpm run ci` adds the
 minified build, the dist identity check and the size ratchet, and `prepublishOnly` runs it
 before any publish. oxfmt and oxlint need Node ^20.19 or >=22.12 on the developer machine; the
 package itself supports Node >=18 (verified on ubuntu, macOS and Windows x Node 18/20/22
-before the hosted workflow was removed).
+before the hosted workflow was removed). Schema drift is guarded by `pnpm schema:check` alone, not by a test, because the generator needs Node >=22 and the test suite must run on >=18.
 
 ## Publishing
 

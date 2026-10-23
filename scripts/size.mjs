@@ -8,6 +8,7 @@ for (const [name, entry] of [
   ["measure", "scripts/measure-entry.ts"],
   ["measure-kanban", "scripts/measure-kanban-entry.ts"],
   ["measure-waterfall", "scripts/measure-waterfall-entry.ts"],
+  ["measure-schema", "scripts/measure-schema-entry.ts"],
 ]) {
   await build({
     entry: { [name]: entry },
@@ -35,10 +36,12 @@ const measured = {
   "core+kanban": statSync(".size-measure/measure-kanban.mjs").size,
   "dist/waterfall/index.mjs": statSync("dist/waterfall/index.mjs").size,
   "core+waterfall": statSync(".size-measure/measure-waterfall.mjs").size,
+  "dist/schema/index.mjs": statSync("dist/schema/index.mjs").size,
+  schema: statSync(".size-measure/measure-schema.mjs").size,
 };
 const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
 const NOTE =
-  "budgets set at measured size (owner decision, 2026-10-19 for core+scrum, Phase 2 for core+kanban); spec target was 40960 per methodology; ratchets down only; core+scrum raised 45244 -> 45668, dist/index.mjs 1031 -> 1092, dist/scrum/index.mjs 369 -> 404 on 2026-10-22 for the Phase 2 planner hooks and the blocker.raised/blocker.cleared transition payloads (+424 B core+scrum, measured: +330 B hooks at ac350c4, +94 B payloads at e04cb76); core+scrum 45668 -> 46190 and core+kanban 55726 -> 56956 on 2026-10-22 for plan() skipped-reason reporting (+522 B core) and class-band ordering with aging promotion (+706 B kanban), measured; core+scrum 46190 -> 46213 and core+kanban 56956 -> 57199 for the question entry-policy exemption and index-based deferral counting, measured; core+scrum 46213 -> 46552 and core+kanban 57199 -> 57538 on 2026-10-23 for the Phase 3 core additions (phase fields, planner roleFor, afterDecide hook, item.added phase/parent payload; +339 B core, measured); core+waterfall 57943 and dist/waterfall/index.mjs 934 seeded at measured size (Phase 3); core+waterfall 57943 -> 58264 on 2026-10-23 for the human-only decider check in waterfallAfterDecide (+321 B, measured)";
+  "budgets set at measured size (owner decision, 2026-10-19 for core+scrum, Phase 2 for core+kanban); spec target was 40960 per methodology; ratchets down only; core+scrum raised 45244 -> 45668, dist/index.mjs 1031 -> 1092, dist/scrum/index.mjs 369 -> 404 on 2026-10-22 for the Phase 2 planner hooks and the blocker.raised/blocker.cleared transition payloads (+424 B core+scrum, measured: +330 B hooks at ac350c4, +94 B payloads at e04cb76); core+scrum 45668 -> 46190 and core+kanban 55726 -> 56956 on 2026-10-22 for plan() skipped-reason reporting (+522 B core) and class-band ordering with aging promotion (+706 B kanban), measured; core+scrum 46190 -> 46213 and core+kanban 56956 -> 57199 for the question entry-policy exemption and index-based deferral counting, measured; core+scrum 46213 -> 46552 and core+kanban 57199 -> 57538 on 2026-10-23 for the Phase 3 core additions (phase fields, planner roleFor, afterDecide hook, item.added phase/parent payload; +339 B core, measured); core+waterfall 57943 and dist/waterfall/index.mjs 934 seeded at measured size (Phase 3); core+waterfall 57943 -> 58264 on 2026-10-23 for the human-only decider check in waterfallAfterDecide (+321 B, measured); dist/schema/index.mjs and schema seeded at measured size on 2026-10-23 (Phase 4)";
 const budgets = {};
 for (const k of Object.keys(measured)) {
   budgets[k] = current[k] ?? (k.startsWith("core+") ? TARGET : measured[k]);

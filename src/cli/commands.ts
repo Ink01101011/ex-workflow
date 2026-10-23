@@ -16,6 +16,13 @@ import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
 import { applyAction, init, validateAction } from "../methodology.ts";
 import { openIteration } from "../planner.ts";
 import { registerRole } from "../roles.ts";
+import {
+  assertValid,
+  handoffSchema,
+  itemPatchSchema,
+  newItemSchema,
+  roleSchema,
+} from "../schema/index.ts";
 import { lastEvent } from "../state.ts";
 import { scrum } from "../scrum/index.ts";
 import { kanban } from "../kanban/index.ts";
@@ -148,6 +155,15 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const roles = flags["roles"]
         ? await readJson<Role[]>(path.resolve(cwd, flags["roles"]))
         : undefined;
+      if (roles !== undefined) {
+        if (!Array.isArray(roles))
+          fail(
+            "invalid-input",
+            `roles file ${flags["roles"]} must contain an array of role manifests`,
+            "wrap the manifests in [ ... ]",
+          );
+        for (const r of roles) assertValid(roleSchema, r, `roles file ${flags["roles"]}`);
+      }
       const res = init(
         roles
           ? { methodology: f(), config, roles, by, now }
@@ -171,6 +187,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const item = await readJson<NewItem>(path.resolve(cwd, rest[0]));
+      assertValid(newItemSchema, item, `item file ${rest[0]}`);
       const res = applyAction(
         state,
         methodologyOf(state),
@@ -188,6 +205,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const state = await loadState(cwd);
       const id = rest[0];
       const patch = await readJson<ItemPatch>(path.resolve(cwd, rest[1]));
+      assertValid(itemPatchSchema, patch, `patch file ${rest[1]}`);
       const res = applyAction(
         state,
         methodologyOf(state),
@@ -212,6 +230,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (!rest[0] || !rest[1]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const handoff = await readJson<Handoff>(path.resolve(cwd, rest[1]));
+      assertValid(handoffSchema, handoff, `handoff file ${rest[1]}`);
       if (handoff.item !== rest[0])
         fail(
           "handoff-invalid",
@@ -346,7 +365,9 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
           out: { ok: true, roles: Object.keys(state.roles), detail: state.roles },
         };
       if (rest[0] === "add" && rest[1]) {
-        const s2 = registerRole(state, await readJson<Role>(path.resolve(cwd, rest[1])), by, now);
+        const manifest = await readJson<Role>(path.resolve(cwd, rest[1]));
+        assertValid(roleSchema, manifest, `role manifest ${rest[1]}`);
+        const s2 = registerRole(state, manifest, by, now);
         await saveState(cwd, s2);
         return { exit: 0, out: { ok: true, roles: Object.keys(s2.roles) } };
       }

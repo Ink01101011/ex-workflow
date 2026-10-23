@@ -1,4 +1,5 @@
 import { assertId, fail } from "./errors.ts";
+import type { ItemPatch } from "./types.ts";
 
 export { assertId };
 import { appendEvent, nowOf } from "./state.ts";
@@ -144,9 +145,7 @@ export function addItem(
   );
 }
 
-export type ItemPatch = Partial<
-  Omit<WorkItem, "id" | "stage" | "status" | "transitions" | "evidence" | "blockers">
->;
+export type { ItemPatch } from "./types.ts";
 
 export function editItem(
   state: WorkflowState,
