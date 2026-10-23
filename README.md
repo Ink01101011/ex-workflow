@@ -183,7 +183,7 @@ Minor items deferred past 0.5.0-stage:
 - State is written before briefs; a crash between the two leaves them out of step.
 - `roles/*.json` are re-merged on every load.
 - Evidence can go stale across a rework cycle.
-- The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget is 57126 B after Phase 5 (spec target 40960 B).
+- The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget is 57417 B after the Phase 5 fix wave (spec target 40960 B).
 - Kanban WIP limits bound active cards (`in_progress`, `blocked`, `awaiting_human`); cards the engine advanced into a column's queue are reported as `queued` and surfaced by operations-review, not refused.
 - Kanban `wipBypass` is the total number of extra slots a column grants while any expedite is active, not one per expedite.
 - Kanban cadences use `item.completed` counts as turns; a wall-clock cadence schedule is the host's job.
