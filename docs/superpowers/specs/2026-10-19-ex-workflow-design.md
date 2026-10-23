@@ -858,3 +858,36 @@ Decisions for GitHub issues #8–#21 (label `engine-gap`), raised by the workflo
 | Size | Core and Scrum grow; budgets are set at measured size per the owner's standing decision and the deltas are recorded in `size-budget.json`'s note. Kanban and Waterfall move only by the shared core delta plus their `lockedConfigKeys`. |
 | Version | 0.5.0-stage. |
 | Out of Phase 5 | `complete()` does not run through `applyAction`, so the core `conflict-of-interest` rule never sees a completion (probe finding; recorded in the README backlog); auto-clearing blockers from follow-ups; `exwf validate` for ceremony inputs; retro-created lessons emit no `lesson.raised`. |
+
+## 22. Phase 6 implementation addenda (backlog zero)
+
+The 1.0 definition (owner, 2026-10-23) requires every README "Known backlog" item to be fixed or explicitly accepted as a documented limitation. Phase 6 does that for the 24 items listed at 7deccf0 (numbered B01–B24 in README order), after a read-only probe verified each against the code. Version 0.6.0-stage. No schema change and no new event kind; `.workflow/state.json` files from every stage release load unchanged.
+
+| # | Item | Decision |
+|---|---|---|
+| B01 | Stale-lock takeover race (> 60 s) | SPLIT: re-stat the lock (inode + mtime) immediately before `unlink` and abort the takeover if it changed; the residual race between stat and unlink is accepted and documented. |
+| B02 | `complete()` bypasses `applyAction` | SPLIT: `conflict-of-interest` is already enforced by `checkGate` (error `gate-unmet`, unchanged). `complete()` now also runs the methodology's rules through `applyAction` with action type `item.complete` after validation, so rule hooks see completions. The `ErrorCode` member `"conflict-of-interest"` stays declared, documented as reserved (never thrown); removing it would narrow a public type. |
+| B03 | Blockers not auto-cleared by follow-ups | ACCEPT: a blocker is owned by a human; clearing it needs a link from the follow-up to the blocker that the schema does not carry. `exwf unblock` is the path. |
+| B04 | `closing` with `autoClose: false` not flagged | FIX: Scrum gains `report(state)` → `{ closing: boolean, sprint, reason, inFlight: string[] }` (`null` fields when no sprint); `exwf status.report` is no longer `null` for Scrum. |
+| B05 | `decide(approve)` ignores `needs-review` | FIX: the gate approval derives the verdict from the item's last `item.completed` event and advances to the review stage for `needs-review`. |
+| B06 | `setDod` hard-codes the `review` stage id | SPLIT: Scrum owns the stage ids `backlog`, `sprint`, `review` (about twenty uses); accepted and documented. An init-time check refuses a Scrum config whose stages lack any of them (`config-invalid`). |
+| B07 | `closing` not enforced on commit/uncommit | SPLIT: rule `sprint-closing` refuses `ceremony.commit` into a closing sprint; `uncommit` during closing stays allowed (it only shrinks the sprint). |
+| B08 | State written before briefs | FIX: the CLI writes briefs and handoff files first, then state. |
+| B09 | `roles/*.json` re-merged on every load | ACCEPT: state wins on an id conflict and `exwf role add` is the audited path; re-merging is idempotent. |
+| B10 | Evidence can go stale across rework | FIX (own commit, reversible): policies and gates count only evidence recorded at or after the item's last `item.rework` event. Semantic change, flagged to the owner. |
+| B11 | Scrum stub size row | ACCEPT: budgets are set at measured size by the owner's standing decision; the row stays as a tripwire. |
+| B12 | Kanban WIP bounds active cards; queued reported | ACCEPT: the engine must not refuse a card it advanced itself; operations-review surfaces queues. |
+| B13 | Kanban `wipBypass` is a column total | ACCEPT: renaming or re-scoping the key after 1.0 breaks configs; documented. |
+| B14 | Kanban cadences count turns | ACCEPT: the key is `everyTurns`; the engine has no clock; wall-clock schedules are the host's. |
+| B15 | Minor test gaps | FIX: `writeAtomic` failure path, `decide` reject and unknown-pending cases, a usage exit-2 test per command. The retro duplicate-ref test already exists. |
+| B16 | Waterfall traceability keyed by phase ids | ACCEPT: already recorded in §19; §10's `traceability` type line is corrected to phase ids. |
+| B17 | Waterfall `editItem`/`addItem` bypass `baseline-immutable` when called directly | ACCEPT: the low-level primitives bypass rules in every methodology by design; `applyAction` and the CLI enforce them. |
+| B18 | Phase budgets reuse `Iteration`; fallback needs `next()` option | SPLIT: `openIteration` naming accepted; `WaterfallConfig.fallbackTokensPerWeight` (optional) feeds the planner like Scrum's. `state.config` is `unknown` in the schema, so no regeneration. |
+| B19 | Phase retrospective applies agreements only | ACCEPT: baselines and config are locked in Waterfall; `dod`/`backlog` changes are stored for the host. |
+| B20 | `plan auto` honours turns only without tokens | FIX: `selectAuto` applies both limits. |
+| B21 | Waterfall lessons lack `from`/`item` | FIX: per-lesson `from` and `item` honoured as in Scrum (default `from` = the retro's `by`). |
+| B22 | Carryover at `awaiting_human`/`blocked` in review restarts | FIX: `resumeStageOf` resumes at review for any status in a stage whose `review` flag is set; signature unchanged. |
+| B23 | `correctAccounting` with `endedAt` outside any sprint | ACCEPT: a line outside every sprint window has no sprint to charge. |
+| B24 | Valueless flags parse as `"true"` | FIX: a value-taking flag given without a value is `invalid-input` naming the flag; `--estimate` is the only boolean flag. |
+
+Out of Phase 6: a compatibility test loading `state.json` from every stage release, the API freeze and the 1.0 release itself (own job once the owner says the definition is met).
