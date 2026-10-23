@@ -12,7 +12,7 @@ import {
   type ItemPatch,
 } from "../items.ts";
 import { applyAction } from "../methodology.ts";
-import { assertPolicies } from "../policies.ts";
+import { assertPolicies, evaluatePolicies } from "../policies.ts";
 import { openIteration } from "../planner.ts";
 import { approverIds, canDo, requireCap } from "../roles.ts";
 export { canDo };
@@ -31,7 +31,7 @@ import type {
   WorkItem,
   WorkflowState,
 } from "../types.ts";
-import { closeSprint, configOf } from "./index.ts";
+import { closeSprint, configOf, resumeStageOf } from "./index.ts";
 
 const STATUSES: ItemStatus[] = [
   "todo",
@@ -180,19 +180,46 @@ export function setDod(state: WorkflowState, policies: Policy[]): WorkflowState 
   };
 }
 
-function selectAuto(state: WorkflowState, budget: Budget): string[] {
+interface Skipped {
+  id: string;
+  reason: "policy" | "budget";
+  detail: string;
+}
+
+function selectAuto(state: WorkflowState, budget: Budget): { ids: string[]; skipped: Skipped[] } {
   const cfg = configOf(state);
-  const out: string[] = [];
+  const ids: string[] = [];
+  const skipped: Skipped[] = [];
+  const exit = stageOf(state, "backlog").exitPolicy;
   let tokens = 0;
   for (const item of backlogOrdered(state)) {
+    const unmet = evaluatePolicies(state, item, exit);
+    if (unmet.length > 0) {
+      skipped.push({
+        id: item.id,
+        reason: "policy",
+        detail: unmet.map((u) => u.message).join("; "),
+      });
+      continue;
+    }
     if (budget.tokens !== undefined) {
       const est = estimateTokens(state, item.weight, cfg.fallbackTokensPerWeight, cfg.estimateMode);
-      if (tokens + est > budget.tokens) break;
+      if (tokens + est > budget.tokens) {
+        skipped.push({
+          id: item.id,
+          reason: "budget",
+          detail: `needs about ${est} tokens, ${budget.tokens - tokens} left`,
+        });
+        continue;
+      }
       tokens += est;
-    } else if (budget.turns !== undefined && out.length >= budget.turns) break;
-    out.push(item.id);
+    } else if (budget.turns !== undefined && ids.length >= budget.turns) {
+      skipped.push({ id: item.id, reason: "budget", detail: "turns budget full" });
+      continue;
+    }
+    ids.push(item.id);
   }
-  return out;
+  return { ids, skipped };
 }
 
 export function scrumCeremonies(methodology: () => Methodology): Record<string, Ceremony> {
@@ -210,10 +237,33 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     requireCap(state, input.by, "define-acceptance", "deliver");
     const items = (input["items"] ?? []) as Array<{ id: string; patch: ItemPatch }>;
     const split = (input["split"] ?? []) as Array<{ from: string; into: NewItem[] }>;
-    if (items.length === 0 && split.length === 0)
-      fail("invalid-input", "refine needs items[] or split[]", "pass at least one patch or split");
+    const reestimate = (input["reestimate"] ?? []) as string[];
+    if (items.length === 0 && split.length === 0 && reestimate.length === 0)
+      fail(
+        "invalid-input",
+        "refine needs items[], split[] or reestimate[]",
+        "pass at least one patch, split or reestimate",
+      );
+    for (const id of reestimate) {
+      const it = getItem(state, id);
+      if (it.stage !== "backlog" || it.status !== "todo" || it.weight === undefined)
+        fail(
+          "invalid-input",
+          `item "${id}" has no weight to confirm in the Product Backlog`,
+          "refine it with a patch { weight } instead",
+          { items: [id] },
+        );
+    }
     return act(state, "ceremony.refine", input, (s, now) => {
       for (const { id, patch } of items) s = editItem(s, id, patch, input.by, now);
+      for (const id of reestimate)
+        s = appendEvent(
+          s,
+          "item.reestimated",
+          input.by,
+          { id, weight: getItem(s, id).weight },
+          now,
+        );
       for (const sp of split) {
         getItem(s, sp.from);
         for (const n of sp.into) s = addItem(s, { ...n, parent: sp.from }, input.by, now);
@@ -226,6 +276,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         {
           edited: items.map((i) => i.id),
           split: split.map((x) => ({ from: x.from, into: x.into.map((n) => n.id) })),
+          reestimated: reestimate,
         },
         now,
       );
@@ -243,10 +294,9 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       );
     const cfg = configOf(state);
     const budget = (input["budget"] as Budget | undefined) ?? cfg.sprintBudget;
-    const wanted =
-      input["items"] === "auto"
-        ? selectAuto(state, budget)
-        : (input["items"] as string[] | undefined);
+    const auto = input["items"] === "auto" ? selectAuto(state, budget) : undefined;
+    const skipped = auto?.skipped ?? [];
+    const wanted = auto ? auto.ids : (input["items"] as string[] | undefined);
     if (!Array.isArray(wanted))
       fail(
         "invalid-input",
@@ -264,8 +314,17 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       const id = `S${s.iterations.length + 1}`;
       const last = lastClosedIteration(s);
       const carryover = wanted.filter((w) => last?.carryover.includes(w));
+      const resumed: string[] = [];
       for (const w of wanted) {
-        s = moveItem(s, w, { stage: "sprint", status: "todo" }, input.by, now);
+        const rs = resumeStageOf(getItem(s, w));
+        if (rs) resumed.push(w);
+        s = moveItem(
+          s,
+          w,
+          rs ? { stage: rs, status: "review" } : { stage: "sprint", status: "todo" },
+          input.by,
+          now,
+        );
         s = patchItem(s, w, (it) => ({ ...it, iteration: id }));
       }
       s = attachQuestions(s, wanted, id, input.by, now);
@@ -289,7 +348,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         s,
         "sprint.opened",
         input.by,
-        { id, goal, committed: wanted, committedWeight, budget },
+        { id, goal, committed: wanted, committedWeight, budget, skipped, resumed },
         now,
       );
     });
@@ -316,8 +375,17 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       assertCommittable(state, id);
     }
     return act(state, "ceremony.commit", input, (s, now) => {
+      const resumed: string[] = [];
       for (const id of items) {
-        s = moveItem(s, id, { stage: "sprint", status: "todo" }, input.by, now);
+        const rs = resumeStageOf(getItem(s, id));
+        if (rs) resumed.push(id);
+        s = moveItem(
+          s,
+          id,
+          rs ? { stage: rs, status: "review" } : { stage: "sprint", status: "todo" },
+          input.by,
+          now,
+        );
         s = patchItem(s, id, (x) => ({ ...x, iteration: it.id }));
       }
       s = attachQuestions(s, items, it.id, input.by, now);
@@ -331,7 +399,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         s,
         "sprint.committed",
         input.by,
-        { id: it.id, items, goalImpact: input["goalImpact"] ?? null },
+        { id: it.id, items, goalImpact: input["goalImpact"] ?? null, resumed },
         now,
       );
     });

@@ -31,6 +31,18 @@ export function configOf(state: WorkflowState): ScrumConfig {
   return state.config as ScrumConfig;
 }
 
+/** The stage a carried-over item was returned from when it was in review: it resumes there, not at the sprint start. */
+export function resumeStageOf(item: WorkItem): string | undefined {
+  const t = item.transitions.at(-1);
+  return t &&
+    t.by === "system" &&
+    t.to.stage === "backlog" &&
+    t.to.status === "todo" &&
+    t.from.status === "review"
+    ? t.from.stage
+    : undefined;
+}
+
 /** Send an item back to the backlog: clear its open blockers and pending decisions, strip iteration and role. */
 function toBacklog(state: WorkflowState, id: string, now: string): WorkflowState {
   let s = state;

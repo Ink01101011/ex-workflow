@@ -217,6 +217,51 @@ test("dod-not-weakened", () => {
   );
 });
 
+const withDod = (state: WorkflowState): WorkflowState => ({
+  ...state,
+  config: {
+    ...(state.config as object),
+    definitionOfDone: [{ kind: "evidence", evidenceKind: "test-output" }],
+  },
+});
+const retroAction = (payload: Record<string, unknown>): Action => ({
+  type: "ceremony.retro",
+  by: "scrum-master",
+  payload,
+});
+
+test("dod-not-weakened between sprints", () => {
+  let s = m.ceremonies["plan"]!(withBacklog(), {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A"],
+  }).state;
+  s = withDod(m.ceremonies["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state);
+  const vs = scrumRules().flatMap((r) =>
+    r.check(s, retroAction({ dodChanges: [{ kind: "acceptance-written" }] })),
+  );
+  assert.equal(vs.length, 1);
+  assert.match(vs[0]!.message, /evidence test-output/);
+  assert.match(vs[0]!.fix, /allowWeaken/);
+  assert.deepEqual(
+    run(s, retroAction({ dodChanges: [{ kind: "acceptance-written" }], allowWeaken: true })),
+    [],
+  );
+  assert.deepEqual(
+    run(
+      s,
+      retroAction({
+        dodChanges: [
+          { kind: "evidence", evidenceKind: "test-output" },
+          { kind: "acceptance-written" },
+        ],
+      }),
+    ),
+    [],
+  );
+});
+
 test("carryover-reestimated", () => {
   let s = m.ceremonies["plan"]!(withBacklog(), {
     by: "scrum-master",

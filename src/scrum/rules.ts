@@ -1,8 +1,8 @@
 import { openIteration } from "../planner.ts";
-import type { Budget, Iteration, Rule, Violation, WorkflowState } from "../types.ts";
+import type { Budget, Iteration, Policy, Rule, Violation, WorkflowState } from "../types.ts";
 import type { ItemPatch } from "../items.ts";
 import { canDo, closedSeq } from "./ceremonies.ts";
-import { configOf } from "./index.ts";
+import { configOf, resumeStageOf } from "./index.ts";
 
 const v = (
   rule: string,
@@ -138,19 +138,37 @@ export function scrumRules(): Rule[] {
   const dod: Rule = {
     id: "dod-not-weakened",
     severity: "error",
-    check: (s, a) =>
-      a.type === "ceremony.retro" &&
-      (a.payload as { dodChanges?: unknown } | undefined)?.dodChanges !== undefined &&
-      openIteration(s)
-        ? [
-            v(
-              "dod-not-weakened",
-              "error",
-              "Definition of Done cannot change while a sprint is open",
-              "close the sprint first; DoD changes apply to the next sprint",
-            ),
-          ]
-        : [],
+    check: (s, a) => {
+      if (a.type !== "ceremony.retro") return [];
+      const p = (a.payload ?? {}) as { dodChanges?: unknown; allowWeaken?: boolean };
+      if (p.dodChanges === undefined) return [];
+      if (openIteration(s))
+        return [
+          v(
+            "dod-not-weakened",
+            "error",
+            "Definition of Done cannot change while a sprint is open",
+            "close the sprint first; DoD changes apply to the next sprint",
+          ),
+        ];
+      if (!Array.isArray(p.dodChanges) || p.allowWeaken === true) return [];
+      const next = p.dodChanges as Policy[];
+      const removed = configOf(s).definitionOfDone.filter(
+        (q) => !next.some((n) => JSON.stringify(n) === JSON.stringify(q)),
+      );
+      if (removed.length === 0) return [];
+      const describe = removed.map((q) =>
+        q.kind === "evidence" ? `evidence ${q.evidenceKind}` : q.kind,
+      );
+      return [
+        v(
+          "dod-not-weakened",
+          "error",
+          `retro dodChanges drops ${removed.length} Definition of Done policy(ies): ${describe.join(", ")}`,
+          'keep them in dodChanges (it replaces the whole list; suggestedChange { kind: "dod" } appends one), or pass allowWeaken: true to weaken the Definition of Done knowingly',
+        ),
+      ];
+    },
   };
 
   const carry: Rule = {
@@ -167,12 +185,14 @@ export function scrumRules(): Rule[] {
         .filter(
           (id) =>
             last.carryover.includes(id) &&
+            !(s.items[id] && resumeStageOf(s.items[id]) !== undefined) &&
             !s.events.some(
               (e) =>
-                e.type === "item.edited" &&
                 e.seq > seq &&
-                (e.payload as { id: string; changed: string[] }).id === id &&
-                (e.payload as { changed: string[] }).changed.includes("weight"),
+                (e.payload as { id: string }).id === id &&
+                ((e.type === "item.edited" &&
+                  (e.payload as { changed: string[] }).changed.includes("weight")) ||
+                  e.type === "item.reestimated"),
             ),
         )
         .map((id) =>
