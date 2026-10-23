@@ -446,3 +446,40 @@ test("phaseRetrospective stores lessons, adopts and dismisses, applies agreement
   );
   assert.equal(s.baseline!.version, 1); // untouched
 });
+
+test("only a human may decide a phase gate or a change pending; the state is untouched on refusal", () => {
+  let s = withRequirements();
+  s = c["kickoff"]!(s, { by: pm, now: T0, phase: "requirements" }).state;
+  s = finish(s, "R1", "business-analyst", ["srs"]);
+  s = finish(s, "R2", "business-analyst", []);
+  s = c["gateReview"]!(s, { by: pm, now: T1, phase: "requirements" }).state;
+  for (const who of ["developer", pm]) {
+    assert.throws(
+      () => decide(s, "p1", "approve", who, "ok", T2, m),
+      err("gate-unmet", /may not decide phase gate "requirements-gate" \(p1\)/),
+    );
+  }
+  assert.equal(phasesOf(s)[0]!.status, "open");
+  assert.equal(s.pending.length, 1);
+  let s2 = baselinedThrough(["requirements"]);
+  s2 = addItem(
+    s2,
+    {
+      id: "CR-1",
+      title: "c",
+      type: "change-request",
+      impactAnalysis: { summary: "s", reopen: ["requirements"], weight: 1 },
+    },
+    "developer",
+    T1,
+  );
+  s2 = c["changeControlBoard"]!(s2, { by: pm, now: T1, change: "CR-1", decision: "approve" }).state;
+  const pid = s2.pending[s2.pending.length - 1]!.id;
+  assert.throws(
+    () => decide(s2, pid, "approve", pm, "ok", T2, m),
+    err("gate-unmet", /may not decide change "CR-1"/),
+  );
+  assert.equal(getItem(s2, "CR-1").status, "awaiting_human");
+  s2 = decide(s2, pid, "approve", "human", "ok", T2, m);
+  assert.equal(getItem(s2, "CR-1").status, "done");
+});

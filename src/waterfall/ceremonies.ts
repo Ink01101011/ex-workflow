@@ -314,6 +314,14 @@ export function waterfallAfterDecide(
   if (entry.kind === "gate" && entry.item === undefined && entry.gate !== undefined) {
     const phase = phasesOf(state).find((p) => p.gate.id === entry.gate);
     if (!phase) return state;
+    // core decide() checks the decider only for item gates; a phase gate pending exists because the gate requires a human
+    if (by !== "human")
+      fail(
+        "gate-unmet",
+        `"${by}" may not decide phase gate "${entry.gate}" (${entry.id}); it awaits a human`,
+        `decide ${entry.id} as human`,
+        { rule: "gate" },
+      );
     let reviewer: string | undefined;
     for (let i = state.events.length - 1; i >= 0; i--) {
       const e = state.events[i]!;
@@ -342,6 +350,13 @@ export function waterfallAfterDecide(
   ) {
     const item = state.items[entry.item]!;
     if (item.type !== "change-request") return state;
+    if (by !== "human")
+      fail(
+        "gate-unmet",
+        `"${by}" may not decide change "${item.id}" (${entry.id}); change control awaits a human`,
+        `decide ${entry.id} as human`,
+        { rule: "change-control", items: [item.id] },
+      );
     return decision === "approve"
       ? approveChange(state, item.id, by, note, now)
       : rejectChange(state, item.id, by, note, now);
