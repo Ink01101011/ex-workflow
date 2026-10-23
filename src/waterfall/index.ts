@@ -13,6 +13,7 @@ import {
   phaseOf,
   phasesOf,
 } from "./phases.ts";
+import { waterfallAfterDecide, waterfallCeremonies } from "./ceremonies.ts";
 import { waterfallRoles } from "./roles.ts";
 import { waterfallRules } from "./rules.ts";
 import { waterfallStages } from "./stages.ts";
@@ -49,6 +50,7 @@ export {
 export { waterfallStages } from "./stages.ts";
 export { waterfallRoles } from "./roles.ts";
 export { waterfallRules } from "./rules.ts";
+export { waterfallCeremonies, waterfallAfterDecide, wantPhase } from "./ceremonies.ts";
 export { traceabilityMatrix, missingTraces } from "./traceability.ts";
 export type { TraceabilityMatrix, TraceRow } from "./traceability.ts";
 export { baselinePhase, reopenPhases } from "./baseline.ts";
@@ -160,11 +162,12 @@ export function waterfall(): Methodology<WaterfallConfig> {
         `Do not change the scope of "${item.id}" or its acceptance criteria; raise open_questions instead`,
       ];
     },
-    ceremonies: {},
+    ceremonies: waterfallCeremonies(waterfall),
     rules: waterfallRules(),
     metrics: () => ({}),
     humanDefaults: { gates: "all" },
     report: (state) => ({ ...phaseReport(state), coverage: traceabilityMatrix(state).coverage }),
+    afterDecide: waterfallAfterDecide,
     afterComplete(state, itemId, _now) {
       // an item added to the phase after kickoff is not in the iteration's committed list: count its spend now
       const it = openIteration(state);
