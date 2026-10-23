@@ -48,7 +48,12 @@ const ITEMS = [
 ];
 
 function run(cmd, args, cwd) {
-  const r = spawnSync(cmd, args, { cwd, shell: false, encoding: "utf8" });
+  const r = spawnSync(cmd, args, {
+    cwd,
+    // npm.cmd needs a shell on Windows since the CVE-2024-27980 fix; node itself never does
+    shell: cmd === npm && process.platform === "win32",
+    encoding: "utf8",
+  });
   if (r.status !== 0)
     throw new Error(`${cmd} ${args.join(" ")} failed in ${cwd}: ${r.stderr || r.stdout || r.error}`);
   return r.stdout;
