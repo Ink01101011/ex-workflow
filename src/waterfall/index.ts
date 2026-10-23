@@ -14,6 +14,7 @@ import {
   phasesOf,
 } from "./phases.ts";
 import { waterfallAfterDecide, waterfallCeremonies } from "./ceremonies.ts";
+import { waterfallMetrics } from "./metrics.ts";
 import { waterfallRoles } from "./roles.ts";
 import { waterfallRules } from "./rules.ts";
 import { waterfallStages } from "./stages.ts";
@@ -50,6 +51,8 @@ export {
 export { waterfallStages } from "./stages.ts";
 export { waterfallRoles } from "./roles.ts";
 export { waterfallRules } from "./rules.ts";
+export { waterfallMetrics } from "./metrics.ts";
+export type { WaterfallMetrics } from "./metrics.ts";
 export {
   waterfallCeremonies,
   waterfallAfterDecide,
@@ -170,7 +173,7 @@ export function waterfall(): Methodology<WaterfallConfig> {
     },
     ceremonies: waterfallCeremonies(waterfall),
     rules: waterfallRules(),
-    metrics: () => ({}),
+    metrics: (state) => ({ ...waterfallMetrics(state) }),
     humanDefaults: { gates: "all" },
     report: (state) => ({ ...phaseReport(state), coverage: traceabilityMatrix(state).coverage }),
     afterDecide: waterfallAfterDecide,
