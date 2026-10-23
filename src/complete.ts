@@ -12,6 +12,7 @@ import {
   raiseBlocker,
   stageOf,
 } from "./items.ts";
+import { applyAction } from "./methodology.ts";
 import { assertPolicies } from "./policies.ts";
 import { openIteration } from "./planner.ts";
 import { rolesWith } from "./roles.ts";
@@ -130,6 +131,27 @@ export function complete(
   now?: string,
 ): ApplyResult {
   validate(state, handoff, acc);
+  // the methodology's rules see the completion (applyAction validates, appends nothing, then reduces)
+  let result: ApplyResult | undefined;
+  const ruled = applyAction(
+    state,
+    methodology,
+    { type: "item.complete", by: handoff.role, payload: { item: handoff.item, handoff } },
+    () => {
+      result = completeBody(state, methodology, handoff, acc, now);
+      return result.state;
+    },
+  );
+  return { state: ruled.state, warnings: [...ruled.warnings, ...result!.warnings] };
+}
+
+function completeBody(
+  state: WorkflowState,
+  methodology: Methodology,
+  handoff: Handoff,
+  acc: Accounting,
+  now?: string,
+): ApplyResult {
   const at = nowOf(now);
   const id = handoff.item;
   const role = handoff.role;

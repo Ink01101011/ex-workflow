@@ -596,3 +596,56 @@ test("openQuestions is last-wins: a rework then a done without questions drops t
   s = complete(s, m(), handoff({ open_questions: [] }), acc(), T0).state;
   assert.deepEqual(openQuestions(s), []);
 });
+
+test("decide(approve) honours a needs-review verdict from the last item.completed event (B05)", () => {
+  const st: Stage[] = [
+    {
+      id: "todo",
+      name: "To do",
+      entryPolicy: [],
+      exitPolicy: [],
+      gate: { id: "h", requires: ["human"], evidence: [], onFail: { action: "block" } },
+    },
+    { id: "qa", name: "QA", entryPolicy: [], exitPolicy: [] },
+    { id: "done", name: "Done", entryPolicy: [], exitPolicy: [] },
+  ];
+  let s = createState({ methodology: "kanban", config: {}, stages: st, roles, now: T0 });
+  s = addItem(s, { id: "A", title: "a", weight: 1 }, "po", T0);
+  s = next(s, m(), { now: T0 }).state;
+  s = complete(s, m(), handoff({ verdict: "needs-review" }), acc(), T0).state;
+  s = decide(s, "p1", "approve", "human", "", T0);
+  assert.equal(getItem(s, "A").stage, "qa");
+  assert.equal(getItem(s, "A").status, "review");
+});
+
+test("complete runs methodology rules for action type item.complete without appending an action event (B02)", () => {
+  const refuse: Methodology = {
+    ...m(),
+    rules: [
+      {
+        id: "no-refuse",
+        severity: "error",
+        check: (_s, a) =>
+          a.type === "item.complete" &&
+          (a.payload as { handoff: Handoff }).handoff.notes === "refuse me"
+            ? [
+                {
+                  rule: "no-refuse",
+                  severity: "error",
+                  message: "refused",
+                  fix: "change the notes",
+                },
+              ]
+            : [],
+      },
+    ],
+  };
+  const s = started();
+  assert.throws(
+    () => complete(s, refuse, handoff({ notes: "refuse me" }), acc(), T0),
+    (e) => code(e) === "rule-violation",
+  );
+  const ok = complete(s, refuse, handoff(), acc(), T0).state;
+  assert.ok(!ok.events.some((e) => (e.type as string) === "item.complete"));
+  assert.equal(ok.events.filter((e) => e.type === "item.completed").length, 1);
+});

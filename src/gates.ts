@@ -170,7 +170,14 @@ export function decide(
     const id = item0.id;
     const gateId = entry.gate ?? gate?.id ?? null;
     if (decision === "approve") {
-      next = advanceItem(next, id, by, false, at);
+      let wantsReview = false;
+      for (let i = state.events.length - 1; i >= 0; i--) {
+        const e = state.events[i]!;
+        if (e.type !== "item.completed" || (e.payload as { id?: string }).id !== id) continue;
+        wantsReview = (e.payload as { verdict?: string }).verdict === "needs-review";
+        break;
+      }
+      next = advanceItem(next, id, by, wantsReview, at);
       next = appendEvent(next, "gate.passed", by, { item: id, gate: gateId }, at);
     } else {
       const onFail = gate?.onFail ?? { action: "block" as const };
