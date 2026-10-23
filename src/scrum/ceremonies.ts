@@ -329,7 +329,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       const carryover = wanted.filter((w) => last?.carryover.includes(w));
       const resumed: string[] = [];
       for (const w of wanted) {
-        const rs = resumeStageOf(getItem(s, w));
+        const rs = resumeStageOf(getItem(s, w), s);
         if (rs) resumed.push(w);
         s = moveItem(
           s,
@@ -390,7 +390,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     return act(state, "ceremony.commit", input, (s, now) => {
       const resumed: string[] = [];
       for (const id of items) {
-        const rs = resumeStageOf(getItem(s, id));
+        const rs = resumeStageOf(getItem(s, id), s);
         if (rs) resumed.push(id);
         s = moveItem(
           s,

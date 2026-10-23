@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../methodology.ts";
-import { addItem, getItem } from "../items.ts";
+import { addItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
 import { authorOf } from "../gates.ts";
@@ -509,6 +509,40 @@ test("#10 commit resumes a carried-over review item at review and reports it as 
   assert.equal(r.state.items["A"]!.stage, "review");
   assert.equal(r.state.items["A"]!.status, "review");
   assert.deepEqual((r.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+});
+
+function carried(stage: string, status: "blocked" | "awaiting_human"): WorkflowState {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  if (stage === "review") s = complete(s, m, h("A"), a("A", 50), T0).state;
+  s = moveItem(s, "A", { status }, "system", T0);
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  return c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+}
+
+for (const status of ["blocked", "awaiting_human"] as const) {
+  test(`B22 a ${status} carryover left in the review stage resumes at review on plan and on commit`, () => {
+    const s = carried("review", status);
+    assert.equal(getItem(s, "A").status, "todo");
+    const p = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] });
+    assert.equal(p.state.items["A"]!.stage, "review");
+    assert.equal(p.state.items["A"]!.status, "review");
+    assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+    let s2 = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["B"] }).state;
+    s2 = c["commit"]!(s2, { by: "product-owner", now: T1, items: ["A"], goalImpact: "none" }).state;
+    assert.equal(s2.items["A"]!.stage, "review");
+    assert.equal(s2.items["A"]!.status, "review");
+    assert.deepEqual((s2.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+  });
+}
+
+test("B22 a blocked carryover left in the sprint stage still restarts at the sprint start", () => {
+  let s = carried("sprint", "blocked");
+  s = c["refine"]!(s, { by: "product-owner", now: T1, reestimate: ["A"] }).state;
+  const p = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] });
+  assert.equal(p.state.items["A"]!.stage, "sprint");
+  assert.equal(p.state.items["A"]!.status, "todo");
+  assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, []);
 });
 
 test("#11 refine reestimate confirms a weight and satisfies carryover-reestimated", () => {

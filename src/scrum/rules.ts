@@ -227,7 +227,7 @@ export function scrumRules(): Rule[] {
         .filter(
           (id) =>
             last.carryover.includes(id) &&
-            !(s.items[id] && resumeStageOf(s.items[id]) !== undefined) &&
+            !(s.items[id] && resumeStageOf(s.items[id], s) !== undefined) &&
             !s.events.some(
               (e) =>
                 e.seq > seq &&

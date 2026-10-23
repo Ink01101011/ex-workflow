@@ -31,16 +31,17 @@ export function configOf(state: WorkflowState): ScrumConfig {
   return state.config as ScrumConfig;
 }
 
-/** The stage a carried-over item was returned from when it was in review: it resumes there, not at the sprint start. */
-export function resumeStageOf(item: WorkItem): string | undefined {
+/**
+ * The stage a carried-over item was returned from when it was in a review stage: it resumes there, not at the
+ * sprint start. closeSprint releases blocked and awaiting_human items, so the stage (its `review` flag) is read from
+ * the last system transition, not the status. Without `state` only a `review` status is recognised.
+ */
+export function resumeStageOf(item: WorkItem, state?: WorkflowState): string | undefined {
   const t = item.transitions.at(-1);
-  return t &&
-    t.by === "system" &&
-    t.to.stage === "backlog" &&
-    t.to.status === "todo" &&
-    t.from.status === "review"
-    ? t.from.stage
-    : undefined;
+  if (!t || t.by !== "system" || t.to.stage !== "backlog" || t.to.status !== "todo")
+    return undefined;
+  if (!state) return t.from.status === "review" ? t.from.stage : undefined;
+  return state.stages.find((x) => x.id === t.from.stage)?.review ? t.from.stage : undefined;
 }
 
 /** Send an item back to the backlog: clear its open blockers and pending decisions, strip iteration and role. */
