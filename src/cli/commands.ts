@@ -155,7 +155,15 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const roles = flags["roles"]
         ? await readJson<Role[]>(path.resolve(cwd, flags["roles"]))
         : undefined;
-      if (roles) for (const r of roles) assertValid(roleSchema, r, `roles file ${flags["roles"]}`);
+      if (roles !== undefined) {
+        if (!Array.isArray(roles))
+          fail(
+            "invalid-input",
+            `roles file ${flags["roles"]} must contain an array of role manifests`,
+            "wrap the manifests in [ ... ]",
+          );
+        for (const r of roles) assertValid(roleSchema, r, `roles file ${flags["roles"]}`);
+      }
       const res = init(
         roles
           ? { methodology: f(), config, roles, by, now }

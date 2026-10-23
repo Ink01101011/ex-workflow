@@ -505,3 +505,15 @@ test("init --roles refuses a roles file that fails the schema", async () => {
   );
   await assert.rejects(readFile(path.join(root, ".workflow", "state.json"), "utf8"));
 });
+
+test("init --roles refuses a roles file that is not an array, with a WorkflowError", async () => {
+  const { root, w, cfg } = await project();
+  await w("roles.json", { id: "dev", name: "Dev" });
+  const r = await runCommand(["init", "scrum", "--config", cfg, "--roles", "roles.json"], root);
+  assert.equal(r.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(r).error.code, "invalid-input");
+  assert.match(
+    out<{ error: { message: string } }>(r).error.message,
+    /roles\.json must contain an array of role manifests/,
+  );
+});
