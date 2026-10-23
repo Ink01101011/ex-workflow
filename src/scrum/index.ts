@@ -41,7 +41,8 @@ export function resumeStageOf(item: WorkItem, state?: WorkflowState): string | u
   if (!t || t.by !== "system" || t.to.stage !== "backlog" || t.to.status !== "todo")
     return undefined;
   if (!state) return t.from.status === "review" ? t.from.stage : undefined;
-  return state.stages.find((x) => x.id === t.from.stage)?.review ? t.from.stage : undefined;
+  const st = state.stages.find((x) => x.id === t.from.stage);
+  return st?.review || t.from.status === "review" ? t.from.stage : undefined;
 }
 
 /** Send an item back to the backlog: clear its open blockers and pending decisions, strip iteration and role. */

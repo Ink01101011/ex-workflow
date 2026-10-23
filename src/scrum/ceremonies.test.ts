@@ -4,11 +4,12 @@ import { init } from "../methodology.ts";
 import { addItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
-import { authorOf } from "../gates.ts";
+import { authorOf, decide } from "../gates.ts";
 import { WorkflowError } from "../errors.ts";
-import { scrum } from "./index.ts";
+import { resumeStageOf, scrum } from "./index.ts";
+import { scrumStages } from "./stages.ts";
 import { dailyReport } from "./ceremonies.ts";
-import type { Accounting, Handoff, WorkflowState } from "../types.ts";
+import type { Accounting, Handoff, Stage, WorkflowState } from "../types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const T1 = "2026-10-19T01:00:00.000Z";
@@ -543,6 +544,70 @@ test("B22 a blocked carryover left in the sprint stage still restarts at the spr
   assert.equal(p.state.items["A"]!.stage, "sprint");
   assert.equal(p.state.items["A"]!.status, "todo");
   assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, []);
+});
+
+function qaCarried(): WorkflowState {
+  const [backlogStage, sprint, inProgress, review, done] = scrumStages(config as never);
+  const stages: Stage[] = [
+    backlogStage!,
+    sprint!,
+    {
+      ...inProgress!,
+      gate: { id: "h", requires: ["human"], evidence: [], onFail: { action: "block" as const } },
+    },
+    { id: "qa", name: "QA", entryPolicy: [], exitPolicy: [] },
+    review!,
+    done!,
+  ];
+  let { state } = init({ methodology: m, config, stages, now: T0 });
+  state = addItem(
+    state,
+    { id: "A", title: "a", weight: 1, priority: 3, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  let s = c["plan"]!(state, { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(s, m, h("A", "developer", { verdict: "needs-review" }), a("A", 50), T0).state;
+  s = decide(s, s.pending[0]!.id, "approve", "human", "", T0);
+  assert.equal(getItem(s, "A").stage, "qa");
+  assert.equal(getItem(s, "A").status, "review");
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  return c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+}
+
+test("B22 a review-status carryover left in a non-review stage resumes there without a reestimate", () => {
+  const s = qaCarried();
+  const p = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] });
+  assert.equal(p.state.items["A"]!.stage, "qa");
+  assert.equal(p.state.items["A"]!.status, "review");
+  assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+});
+
+test("B22 resumeStageOf without state recognises only a review status", () => {
+  const s = qaCarried();
+  assert.equal(resumeStageOf(getItem(s, "A")), "qa");
+  const t = getItem(s, "A").transitions.at(-1)!;
+  const other = {
+    ...getItem(s, "A"),
+    transitions: [{ ...t, from: { ...t.from, status: "blocked" as const } }],
+  };
+  assert.equal(resumeStageOf(other), undefined);
+});
+
+test("B22 a blocked-in-review item uncommitted by a human restarts at the sprint start", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["B"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(s, m, h("B"), a("B", 50), T0).state;
+  s = moveItem(s, "B", { status: "blocked" }, "system", T0);
+  s = c["uncommit"]!(s, { by: "product-owner", now: T0, items: ["B"], reason: "x" }).state;
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  s = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+  s = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] }).state;
+  s = c["commit"]!(s, { by: "product-owner", now: T1, items: ["B"], goalImpact: "none" }).state;
+  assert.equal(s.items["B"]!.stage, "sprint");
+  assert.equal(s.items["B"]!.status, "todo");
+  assert.deepEqual((s.events.at(-1)!.payload as { resumed: string[] }).resumed, []);
 });
 
 test("#11 refine reestimate confirms a weight and satisfies carryover-reestimated", () => {
