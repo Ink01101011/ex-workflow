@@ -14,7 +14,7 @@ import { WorkflowError, fail } from "../errors.ts";
 import { decide } from "../gates.ts";
 import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
 import { applyAction, init, validateAction } from "../methodology.ts";
-import { openIteration } from "../planner.ts";
+import { openIteration, type PlanOptions } from "../planner.ts";
 import { registerRole } from "../roles.ts";
 import {
   assertValid,
@@ -47,7 +47,8 @@ const METHODOLOGIES: Record<string, () => Methodology> = {
 export const USAGE = [
   "exwf init <scrum|kanban|waterfall> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
-  "exwf next [--max n]                  exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m",
+  "exwf next [--max n] [--fallback-tokens-per-weight n]",
+  "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m",
   "exwf ceremony <name> [input.json] [--by who]",
   "exwf decide <pendingId> approve|reject [--by who] [--note text]",
   "exwf status | board | metrics | pending | lessons",
@@ -217,7 +218,10 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
     }
     case "next": {
       const state = await loadState(cwd);
-      const opts = flags["max"] ? { max: num(flags, "max"), now } : { now };
+      const opts: PlanOptions = { now };
+      if (flags["max"]) opts.max = num(flags, "max");
+      if (flags["fallback-tokens-per-weight"])
+        opts.fallbackTokensPerWeight = num(flags, "fallback-tokens-per-weight");
       const res = planNext(state, methodologyOf(state), opts);
       await saveState(cwd, res.state);
       for (const b of res.briefs) await saveBrief(cwd, b);

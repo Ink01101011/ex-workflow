@@ -1,3 +1,4 @@
+import type { EstimateMode } from "../budget.ts";
 import { fail } from "../errors.ts";
 import type { Budget, Policy } from "../types.ts";
 
@@ -8,6 +9,12 @@ export interface ScrumConfig {
   refinementSharePct: number;
   allowMidSprintAdd: "never" | "po-only" | "any";
   inProgressWipLimit?: number;
+  /** Close the sprint automatically when its budget is spent and nothing is in flight; default true. */
+  autoClose?: boolean;
+  /** How the planner and sprint planning price a candidate; default "per-weight". */
+  estimateMode?: EstimateMode;
+  /** Tokens per weight unit when no accounting history exists; default 20000. */
+  fallbackTokensPerWeight?: number;
 }
 
 const ADD_MODES = new Set(["never", "po-only", "any"]);
@@ -59,6 +66,30 @@ export function validateScrumConfig(raw: unknown): ScrumConfig {
       "scrum config.inProgressWipLimit must be a positive number",
       "omit it for no limit",
     );
+  const autoClose = c["autoClose"];
+  if (autoClose !== undefined && typeof autoClose !== "boolean")
+    fail(
+      "config-invalid",
+      "scrum config.autoClose must be true or false",
+      "omit it for the default true",
+    );
+  const mode = c["estimateMode"];
+  if (mode !== undefined && mode !== "per-weight" && mode !== "per-call")
+    fail(
+      "config-invalid",
+      `scrum config.estimateMode must be per-weight | per-call (got ${JSON.stringify(mode)})`,
+      'use "per-weight" (the default) or "per-call"',
+    );
+  const fallback = c["fallbackTokensPerWeight"];
+  if (
+    fallback !== undefined &&
+    (typeof fallback !== "number" || !Number.isFinite(fallback) || fallback <= 0)
+  )
+    fail(
+      "config-invalid",
+      "scrum config.fallbackTokensPerWeight must be a positive finite number",
+      "omit it for the default 20000",
+    );
   const out: ScrumConfig = {
     sprintBudget: budget,
     productGoal: c["productGoal"],
@@ -67,5 +98,8 @@ export function validateScrumConfig(raw: unknown): ScrumConfig {
     allowMidSprintAdd: add as ScrumConfig["allowMidSprintAdd"],
   };
   if (wip !== undefined) out.inProgressWipLimit = wip as number;
+  if (autoClose !== undefined) out.autoClose = autoClose as boolean;
+  if (mode !== undefined) out.estimateMode = mode as EstimateMode;
+  if (fallback !== undefined) out.fallbackTokensPerWeight = fallback as number;
   return out;
 }

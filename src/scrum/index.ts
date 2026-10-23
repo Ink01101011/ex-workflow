@@ -137,10 +137,13 @@ export function scrum(): Methodology<ScrumConfig> {
     requiredCapabilities: ["order-backlog", "facilitate", "deliver"],
     exclusiveCapabilities: ["order-backlog"],
     plannerOptions(state): PlannerOptions {
-      const cap = configOf(state).inProgressWipLimit;
-      return cap === undefined
-        ? { schedulerMode: "level", dispatchStage: "in_progress" }
-        : { schedulerMode: "level", dispatchStage: "in_progress", concurrencyCap: cap };
+      const cfg = configOf(state);
+      const po: PlannerOptions = { schedulerMode: "level", dispatchStage: "in_progress" };
+      if (cfg.inProgressWipLimit !== undefined) po.concurrencyCap = cfg.inProgressWipLimit;
+      if (cfg.estimateMode !== undefined) po.estimateMode = cfg.estimateMode;
+      if (cfg.fallbackTokensPerWeight !== undefined)
+        po.fallbackTokensPerWeight = cfg.fallbackTokensPerWeight;
+      return po;
     },
     candidates(state): WorkItem[] {
       const it = openIteration(state);
@@ -173,7 +176,8 @@ export function scrum(): Methodology<ScrumConfig> {
       const inFlight = Object.values(state.items).some(
         (i) => i.iteration === it.id && i.status === "in_progress",
       );
-      if (!inFlight) return closeSprint(state, "budget", now);
+      if (!inFlight && configOf(state).autoClose !== false)
+        return closeSprint(state, "budget", now);
       if (it.closing) return state;
       return appendEvent(
         {

@@ -517,3 +517,25 @@ test("init --roles refuses a roles file that is not an array, with a WorkflowErr
     /roles\.json must contain an array of role manifests/,
   );
 });
+
+test("next --fallback-tokens-per-weight prices a candidate when there is no history", async () => {
+  const { root, w } = await project();
+  const cfg = await w("tight.json", {
+    sprintBudget: { tokens: 100 },
+    productGoal: "ship",
+    definitionOfDone: [{ kind: "evidence", evidenceKind: "test-output" }],
+  });
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  assert.equal(
+    (await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root)).exit,
+    0,
+  );
+  const r1 = await runCommand(["next"], root);
+  assert.equal(out<{ reason: string }>(r1).reason, "budget-exhausted");
+  assert.equal(out<{ briefs: unknown[] }>(r1).briefs.length, 0);
+  const r2 = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(out<{ briefs: unknown[] }>(r2).briefs.length, 1);
+});

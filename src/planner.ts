@@ -129,7 +129,12 @@ export function plan(
   );
   const readyAll = all.filter((i) => i.dependsOn.every((d) => state.items[d]?.status === "done"));
   if (candidates.length === 0)
-    return { state, dispatched: [], skipped: [], reason: "no-candidates" };
+    return {
+      state,
+      dispatched: [],
+      skipped: [],
+      reason: openIteration(state)?.closing ? "budget-exhausted" : "no-candidates",
+    };
 
   const po = methodology.plannerOptions(state);
   const options: ExFlowOptions<NodeData> = {
@@ -181,7 +186,17 @@ export function plan(
   }
   const caps = resourceCapsFor(state);
   const iteration = openIteration(state);
-  let tokensLeft = iteration ? remaining(iteration.budget, iteration.spent).tokens : undefined;
+  const left = iteration ? remaining(iteration.budget, iteration.spent) : {};
+  let tokensLeft = left.tokens;
+  const inFlight = iteration
+    ? Object.values(state.items).filter(
+        (i) => i.iteration === iteration.id && i.status === "in_progress",
+      ).length
+    : 0;
+  let turnsLeft = left.turns === undefined ? undefined : left.turns - inFlight;
+  const clockOut = left.wallclockMs !== undefined && left.wallclockMs <= 0;
+  const estimateMode = po.estimateMode ?? "per-weight";
+  const fallback = opts.fallbackTokensPerWeight ?? po.fallbackTokensPerWeight;
   const limit = Math.min(opts.max ?? Infinity, po.concurrencyCap ?? Infinity);
 
   const dispatched: WorkItem[] = [];
@@ -234,8 +249,22 @@ export function plan(
       });
       continue;
     }
+    if (turnsLeft !== undefined && turnsLeft <= 0) {
+      reason = "budget-exhausted";
+      skipped.push({
+        id: item.id,
+        reason: "budget",
+        detail: `turns budget spent: ${iteration!.budget.turns} of ${iteration!.budget.turns} in flight or used`,
+      });
+      continue;
+    }
+    if (clockOut) {
+      reason = "budget-exhausted";
+      skipped.push({ id: item.id, reason: "budget", detail: "wall-clock budget spent" });
+      continue;
+    }
     if (tokensLeft !== undefined) {
-      const est = estimateTokens(state, item.weight, opts.fallbackTokensPerWeight);
+      const est = estimateTokens(state, item.weight, fallback, estimateMode);
       if (est > tokensLeft) {
         reason = "budget-exhausted";
         skipped.push({
@@ -248,6 +277,7 @@ export function plan(
       tokensLeft -= est;
     }
     perClass[cls] = (perClass[cls] ?? 0) + 1;
+    if (turnsLeft !== undefined) turnsLeft -= 1;
     next = moveItem(next, item.id, { stage: target, status: "in_progress" }, role.id, at);
     next = {
       ...next,

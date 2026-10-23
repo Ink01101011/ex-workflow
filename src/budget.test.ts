@@ -49,3 +49,23 @@ test("estimateTokens uses the median tokens-per-weight from history", () => {
     200,
   );
 });
+
+test("estimateTokens ignores placeholder lines and prices per call when asked", () => {
+  const s = {
+    items: { A: { weight: 1 }, B: { weight: 2 } },
+    accounting: [acc("A", 200), acc("B", 600)],
+  } as unknown as WorkflowState;
+  const base = estimateTokens(s, 2);
+  const withZero = {
+    ...s,
+    accounting: [...s.accounting, { ...acc("A", 0), estimate: true }],
+  } as WorkflowState;
+  assert.equal(estimateTokens(withZero, 2), base, "an estimate:true line does not move the median");
+  // per-call: the median of tokens per completion, weight ignored
+  assert.equal(estimateTokens(s, 5, 20000, "per-call"), 400);
+  assert.equal(
+    estimateTokens({ items: {}, accounting: [] } as unknown as WorkflowState, 5, 700, "per-call"),
+    700,
+    "no history: one call at the fallback",
+  );
+});

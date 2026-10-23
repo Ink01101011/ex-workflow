@@ -33,6 +33,32 @@ test("validateScrumConfig applies defaults and names bad fields", () => {
     () => validateScrumConfig({ ...config, allowMidSprintAdd: "yes" }),
     (e: unknown) => e instanceof WorkflowError && /allowMidSprintAdd/.test(e.message),
   );
+  assert.equal(validateScrumConfig(config).autoClose, undefined);
+  const good = validateScrumConfig({
+    ...config,
+    autoClose: false,
+    estimateMode: "per-call",
+    fallbackTokensPerWeight: 500,
+  });
+  assert.deepEqual(
+    [good.autoClose, good.estimateMode, good.fallbackTokensPerWeight],
+    [false, "per-call", 500],
+  );
+  for (const [bad, name] of [
+    [{ autoClose: "yes" }, "autoClose"],
+    [{ estimateMode: "per-token" }, "estimateMode"],
+    [{ fallbackTokensPerWeight: 0 }, "fallbackTokensPerWeight"],
+    [{ fallbackTokensPerWeight: "20000" }, "fallbackTokensPerWeight"],
+  ] as const) {
+    assert.throws(
+      () => validateScrumConfig({ ...config, ...bad }),
+      (e: unknown) =>
+        e instanceof WorkflowError &&
+        e.code === "config-invalid" &&
+        e.message.includes(name) &&
+        e.fix.length > 0,
+    );
+  }
 });
 
 test("init with scrum builds the five stages and three roles", () => {
@@ -315,4 +341,35 @@ test("budget exhaustion with work in flight marks the sprint closing and lets th
   assert.equal(closed.spent.tokens, 150);
   assert.equal(s.events.at(-1)!.type, "sprint.closed");
   assert.equal(s.accounting.length, 2);
+});
+
+test("autoClose false keeps an exhausted sprint in closing until review closes it", () => {
+  const m = scrum();
+  let { state } = init({
+    methodology: m,
+    config: { ...config, sprintBudget: { turns: 1 }, autoClose: false },
+    now: T0,
+  });
+  state = addItem(
+    state,
+    { id: "A", title: "a", weight: 1, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = m.ceremonies["plan"]!(state, {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A"],
+  }).state;
+  state = next(state, m, { now: T0 }).state;
+  const s1 = complete(state, m, hand("A"), acct("A", 10), T0).state;
+  const it = s1.iterations[0]!;
+  assert.equal(it.closing, true);
+  assert.equal(it.endedAt, undefined);
+  assert.ok(s1.events.some((e) => e.type === "sprint.closing"));
+  assert.equal(next(s1, m, { now: T0 }).reason, "budget-exhausted");
+  const s2 = m.ceremonies["review"]!(s1, { by: "human", now: T0, accepted: true }).state;
+  assert.notEqual(s2.iterations[0]!.endedAt, undefined);
+  assert.equal(s2.events.at(-1)!.type, "sprint.closed");
 });

@@ -194,6 +194,8 @@ export interface Accounting {
   durationMs: number;
   startedAt: string;
   endedAt: string;
+  /** The tokens are a placeholder the host will correct with correctAccounting, not the host's usage figures. */
+  estimate?: boolean;
 }
 
 export interface Event {
@@ -352,6 +354,10 @@ export interface PlannerOptions {
   wipLimitOf?(stage: Stage, item: WorkItem): number | undefined;
   /** Role id to dispatch a todo item to (e.g. the phase's deliverer); undefined = default (item.role, then reviewer/deliverer by capability). */
   roleFor?(item: WorkItem): string | undefined;
+  /** How estimateTokens prices a candidate; default "per-weight". */
+  estimateMode?: "per-weight" | "per-call";
+  /** Tokens per weight unit when no accounting history exists; default 20000. PlanOptions.fallbackTokensPerWeight wins. */
+  fallbackTokensPerWeight?: number;
 }
 
 export interface Methodology<C = unknown> {

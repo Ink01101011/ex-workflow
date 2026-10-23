@@ -181,11 +181,12 @@ function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
 }
 
 function selectAuto(state: WorkflowState, budget: Budget): string[] {
+  const cfg = configOf(state);
   const out: string[] = [];
   let tokens = 0;
   for (const item of backlogOrdered(state)) {
     if (budget.tokens !== undefined) {
-      const est = estimateTokens(state, item.weight);
+      const est = estimateTokens(state, item.weight, cfg.fallbackTokensPerWeight, cfg.estimateMode);
       if (tokens + est > budget.tokens) break;
       tokens += est;
     } else if (budget.turns !== undefined && out.length >= budget.turns) break;

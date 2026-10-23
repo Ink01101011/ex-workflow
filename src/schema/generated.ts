@@ -30,6 +30,9 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
       endedAt: {
         type: "string",
       },
+      estimate: {
+        type: "boolean",
+      },
     },
     required: [
       "item",
@@ -1179,6 +1182,10 @@ export const SCRUM_DEFINITIONS: Record<string, JsonSchema> = {
     },
     additionalProperties: false,
   },
+  EstimateMode: {
+    type: "string",
+    enum: ["per-weight", "per-call"],
+  },
   Policy: {
     anyOf: [
       {
@@ -1281,6 +1288,15 @@ export const SCRUM_DEFINITIONS: Record<string, JsonSchema> = {
         enum: ["never", "po-only", "any"],
       },
       inProgressWipLimit: {
+        type: "number",
+      },
+      autoClose: {
+        type: "boolean",
+      },
+      estimateMode: {
+        $ref: "#/definitions/EstimateMode",
+      },
+      fallbackTokensPerWeight: {
         type: "number",
       },
     },
