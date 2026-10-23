@@ -4,6 +4,7 @@ import { init } from "../methodology.ts";
 import { addItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
+import { correctAccounting } from "../accounting.ts";
 import { scrum } from "./index.ts";
 import { scrumMetrics } from "./metrics.ts";
 import type { WorkflowState } from "../types.ts";
@@ -64,7 +65,14 @@ function oneSprint(): WorkflowState {
   state = complete(
     state,
     m,
-    { item: "A", role: "developer", produced: [], notes: "lgtm", do_not: [], open_questions: [] },
+    {
+      item: "A",
+      role: "developer",
+      produced: [],
+      notes: "lgtm",
+      do_not: [],
+      open_questions: [],
+    },
     {
       item: "A",
       role: "developer",
@@ -148,5 +156,84 @@ test("metrics on an empty state are zeros", () => {
     carryoverRatio: 0,
     budgetUtilisation: 0,
     costPerPoint: 0,
+    current: {
+      spentTokens: 0,
+      spentTurns: 0,
+      budgetTokens: 0,
+      committedWeight: 0,
+      doneWeight: 0,
+      remainingWeight: 0,
+      costPerPoint: 0,
+      budgetUtilisation: 0,
+    },
   });
+});
+
+const ho = (produced: Array<{ kind: string; ref: string }>) => ({
+  item: "A",
+  role: "developer",
+  produced,
+  notes: "",
+  do_not: [],
+  open_questions: [],
+});
+
+function midSprint(): WorkflowState {
+  let { state } = init({ methodology: m, config, now: T0 });
+  state = addItem(
+    state,
+    { id: "A", title: "a", weight: 2, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = addItem(
+    state,
+    { id: "B", title: "b", weight: 3, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  state = m.ceremonies["plan"]!(state, {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A", "B"],
+  }).state;
+  return next(state, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+}
+
+test("current metrics describe the open sprint mid-flight", () => {
+  let s = midSprint();
+  const acc = (tokensIn: number) => ({
+    item: "A",
+    role: "developer",
+    model: "haiku",
+    tokensIn,
+    tokensOut: 50,
+    durationMs: 1,
+    startedAt: T0,
+    endedAt: T0,
+  });
+  s = complete(s, m, ho([{ kind: "test-output", ref: "ci" }]), acc(100), T0).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state; // review of A
+  s = complete(s, m, ho([]), acc(50), T0).state; // review passes: A is done
+  const c = scrumMetrics(s).current;
+  assert.equal(c["spentTokens"], 250); // 150 + 100
+  assert.equal(c["spentTurns"], 2);
+  assert.equal(c["budgetTokens"], 1000);
+  assert.equal(c["committedWeight"], 5);
+  assert.equal(c["doneWeight"], 2);
+  assert.equal(c["remainingWeight"], 3);
+  assert.equal(c["costPerPoint"], 125);
+  assert.equal(c["budgetUtilisation"], 0.25);
+});
+
+test("a correction after close changes costPerPoint and budgetUtilisation", () => {
+  const s = oneSprint();
+  const fixed = correctAccounting(s, "A", { tokensIn: 400, tokensOut: 100 }, "human", T0, 1);
+  const before = scrumMetrics(s);
+  const after = scrumMetrics(fixed);
+  assert.equal(after.budgetUtilisation, 0.6); // line 1: 200 -> 500, plus the review line's 100
+  assert.equal(after.costPerPoint, 300);
+  assert.notEqual(after.costPerPoint, before.costPerPoint);
+  assert.deepEqual(after.velocity, before.velocity);
 });

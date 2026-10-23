@@ -36,6 +36,8 @@ export type { PlanOptions, PlanReason, PlanResult, Skipped } from "./planner.ts"
 export { synthesizeBrief, next } from "./brief.ts";
 export type { NextResult } from "./brief.ts";
 export { complete } from "./complete.ts";
+export { correctAccounting } from "./accounting.ts";
+export type { AccountingPatch } from "./accounting.ts";
 export { coreRulesFor } from "./rules.ts";
 export { applyAction, validateAction, init } from "./methodology.ts";
 export type { InitInput } from "./methodology.ts";

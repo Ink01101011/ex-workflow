@@ -10,6 +10,7 @@ import {
 } from "../adapters/file.ts";
 import { next as planNext } from "../brief.ts";
 import { complete } from "../complete.ts";
+import { correctAccounting, type AccountingPatch } from "../accounting.ts";
 import { WorkflowError, fail } from "../errors.ts";
 import { decide } from "../gates.ts";
 import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
@@ -48,7 +49,8 @@ export const USAGE = [
   "exwf init <scrum|kanban|waterfall> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
   "exwf next [--max n] [--fallback-tokens-per-weight n]",
-  "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m",
+  "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--estimate]",
+  "exwf account <item> [--line n] [--tokens-in n] [--tokens-out n] [--duration-ms n] [--model m] [--by who]",
   "exwf ceremony <name> [input.json] [--by who]",
   "exwf decide <pendingId> approve|reject [--by who] [--note text]",
   "exwf status | board | metrics | pending | lessons",
@@ -118,7 +120,16 @@ export interface CommandResult {
 }
 
 /** Commands that load, change and save the state: they run under .workflow/state.lock. */
-const WRITERS = new Set(["init", "add", "edit", "next", "complete", "ceremony", "decide"]);
+const WRITERS = new Set([
+  "init",
+  "add",
+  "edit",
+  "next",
+  "complete",
+  "account",
+  "ceremony",
+  "decide",
+]);
 
 export async function runCommand(argv: string[], cwd: string): Promise<CommandResult> {
   const [cmd, sub] = parseArgs(argv).positional;
@@ -198,7 +209,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       await saveState(cwd, res.state);
       return {
         exit: 0,
-        out: { ok: true, warnings: res.warnings, item: getItem(res.state, item.id) },
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          item: getItem(res.state, item.id),
+        },
       };
     }
     case "edit": {
@@ -214,7 +229,10 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         (s) => editItem(s, id, patch, by, now),
       );
       await saveState(cwd, res.state);
-      return { exit: 0, out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) } };
+      return {
+        exit: 0,
+        out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) },
+      };
     }
     case "next": {
       const state = await loadState(cwd);
@@ -227,7 +245,12 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       for (const b of res.briefs) await saveBrief(cwd, b);
       return {
         exit: 0,
-        out: { ok: true, reason: res.reason ?? null, skipped: res.skipped, briefs: res.briefs },
+        out: {
+          ok: true,
+          reason: res.reason ?? null,
+          skipped: res.skipped,
+          briefs: res.briefs,
+        },
       };
     }
     case "complete": {
@@ -253,13 +276,34 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         startedAt: new Date(Date.parse(now) - durationMs).toISOString(),
         endedAt: now,
       };
+      if (flags["estimate"] === "true") acc.estimate = true;
       const res = complete(state, methodologyOf(state), { ...handoff, role }, acc, now);
       await saveState(cwd, res.state);
       await saveHandoff(cwd, handoff, res.state.events.length);
       return {
         exit: 0,
-        out: { ok: true, warnings: res.warnings, item: getItem(res.state, rest[0]) },
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          item: getItem(res.state, rest[0]),
+        },
       };
+    }
+    case "account": {
+      if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
+      const state = await loadState(cwd);
+      const patch: AccountingPatch = {};
+      if (flags["tokens-in"] !== undefined) patch.tokensIn = num(flags, "tokens-in");
+      if (flags["tokens-out"] !== undefined) patch.tokensOut = num(flags, "tokens-out");
+      if (flags["duration-ms"] !== undefined) patch.durationMs = num(flags, "duration-ms");
+      if (flags["model"] !== undefined) patch.model = flags["model"];
+      const line = flags["line"] !== undefined ? num(flags, "line") : undefined;
+      const s2 = correctAccounting(state, rest[0], patch, flags["by"] ?? "human", now, line);
+      await saveState(cwd, s2);
+      const ev = lastEvent(s2)!;
+      const idx = (ev.payload as { line: number }).line;
+      const mine = s2.accounting.filter((a) => a.item === rest[0]);
+      return { exit: 0, out: { ok: true, line: mine[idx - 1], event: ev } };
     }
     case "ceremony": {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
@@ -279,7 +323,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       await saveState(cwd, res.state);
       return {
         exit: 0,
-        out: { ok: true, warnings: res.warnings, lastEvent: lastEvent(res.state) },
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          lastEvent: lastEvent(res.state),
+        },
       };
     }
     case "decide": {
@@ -297,7 +345,10 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         methodologyOf(state),
       );
       await saveState(cwd, s2);
-      return { exit: 0, out: { ok: true, item: entry?.item ? getItem(s2, entry.item) : null } };
+      return {
+        exit: 0,
+        out: { ok: true, item: entry?.item ? getItem(s2, entry.item) : null },
+      };
     }
     case "status": {
       const state = await loadState(cwd);
@@ -346,19 +397,31 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
     }
     case "metrics": {
       const state = await loadState(cwd);
-      return { exit: 0, out: { ok: true, metrics: methodologyOf(state).metrics(state) } };
+      return {
+        exit: 0,
+        out: { ok: true, metrics: methodologyOf(state).metrics(state) },
+      };
     }
     case "pending":
-      return { exit: 0, out: { ok: true, pending: (await loadState(cwd)).pending } };
+      return {
+        exit: 0,
+        out: { ok: true, pending: (await loadState(cwd)).pending },
+      };
     case "lessons":
-      return { exit: 0, out: { ok: true, lessons: (await loadState(cwd)).lessons } };
+      return {
+        exit: 0,
+        out: { ok: true, lessons: (await loadState(cwd)).lessons },
+      };
     case "validate": {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const action = await readJson<Action>(path.resolve(cwd, rest[0]));
       return {
         exit: 0,
-        out: { ok: true, violations: validateAction(state, methodologyOf(state), action) },
+        out: {
+          ok: true,
+          violations: validateAction(state, methodologyOf(state), action),
+        },
       };
     }
     case "role": {
@@ -366,7 +429,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (rest[0] === "list")
         return {
           exit: 0,
-          out: { ok: true, roles: Object.keys(state.roles), detail: state.roles },
+          out: {
+            ok: true,
+            roles: Object.keys(state.roles),
+            detail: state.roles,
+          },
         };
       if (rest[0] === "add" && rest[1]) {
         const manifest = await readJson<Role>(path.resolve(cwd, rest[1]));

@@ -98,6 +98,13 @@ function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void
         { items: [item.id] },
       );
   }
+  if (acc.tokensIn + acc.tokensOut === 0 && acc.estimate !== true)
+    fail(
+      "accounting-invalid",
+      `accounting for "${item.id}" records 0 tokens`,
+      "pass the host's usage figures, or set estimate: true (CLI --estimate) to record a placeholder and correct it later with correctAccounting / exwf account",
+      { items: [item.id] },
+    );
 }
 
 /** Stage the item was pulled from: the `from.stage` of its last transition into in_progress, else its current stage. */

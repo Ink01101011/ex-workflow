@@ -40,7 +40,12 @@ test("init refuses twice and unknown commands exit 2", async () => {
 test("full loop: add → ceremony plan → next → complete → status → board → metrics", async () => {
   const { root, w, cfg } = await project();
   await runCommand(["init", "scrum", "--config", cfg], root);
-  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  const a = await w("a.json", {
+    id: "A",
+    title: "a",
+    weight: 1,
+    acceptance: ["ok"],
+  });
   assert.equal((await runCommand(["add", a, "--by", "product-owner"], root)).exit, 0);
   const plan = await w("plan.json", { goal: "g", items: ["A"] });
   const rp = await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
@@ -48,7 +53,9 @@ test("full loop: add → ceremony plan → next → complete → status → boar
   assert.equal(out<{ lastEvent: { type: string } }>(rp).lastEvent.type, "sprint.opened");
   const rn = await runCommand(["next"], root);
   assert.equal(rn.exit, 0);
-  const briefs = out<{ briefs: Array<{ item: { id: string }; role: { id: string } }> }>(rn).briefs;
+  const briefs = out<{
+    briefs: Array<{ item: { id: string }; role: { id: string } }>;
+  }>(rn).briefs;
   assert.equal(briefs[0]!.item.id, "A");
   assert.equal(briefs[0]!.role.id, "developer");
   assert.ok(
@@ -80,14 +87,15 @@ test("full loop: add → ceremony plan → next → complete → status → boar
   );
   assert.equal(rc.exit, 0);
   assert.equal(out<{ item: { status: string } }>(rc).item.status, "review");
-  const st = out<{ counts: Record<string, number>; openIteration: { id: string } }>(
-    await runCommand(["status"], root),
-  );
+  const st = out<{
+    counts: Record<string, number>;
+    openIteration: { id: string };
+  }>(await runCommand(["status"], root));
   assert.equal(st.counts["review"], 1);
   assert.equal(st.openIteration.id, "S1");
-  const board = out<{ columns: Array<{ stage: string; items: Array<{ id: string }> }> }>(
-    await runCommand(["board"], root),
-  );
+  const board = out<{
+    columns: Array<{ stage: string; items: Array<{ id: string }> }>;
+  }>(await runCommand(["board"], root));
   assert.equal(board.columns.find((c) => c.stage === "review")!.items[0]!.id, "A");
   const rev = await w("rev.json", { accepted: true, goalMet: true });
   assert.equal((await runCommand(["ceremony", "review", rev, "--by", "human"], root)).exit, 0);
@@ -131,7 +139,12 @@ test("add rejects ids that could escape the .workflow directory", async () => {
   const { root, w, cfg } = await project();
   await runCommand(["init", "scrum", "--config", cfg], root);
   for (const id of ["../evil", "a/b", "a\\b", "x..y"]) {
-    const f = await w("bad.json", { id, title: "t", weight: 1, acceptance: ["ok"] });
+    const f = await w("bad.json", {
+      id,
+      title: "t",
+      weight: 1,
+      acceptance: ["ok"],
+    });
     const r = await runCommand(["add", f], root);
     assert.equal(r.exit, 1);
     assert.equal(out<{ error: { code: string; fix: string } }>(r).error.code, "invalid-input");
@@ -165,7 +178,9 @@ test("concurrent add commands do not lose updates", async () => {
 
 test("kanban: init → replenishment → next → complete → status report → board", async () => {
   const { root, w } = await project();
-  const kcfg = await w("kanban.json", { cadences: { replenishment: { everyTurns: 1 } } });
+  const kcfg = await w("kanban.json", {
+    cadences: { replenishment: { everyTurns: 1 } },
+  });
   const r0 = await runCommand(["init", "kanban", "--config", kcfg], root);
   assert.equal(r0.exit, 0);
   assert.deepEqual(out<{ state: { stages: string[]; roles: string[] } }>(r0).state, {
@@ -184,7 +199,10 @@ test("kanban: init → replenishment → next → complete → status report →
   assert.equal(out<{ lastEvent: { type: string } }>(rr).lastEvent.type, "cadence.replenishment");
   const rn = await runCommand(["next"], root);
   const briefs = out<{
-    briefs: Array<{ item: { id: string; stage: string }; role: { id: string } }>;
+    briefs: Array<{
+      item: { id: string; stage: string };
+      role: { id: string };
+    }>;
   }>(rn).briefs;
   assert.deepEqual(
     briefs.map((b) => [b.item.id, b.item.stage, b.role.id]),
@@ -234,10 +252,18 @@ test("kanban: init → replenishment → next → complete → status report →
   assert.ok(Number.isFinite(Date.parse(repl.lastAt!)));
   assert.deepEqual(
     { ...repl, lastAt: null },
-    { cadence: "replenishment", everyTurns: 1, lastAt: null, turnsSince: 1, due: true },
+    {
+      cadence: "replenishment",
+      everyTurns: 1,
+      lastAt: null,
+      turnsSince: 1,
+      due: true,
+    },
   );
   const rb = await runCommand(["board"], root);
-  const cols = out<{ columns: Array<{ stage: string; items: Array<{ id: string }> }> }>(rb).columns;
+  const cols = out<{
+    columns: Array<{ stage: string; items: Array<{ id: string }> }>;
+  }>(rb).columns;
   assert.deepEqual(
     cols.find((c) => c.stage === "review")!.items.map((i) => i.id),
     ["A"],
@@ -258,7 +284,12 @@ test("status.report is null for scrum", async () => {
 test("add and edit are checked by methodology rules and surface rule violations", async () => {
   const { root, w, cfg } = await project();
   await runCommand(["init", "scrum", "--config", cfg], root);
-  const a = await w("a2.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  const a = await w("a2.json", {
+    id: "A",
+    title: "a",
+    weight: 1,
+    acceptance: ["ok"],
+  });
   const ra = await runCommand(["add", a, "--by", "product-owner"], root);
   assert.equal(ra.exit, 0);
   assert.equal(out<{ item: { id: string } }>(ra).item.id, "A");
@@ -309,7 +340,10 @@ test("waterfall: init → add → kickoff → next/complete ×2 → status → g
   assert.equal(out<{ lastEvent: { type: string } }>(rk).lastEvent.type, "phase.opened");
   const rn = await runCommand(["next"], root);
   const briefs = out<{
-    briefs: Array<{ item: { id: string; stage: string }; role: { id: string } }>;
+    briefs: Array<{
+      item: { id: string; stage: string };
+      role: { id: string };
+    }>;
   }>(rn).briefs;
   assert.deepEqual(
     briefs.map((b) => [b.item.id, b.item.stage, b.role.id]),
@@ -447,7 +481,12 @@ test("add, edit, complete and role add refuse files that fail their schema befor
     /bad-patch\.json does not match its schema: \/foo unknown property/,
   );
 
-  await w("bad-handoff.json", { item: "A", role: "developer", produced: [], notes: "n" });
+  await w("bad-handoff.json", {
+    item: "A",
+    role: "developer",
+    produced: [],
+    notes: "n",
+  });
   const done = await runCommand(
     [
       "complete",
@@ -526,7 +565,12 @@ test("next --fallback-tokens-per-weight prices a candidate when there is no hist
     definitionOfDone: [{ kind: "evidence", evidenceKind: "test-output" }],
   });
   await runCommand(["init", "scrum", "--config", cfg], root);
-  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  const a = await w("a.json", {
+    id: "A",
+    title: "a",
+    weight: 1,
+    acceptance: ["ok"],
+  });
   await runCommand(["add", a, "--by", "product-owner"], root);
   const plan = await w("plan.json", { goal: "g", items: ["A"] });
   assert.equal(
@@ -538,4 +582,65 @@ test("next --fallback-tokens-per-weight prices a candidate when there is no hist
   assert.equal(out<{ briefs: unknown[] }>(r1).briefs.length, 0);
   const r2 = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
   assert.equal(out<{ briefs: unknown[] }>(r2).briefs.length, 1);
+});
+
+test("complete refuses 0 tokens without --estimate; account corrects the placeholder", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", {
+    id: "A",
+    title: "a",
+    weight: 1,
+    acceptance: ["ok"],
+  });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
+  await runCommand(["next"], root);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  const zero = [
+    "complete",
+    "A",
+    h,
+    "--tokens-in",
+    "0",
+    "--tokens-out",
+    "0",
+    "--duration-ms",
+    "0",
+    "--model",
+    "haiku",
+  ];
+  const refused = await runCommand(zero, root);
+  assert.equal(refused.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(refused).error.code, "accounting-invalid");
+  assert.equal((await runCommand([...zero, "--estimate"], root)).exit, 0);
+  const ra = await runCommand(
+    ["account", "A", "--tokens-in", "500", "--tokens-out", "100", "--by", "human"],
+    root,
+  );
+  assert.equal(ra.exit, 0);
+  const res = out<{
+    line: { tokensIn: number; estimate?: boolean };
+    event: { type: string };
+  }>(ra);
+  assert.equal(res.line.tokensIn, 500);
+  assert.equal(res.line.estimate, undefined);
+  assert.equal(res.event.type, "accounting.corrected");
+  const metrics = out<{ metrics: { current: Record<string, number> } }>(
+    await runCommand(["metrics"], root),
+  );
+  assert.equal(metrics.metrics.current["spentTokens"], 600);
+  assert.equal(
+    (await runCommand(["account", "A", "--line", "9", "--tokens-in", "1"], root)).exit,
+    1,
+  );
+  assert.equal((await runCommand(["account"], root)).exit, 2);
 });
