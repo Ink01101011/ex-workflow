@@ -16,16 +16,13 @@ export interface WaterfallConfig {
   /** phase ids: every item of `from` must trace to an item of each `to` phase before that phase's gate */
   traceability: { from: string; to: string[] };
   humanGates: "all" | string[];
+  /** tokens per weight unit when there is no accounting history (default 20000, as Scrum) */
+  fallbackTokensPerWeight?: number;
 }
 /**
  * WaterfallConfig plus keys not yet in the generated JSON schema (B18); fold into WaterfallConfig
  * and run schema:gen when a schema change is allowed.
  */
-export interface WaterfallRuntimeConfig extends WaterfallConfig {
-  /** Tokens per weight unit when no accounting history exists; default 20000. */
-  fallbackTokensPerWeight?: number;
-}
-
 export const DEFAULT_PHASE_IDS: readonly string[] = [
   "requirements",
   "design",
@@ -83,8 +80,8 @@ export function defaultPhases(): WaterfallPhaseConfig[] {
   });
 }
 
-export function configOf(state: WorkflowState): WaterfallRuntimeConfig {
-  return state.config as WaterfallRuntimeConfig;
+export function configOf(state: WorkflowState): WaterfallConfig {
+  return state.config as WaterfallConfig;
 }
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
@@ -197,7 +194,7 @@ function phase(raw: unknown, i: number, human: (id: string) => boolean): Waterfa
   return out;
 }
 
-export function validateWaterfallConfig(raw: unknown): WaterfallRuntimeConfig {
+export function validateWaterfallConfig(raw: unknown): WaterfallConfig {
   const c = (raw ?? {}) as Record<string, unknown>;
   if (c["phases"] !== undefined && !Array.isArray(c["phases"]))
     fail(
@@ -306,7 +303,7 @@ export function validateWaterfallConfig(raw: unknown): WaterfallRuntimeConfig {
       "waterfall config.fallbackTokensPerWeight must be a positive finite number",
       "omit it for the default 20000",
     );
-  const out: WaterfallRuntimeConfig = {
+  const out: WaterfallConfig = {
     phases,
     changeControl,
     traceability,
