@@ -10,7 +10,7 @@ State is plain JSON, every operation is `(state, action) -> state`, and every er
 pnpm add ex-workflow@stage
 ```
 
-Pre-releases are published under the `stage` dist-tag (currently `0.5.0-stage`); `latest` is reserved for 0.1.0.
+Pre-releases are published under the `stage` dist-tag (currently `0.6.0-stage`); `latest` is reserved for 0.1.0.
 
 Node >= 18. Runs on macOS, Linux and Windows.
 
@@ -61,7 +61,7 @@ board(s2, new Date().toISOString()); // columns with active/queued counts and ca
 kanbanMetrics(s2); // lead time, cycle time per column, throughput, WIP, flow efficiency, aging, CFD, SLE compliance
 ```
 
-Cadences are ceremonies: `replenishment`, `delivery-planning`, `service-delivery-review` (WIP, policies, SLEs), `operations-review` (blockers, aging WIP), `risk-review` (fixed-date risk, stale blockers), `strategy-review` (classes of service). `exwf status` reports which cadences are due (`config.cadences.<name>.everyTurns`). `test/kanban.e2e.test.ts` is a full week with an expedite, an escalation and a blocker.
+Cadences are ceremonies: `replenishment`, `delivery-planning`, `service-delivery-review` (WIP, policies, SLEs), `operations-review` (blockers, aging WIP), `risk-review` (fixed-date risk, stale blockers), `strategy-review` (classes of service). `exwf status` reports which cadences are due (`config.cadences.<name>.everyTurns`). `delivery-planning` needs a non-empty `items` list, and the `operations-review` assign entries need an existing blocker id. `test/kanban.e2e.test.ts` is a full week with an expedite, an escalation and a blocker.
 
 `next()` also returns `skipped`: each ready card it did not pull, with `reason` (`entry-policy`, `wip`, `resource-cap` or `budget`) and a `detail`; the commitment column's policies gate the pull out of it (escalation `question` cards are exempt, as from exit policies and gates). Ordering is by class band (question, expedite, fixed-date, standard, intangible) and, with `fairness.aging` on (the default), priority stays primary inside a window of `fairness.maxDeferralRounds` passes (default 5); each full window a card is passed over promotes it one step above any priority difference, and an intangible card reaching the first window is ranked as standard, so nothing is starved.
 
@@ -106,7 +106,7 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 | `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` (runs the methodology's `afterDecide`, e.g. a Waterfall phase baseline) |
 | `config set <patch.json> [--by who]` | `{ ok, warnings, changed, config }`: merges a patch into the methodology config between iterations (refused while an iteration is open, and for locked keys); the merge is shallow: top-level keys replace wholesale, so `{ "sprintBudget": { "tokens": N } }` drops `turns`/`wallclockMs` |
 | `unblock <item> [--blocker id] [--note text] [--by who]` | `{ ok, warnings, item }`: clears the named open blocker, or every open one |
-| `status` | `{ ok, methodology, openIteration, counts, pending, openQuestions, lastEvent, report }` (`openQuestions` lists the questions a `done` completion left open; `report` is the methodology's own status: Kanban's cadences due, Waterfall's phases, pending gates and traceability coverage; `null` for Scrum) |
+| `status` | `{ ok, methodology, openIteration, counts, pending, openQuestions, lastEvent, report }` (`openQuestions` lists the questions a `done` completion left open; `report` is the methodology's own status: Scrum's closing sprint, Kanban's cadences due, Waterfall's phases, pending gates and traceability coverage) |
 | `board` | `{ ok, columns }` |
 | `metrics` | `{ ok, metrics }` (Scrum adds `current`, the open sprint's spent, committed and done weight, cost per point and budget utilisation; zeros when no sprint is open) |
 | `pending` / `lessons` | the arrays |
@@ -167,36 +167,30 @@ This package is L0. All layers read and write the same `.workflow/` files.
 
 ## Status
 
-0.5.0-stage closes the engine gaps from the workflowAI dogfood (Scrum budget gates, configuration between iterations, accounting corrections, agreements that can be replaced or retired, question briefs with their parent); see [CHANGELOG.md](CHANGELOG.md). 0.4.0-stage added `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
+0.6.0-stage closes the Phase 6 backlog: every item the 1.0 definition named is either fixed or an accepted limitation (see [Accepted limitations](#accepted-limitations)). 0.5.0-stage closes the engine gaps from the workflowAI dogfood (Scrum budget gates, configuration between iterations, accounting corrections, agreements that can be replaced or retired, question briefs with their parent); see [CHANGELOG.md](CHANGELOG.md). 0.4.0-stage added `ex-workflow/schema` (JSON Schema documents and a validator, checked by `exwf` on load and on input). 0.3.0-stage added the Waterfall module; all three methodologies ship. Design: [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md).
 
-## Known backlog
+## Accepted limitations
 
-Minor items deferred past 0.5.0-stage:
+The 1.0 definition requires every known gap to be fixed or accepted as a documented limitation. These are the accepted ones (design spec, section 22). Each has one line of reasoning.
 
-- Stale-lock takeover can race when a lock is older than 60 s.
-- `complete()` does not run through `applyAction`, so the core `conflict-of-interest` rule never sees a completion.
-- Blockers are not auto-cleared when a follow-up completes; `exwf unblock` clears them by hand.
-- A sprint left in `closing` with `autoClose: false` is not flagged in `exwf status`; run `ceremony review` to close it.
-- `decide(approve)` ignores a `needs-review` verdict.
-- `setDod` hard-codes the `review` stage id in the Scrum methodology.
-- The `closing` sprint state is not enforced on commit or uncommit.
-- State is written before briefs; a crash between the two leaves them out of step.
-- `roles/*.json` are re-merged on every load.
-- Evidence can go stale across a rework cycle.
-- The scrum stub size row in `size-budget.json` guards little; the `core+scrum` budget is 57417 B after the Phase 5 fix wave (spec target 40960 B).
-- Kanban WIP limits bound active cards (`in_progress`, `blocked`, `awaiting_human`); cards the engine advanced into a column's queue are reported as `queued` and surfaced by operations-review, not refused.
-- Kanban `wipBypass` is the total number of extra slots a column grants while any expedite is active, not one per expedite.
-- Kanban cadences use `item.completed` counts as turns; a wall-clock cadence schedule is the host's job.
-- Minor test gaps: retro duplicate-ref rejection, `writeAtomic` failure path, thin CLI usage and `decide` tests.
-- Waterfall traceability is keyed by phase ids, not item types (spec §10 wording); links are read in both directions.
-- Waterfall `editItem`/`addItem` called directly (not through `applyAction` or the CLI) bypass `baseline-immutable`.
-- Waterfall phase budgets reuse `Iteration`; `exwf status` shows the open phase as `openIteration`. With no accounting history the planner estimates 20000 tokens per weight unit, so a small phase budget dispatches nothing until `next({ fallbackTokensPerWeight })` is passed or history exists.
-- Phase retrospective applies `agreement` lessons only; other suggested changes are stored for the host.
-- `plan auto` honours `sprintBudget.turns` only when no `tokens` budget is set; with both, it may commit more items than the turns budget can dispatch and the rest carry over.
-- Waterfall `phaseRetrospective` lessons carry no `from` or `item`; attribution is Scrum-only.
-- A carryover left at `awaiting_human` or `blocked` in the review stage re-enters at the sprint start, not at review; only a `review` status resumes (#10).
-- `correctAccounting` attributes a line to the iteration whose window contains `endedAt` and that carried the item; an `endedAt` outside the sprint window gets `iteration: null` and no spent adjustment.
-- A flag given without a value (`--note`, `--model`, `--blocker`) parses as the string "true".
+- Stale-lock takeover (B01): the re-stat narrows the race to the gap between the stat and the `unlink`, which no portable call closes; on Windows `ino` is 0, so only the mtime is compared.
+- Conflict of interest (B02): `"conflict-of-interest"` stays a declared, reserved `ErrorCode` that is never thrown, and the core rule matching action type `complete` stays dormant; `checkGate` already refuses the case as `gate-unmet`, and removing the code would narrow a public type.
+- Blockers (B03): a blocker is owned by a human, and clearing it would need a link from the follow-up that the schema does not carry; `exwf unblock` is the path.
+- Scrum stage ids (B06): `backlog`, `sprint` and `review` are owned by the module (about twenty uses); init refuses a config that lacks them.
+- Uncommit while closing (B07): `ceremony uncommit` stays allowed during `closing` because it only shrinks the sprint.
+- Roles on load (B09): state wins on an id conflict, `exwf role add` is the audited path, and re-merging is idempotent.
+- Scrum size row (B11): budgets sit at measured size by the owner's standing decision; the row stays as a tripwire.
+- Kanban WIP (B12): the engine must not refuse a card it advanced itself; operations-review surfaces queued cards.
+- Kanban `wipBypass` (B13): it is a column total; re-scoping the key after 1.0 would break configs.
+- Kanban cadences (B14): the key is `everyTurns` because the engine has no clock; wall-clock schedules are the host's job.
+- Waterfall traceability (B16): it is keyed by phase ids because the core item union has no requirement, design or test types; phase membership classifies items.
+- Direct primitives (B17): `editItem` and `addItem` bypass `baseline-immutable` by design; `applyAction` and the CLI enforce it.
+- Phase budgets (B18): a phase budget reuses `Iteration` and `status` shows `openIteration`; the naming is accepted, and `fallbackTokensPerWeight` covers the no-history case.
+- Phase retrospective (B19): baselines and config are locked in Waterfall, so only `agreement` lessons apply; `dod` and `backlog` suggestions are stored for the host.
+- Accounting outside sprints (B23): a line whose `endedAt` lies outside every sprint window has no sprint to charge.
+- Waterfall deliverables (T06): `deliverables-present` aggregates raw item evidence while stage gates use fresh evidence; the two diverge only when one config uses both.
+- Rework in flight (T06): an item reworked mid-flight in a state written before 0.6.0-stage needs fresh evidence before it can pass.
+- Flag values (B24): a value that starts with `--` cannot be passed as a flag value, so the parser reads it as the next flag.
 
 ## Development gate
 

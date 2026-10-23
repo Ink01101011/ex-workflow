@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0-stage (unreleased)
+
+Pre-release under the `stage` dist-tag. Phase 6 (backlog zero) fixes or explicitly accepts all 24 items the 1.0 definition named; the decisions are in the design spec, section 22, and the accepted limitations are in the README.
+
+- Stale-lock takeover (B01): the lock is re-stat'd (inode and mtime) immediately before `unlink`; a changed lock aborts the takeover with the existing lock-held error. The residual window between the stat and the unlink is accepted.
+- Completion rules (B02): `complete()` runs the methodology rules through `applyAction` with action type `item.complete` after validation, so rule hooks see completions; `checkGate` still answers `gate-unmet` for a conflict of interest.
+- Gate approval (B05): `decide(approve)` honours a `needs-review` verdict from the item's last `item.completed` event and advances to the review stage.
+- Scrum status (B04): `exwf status` reports a `report` for Scrum (`{ closing, sprint, reason, inFlight }`), so a sprint left in `closing` is flagged.
+- Scrum closing (B07): the `sprint-closing` rule refuses `ceremony commit` into a closing sprint; `uncommit` stays allowed.
+- Scrum stage ids (B06): `init` refuses a Scrum config whose stages lack `backlog`, `sprint` or `review` (`config-invalid`).
+- CLI write order (B08): `next` and `complete` write briefs and handoff files before the state.
+- Evidence freshness (B10, semantic change, own commit): policies and gates count only evidence recorded after the item's last `item.rework` event; revert that commit alone to restore append-only evidence.
+- Test gaps (B15): `writeAtomic` failure path, `decide` reject and unknown-pending cases, and a usage exit-2 test per command group.
+- Planner budgets (B20): `plan auto` applies the `tokens` and `turns` limits together.
+- Carryover (B22): a carryover blocked or awaiting human in the review stage resumes at review, as `review` already did.
+- Waterfall fallback (B18): `WaterfallConfig.fallbackTokensPerWeight` (optional) feeds the planner like Scrum's `fallbackTokensPerWeight`.
+- Waterfall lessons (B21): phase retrospective lessons carry `from` and `item`, as in Scrum (`from` defaults to the retro's `by`).
+- Valueless flags (B24): a value-taking flag given without a value is `invalid-input` naming the flag; `--estimate` is the only boolean flag.
+
+Compatibility: no `state.json` schema change and no new event kind; every `.workflow/state.json` written by an earlier stage loads unchanged. The generated `WaterfallConfig` schema document gains one optional key, `fallbackTokensPerWeight`. Behaviour changes, all deliberate: rules run on `item.complete` (B02); `decide(approve)` honours `needs-review` (B05); `ceremony commit` is refused into a closing sprint (B07); a freshly reworked item needs fresh evidence before it passes (B10); a blocked or awaiting-human carryover in review resumes at review (B22); `plan auto` applies tokens and turns together (B20); a value-taking flag without a value is refused (B24); Scrum's `status.report` is no longer `null`.
+
 ## 0.5.0-stage (unreleased)
 
 Pre-release under the `stage` dist-tag. Phase 5 closes the engine gaps the workflowAI scrum-master dogfood raised (issues #8–#21); the decisions are in the design spec, section 21.

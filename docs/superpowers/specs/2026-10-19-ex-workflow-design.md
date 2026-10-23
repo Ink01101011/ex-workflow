@@ -521,7 +521,7 @@ maintenance) with formal change control and traceability.
 interface WaterfallConfig {
   phases: Array<{ id: string; name: string; deliverables: string[]; gate: Gate }>;   // ordered
   changeControl: { requiresImpactAnalysis: boolean; approvers: Array<"human" | { capability: string }> };
-  traceability: { from: ItemType; to: ItemType[] };    // default requirement -> design, test
+  traceability: { from: string; to: string[] }  // phase ids
   humanGates: "all" | string[];                         // default "all"
 }
 ```
