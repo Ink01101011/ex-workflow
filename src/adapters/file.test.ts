@@ -1,6 +1,17 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
+import fsp from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, stat, writeFile, mkdir } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  stat,
+  writeFile,
+  mkdir,
+  unlink,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createState } from "../state.ts";
@@ -220,4 +231,57 @@ test("loadState refuses a role manifest that fails the schema and does not merge
     );
     return true;
   });
+});
+
+test("withStateLock does not unlink a stale lock that was replaced after the first stat (B01)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await mkdir(path.join(root, ".workflow"));
+  const lock = path.join(root, ".workflow", "state.lock");
+  await writeFile(lock, "123 old\n");
+  const old = new Date(Date.now() - 3_600_000);
+  await utimes(lock, old, old);
+  const realStat = fsp.stat;
+  let replaced = false;
+  mock.method(fsp, "stat", async (...args: Parameters<typeof realStat>) => {
+    const st = await realStat(...args);
+    if (!replaced && String(args[0]) === lock) {
+      replaced = true;
+      // another recoverer takes over right after our first stat
+      await unlink(lock);
+      await writeFile(lock, "999 fresh\n");
+    }
+    return st;
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withStateLock(root, async () => "stolen", { retries: 0, staleMs: 60_000 }),
+      invalid,
+    );
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+  assert.equal(await readFile(lock, "utf8"), "999 fresh\n");
+});
+
+test("writeAtomic failure removes the temp file and throws invalid-input (B15)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  mock.method(fsp, "rename", async () => {
+    throw new Error("EXDEV simulated");
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(saveState(root, fresh()), (e: unknown) => {
+      assert.ok(e instanceof WorkflowError);
+      assert.equal(e.code, "invalid-input");
+      assert.match(e.message, /cannot write/);
+      assert.ok(e.fix.length > 0);
+      return true;
+    });
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+  assert.deepEqual(await readdir(path.join(root, ".workflow")), []);
 });

@@ -416,6 +416,7 @@ export type ErrorCode =
   | "invalid-transition"
   | "policy-unmet"
   | "gate-unmet"
+  /** reserved: never thrown; kept for type compatibility */
   | "conflict-of-interest"
   | "handoff-invalid"
   | "accounting-invalid"

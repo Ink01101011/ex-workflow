@@ -16,6 +16,8 @@ export interface WaterfallConfig {
   /** phase ids: every item of `from` must trace to an item of each `to` phase before that phase's gate */
   traceability: { from: string; to: string[] };
   humanGates: "all" | string[];
+  /** tokens per weight unit when there is no accounting history (default 20000, as Scrum) */
+  fallbackTokensPerWeight?: number;
 }
 
 export const DEFAULT_PHASE_IDS: readonly string[] = [
@@ -288,10 +290,22 @@ export function validateWaterfallConfig(raw: unknown): WaterfallConfig {
     }
     traceability = { from: tr["from"], to: [...to] };
   }
-  return {
+  const fallback = c["fallbackTokensPerWeight"];
+  if (
+    fallback !== undefined &&
+    (typeof fallback !== "number" || !Number.isFinite(fallback) || fallback <= 0)
+  )
+    fail(
+      "config-invalid",
+      "waterfall config.fallbackTokensPerWeight must be a positive finite number",
+      "omit it for the default 20000",
+    );
+  const out: WaterfallConfig = {
     phases,
     changeControl,
     traceability,
     humanGates: hg === "all" ? "all" : [...(hg as string[])],
   };
+  if (fallback !== undefined) out.fallbackTokensPerWeight = fallback;
+  return out;
 }

@@ -1,14 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../methodology.ts";
-import { addItem, getItem } from "../items.ts";
+import { addItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
-import { authorOf } from "../gates.ts";
+import { authorOf, decide } from "../gates.ts";
 import { WorkflowError } from "../errors.ts";
-import { scrum } from "./index.ts";
+import { resumeStageOf, scrum } from "./index.ts";
+import { scrumStages } from "./stages.ts";
 import { dailyReport } from "./ceremonies.ts";
-import type { Accounting, Handoff, WorkflowState } from "../types.ts";
+import type { Accounting, Handoff, Stage, WorkflowState } from "../types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const T1 = "2026-10-19T01:00:00.000Z";
@@ -511,6 +512,104 @@ test("#10 commit resumes a carried-over review item at review and reports it as 
   assert.deepEqual((r.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
 });
 
+function carried(stage: string, status: "blocked" | "awaiting_human"): WorkflowState {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  if (stage === "review") s = complete(s, m, h("A"), a("A", 50), T0).state;
+  s = moveItem(s, "A", { status }, "system", T0);
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  return c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+}
+
+for (const status of ["blocked", "awaiting_human"] as const) {
+  test(`B22 a ${status} carryover left in the review stage resumes at review on plan and on commit`, () => {
+    const s = carried("review", status);
+    assert.equal(getItem(s, "A").status, "todo");
+    const p = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] });
+    assert.equal(p.state.items["A"]!.stage, "review");
+    assert.equal(p.state.items["A"]!.status, "review");
+    assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+    let s2 = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["B"] }).state;
+    s2 = c["commit"]!(s2, { by: "product-owner", now: T1, items: ["A"], goalImpact: "none" }).state;
+    assert.equal(s2.items["A"]!.stage, "review");
+    assert.equal(s2.items["A"]!.status, "review");
+    assert.deepEqual((s2.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+  });
+}
+
+test("B22 a blocked carryover left in the sprint stage still restarts at the sprint start", () => {
+  let s = carried("sprint", "blocked");
+  s = c["refine"]!(s, { by: "product-owner", now: T1, reestimate: ["A"] }).state;
+  const p = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] });
+  assert.equal(p.state.items["A"]!.stage, "sprint");
+  assert.equal(p.state.items["A"]!.status, "todo");
+  assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, []);
+});
+
+function qaCarried(): WorkflowState {
+  const [backlogStage, sprint, inProgress, review, done] = scrumStages(config as never);
+  const stages: Stage[] = [
+    backlogStage!,
+    sprint!,
+    {
+      ...inProgress!,
+      gate: { id: "h", requires: ["human"], evidence: [], onFail: { action: "block" as const } },
+    },
+    { id: "qa", name: "QA", entryPolicy: [], exitPolicy: [] },
+    review!,
+    done!,
+  ];
+  let { state } = init({ methodology: m, config, stages, now: T0 });
+  state = addItem(
+    state,
+    { id: "A", title: "a", weight: 1, priority: 3, acceptance: ["ok"] },
+    "product-owner",
+    T0,
+  );
+  let s = c["plan"]!(state, { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(s, m, h("A", "developer", { verdict: "needs-review" }), a("A", 50), T0).state;
+  s = decide(s, s.pending[0]!.id, "approve", "human", "", T0);
+  assert.equal(getItem(s, "A").stage, "qa");
+  assert.equal(getItem(s, "A").status, "review");
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  return c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+}
+
+test("B22 a review-status carryover left in a non-review stage resumes there without a reestimate", () => {
+  const s = qaCarried();
+  const p = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] });
+  assert.equal(p.state.items["A"]!.stage, "qa");
+  assert.equal(p.state.items["A"]!.status, "review");
+  assert.deepEqual((p.state.events.at(-1)!.payload as { resumed: string[] }).resumed, ["A"]);
+});
+
+test("B22 resumeStageOf without state recognises only a review status", () => {
+  const s = qaCarried();
+  assert.equal(resumeStageOf(getItem(s, "A")), "qa");
+  const t = getItem(s, "A").transitions.at(-1)!;
+  const other = {
+    ...getItem(s, "A"),
+    transitions: [{ ...t, from: { ...t.from, status: "blocked" as const } }],
+  };
+  assert.equal(resumeStageOf(other), undefined);
+});
+
+test("B22 a blocked-in-review item uncommitted by a human restarts at the sprint start", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["B"] }).state;
+  s = next(s, m, { now: T0, fallbackTokensPerWeight: 10 }).state;
+  s = complete(s, m, h("B"), a("B", 50), T0).state;
+  s = moveItem(s, "B", { status: "blocked" }, "system", T0);
+  s = c["uncommit"]!(s, { by: "product-owner", now: T0, items: ["B"], reason: "x" }).state;
+  s = c["review"]!(s, { by: "human", now: T1, accepted: false, goalMet: false }).state;
+  s = c["retro"]!(s, { by: "scrum-master", now: T1, lessons: [] }).state;
+  s = c["plan"]!(s, { by: "scrum-master", now: T1, goal: "g2", items: ["A"] }).state;
+  s = c["commit"]!(s, { by: "product-owner", now: T1, items: ["B"], goalImpact: "none" }).state;
+  assert.equal(s.items["B"]!.stage, "sprint");
+  assert.equal(s.items["B"]!.status, "todo");
+  assert.deepEqual((s.events.at(-1)!.payload as { resumed: string[] }).resumed, []);
+});
+
 test("#11 refine reestimate confirms a weight and satisfies carryover-reestimated", () => {
   let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["B"] }).state;
   s = c["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state;
@@ -689,4 +788,40 @@ test("#12 #13 retro replaces and retires agreements, and attributes lessons to t
     codeOf(() => c["retro"]!(s, { ...base, lessons: [{ text: "x", scope: "policy", from: 3 }] })),
     "invalid-input",
   );
+});
+
+test("plan auto applies tokens and turns together (B20)", () => {
+  const s = {
+    ...backlog(),
+    config: { ...config, sprintBudget: { tokens: 100000, turns: 1 } },
+  };
+  const r = c["plan"]!(s, { by: "scrum-master", now: T0, goal: "g", items: "auto" });
+  assert.equal(r.state.iterations[0]!.committed.length, 1);
+  const skipped = (
+    r.state.events.find((e) => e.type === "sprint.opened")!.payload as {
+      skipped: Array<{ reason: string; detail: string }>;
+    }
+  ).skipped;
+  assert.equal(skipped.length, 2);
+  assert.ok(skipped.every((x) => x.reason === "budget" && x.detail === "turns budget full"));
+});
+
+test("plan auto skips a candidate that would overrun the tokens budget when turns remain (B20)", () => {
+  const s = {
+    ...backlog(),
+    config: {
+      ...config,
+      sprintBudget: { tokens: 30000, turns: 10 },
+      fallbackTokensPerWeight: 20000,
+    },
+  };
+  const r = c["plan"]!(s, { by: "scrum-master", now: T0, goal: "g", items: "auto" });
+  assert.deepEqual(r.state.iterations[0]!.committed, ["A"]);
+  const skipped = (
+    r.state.events.find((e) => e.type === "sprint.opened")!.payload as {
+      skipped: Array<{ id: string; reason: string; detail: string }>;
+    }
+  ).skipped;
+  assert.ok(skipped.length > 0);
+  assert.ok(skipped.every((x) => x.reason === "budget" && x.detail.includes("needs about")));
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createState } from "./state.ts";
+import { appendEvent, createState } from "./state.ts";
 import { addEvidence, addItem, getItem, moveItem } from "./items.ts";
 import { authorOf, checkGate, decide, raisePending } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
@@ -160,4 +160,21 @@ test("decide hands the removed pending entry to methodology.afterDecide", () => 
   const s3 = decide(s, "p1", "reject", "human", "no", T0);
   assert.deepEqual(s3.pending, []);
   assert.deepEqual(s3.agreements, []);
+});
+
+test("B10: gate evidence recorded before the last rework no longer counts; fresh evidence does; second rework resets", () => {
+  const T1 = "2026-10-19T01:00:00.000Z";
+  const T2 = "2026-10-19T02:00:00.000Z";
+  const T3 = "2026-10-19T03:00:00.000Z";
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r1", by: "dev" }, T0);
+  assert.equal(checkGate(s, getItem(s, "A"), gate, "qa").outcome, "pass");
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "n" }, T1);
+  const stale = checkGate(s, getItem(s, "A"), gate, "qa");
+  assert.equal(stale.outcome, "fail");
+  if (stale.outcome === "fail") assert.equal(stale.violations[0]!.rule, "gate:evidence");
+  assert.equal(getItem(s, "A").evidence.length, 1);
+  s = addEvidence(s, "A", { kind: "test-report", ref: "r2", by: "dev" }, T2);
+  assert.equal(checkGate(s, getItem(s, "A"), gate, "qa").outcome, "pass");
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "m" }, T3);
+  assert.equal(checkGate(s, getItem(s, "A"), gate, "qa").outcome, "fail");
 });

@@ -1709,6 +1709,9 @@ export const WATERFALL_DEFINITIONS: Record<string, JsonSchema> = {
           },
         ],
       },
+      fallbackTokensPerWeight: {
+        type: "number",
+      },
     },
     required: ["phases", "changeControl", "traceability", "humanGates"],
     additionalProperties: false,

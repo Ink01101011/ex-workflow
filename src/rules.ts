@@ -20,6 +20,7 @@ export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilitie
     id: "conflict-of-interest",
     severity: "error",
     check(state, action: Action): Violation[] {
+      // dormant by design: completions reach rules as "item.complete" (spec §22 B02), so this match never fires
       if (action.type !== "complete") return [];
       const handoff = (action.payload as { handoff?: Handoff } | undefined)?.handoff;
       if (!handoff) return [];

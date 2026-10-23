@@ -384,3 +384,65 @@ test("plannerOptions carries estimateMode and fallbackTokensPerWeight from the c
   assert.equal(po.estimateMode, "per-call");
   assert.equal(po.fallbackTokensPerWeight, 1234);
 });
+
+test("report flags a closing sprint with its reason and in-flight items (B04)", () => {
+  const m = scrum();
+  let { state } = init({
+    methodology: m,
+    config: { ...config, sprintBudget: { turns: 1 }, autoClose: false },
+    now: T0,
+  });
+  assert.deepEqual(m.report!(state), { closing: false, sprint: null, reason: null, inFlight: [] });
+  for (const id of ["A", "B"])
+    state = addItem(state, { id, title: id, weight: 1, acceptance: ["ok"] }, "product-owner", T0);
+  state = m.ceremonies["plan"]!(state, {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A"],
+  }).state;
+  assert.deepEqual(m.report!(state), { closing: false, sprint: "S1", reason: null, inFlight: [] });
+  state = next(state, m, { now: T0 }).state;
+  state = complete(state, m, hand("A"), acct("A", 10), T0).state;
+  assert.deepEqual(m.report!(state), {
+    closing: true,
+    sprint: "S1",
+    reason: "budget",
+    inFlight: [],
+  });
+  const busy = {
+    ...state,
+    items: {
+      ...state.items,
+      B: { ...state.items["B"]!, iteration: "S1", status: "in_progress" as const },
+    },
+  };
+  assert.deepEqual(m.report!(busy).inFlight, ["B"]);
+  // a committed in-progress item without `iteration` (legacy state) counts too, as in the planner
+  const c = { ...busy.items["B"]!, id: "C" };
+  delete (c as { iteration?: string }).iteration;
+  const legacy = {
+    ...busy,
+    items: { ...busy.items, C: c },
+    iterations: busy.iterations.map((x) =>
+      x.id === "S1" ? { ...x, committed: [...x.committed, "C"] } : x,
+    ),
+  };
+  assert.deepEqual(m.report!(legacy).inFlight, ["B", "C"]);
+});
+
+test("init refuses scrum stages that lack backlog, sprint or review (B06)", () => {
+  const m = scrum();
+  const stages = m.defaultStages(validateScrumConfig(config));
+  for (const missing of ["backlog", "sprint", "review"])
+    assert.throws(
+      () =>
+        init({ methodology: m, config, stages: stages.filter((s) => s.id !== missing), now: T0 }),
+      (e: unknown) =>
+        e instanceof WorkflowError &&
+        e.code === "config-invalid" &&
+        e.message.includes(missing) &&
+        e.fix.length > 0,
+    );
+  assert.ok(init({ methodology: m, config, stages, now: T0 }).state);
+});

@@ -31,16 +31,18 @@ export function configOf(state: WorkflowState): ScrumConfig {
   return state.config as ScrumConfig;
 }
 
-/** The stage a carried-over item was returned from when it was in review: it resumes there, not at the sprint start. */
-export function resumeStageOf(item: WorkItem): string | undefined {
+/**
+ * The stage a carried-over item was returned from when it was in a review stage: it resumes there, not at the
+ * sprint start. closeSprint releases blocked and awaiting_human items, so the stage (its `review` flag) is read from
+ * the last system transition, not the status. Without `state` only a `review` status is recognised.
+ */
+export function resumeStageOf(item: WorkItem, state?: WorkflowState): string | undefined {
   const t = item.transitions.at(-1);
-  return t &&
-    t.by === "system" &&
-    t.to.stage === "backlog" &&
-    t.to.status === "todo" &&
-    t.from.status === "review"
-    ? t.from.stage
-    : undefined;
+  if (!t || t.by !== "system" || t.to.stage !== "backlog" || t.to.status !== "todo")
+    return undefined;
+  if (!state) return t.from.status === "review" ? t.from.stage : undefined;
+  const st = state.stages.find((x) => x.id === t.from.stage);
+  return st?.review || t.from.status === "review" ? t.from.stage : undefined;
 }
 
 /** Send an item back to the backlog: clear its open blockers and pending decisions, strip iteration and role. */
@@ -181,6 +183,23 @@ export function scrum(): Methodology<ScrumConfig> {
     ceremonies: scrumCeremonies(scrum),
     rules: scrumRules(),
     metrics: (state) => ({ ...scrumMetrics(state) }),
+    report(state) {
+      const it = openIteration(state);
+      return {
+        closing: it?.closing === true,
+        sprint: it?.id ?? null,
+        reason: it?.closing ? "budget" : null,
+        inFlight: it
+          ? Object.values(state.items)
+              .filter(
+                (i) =>
+                  (i.iteration === it.id || it.committed.includes(i.id)) &&
+                  i.status === "in_progress",
+              )
+              .map((i) => i.id)
+          : [],
+      };
+    },
     humanDefaults: { gates: ["sprint-review"] },
     afterConfigChange(state) {
       return setDod(state, configOf(state).definitionOfDone);
@@ -189,7 +208,7 @@ export function scrum(): Methodology<ScrumConfig> {
       const it = openIteration(state);
       if (!it || (!it.closing && !isExhausted(it.budget, it.spent))) return state;
       const inFlight = Object.values(state.items).some(
-        (i) => i.iteration === it.id && i.status === "in_progress",
+        (i) => (i.iteration === it.id || it.committed.includes(i.id)) && i.status === "in_progress",
       );
       if (!inFlight && configOf(state).autoClose !== false)
         return closeSprint(state, "budget", now);

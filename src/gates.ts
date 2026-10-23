@@ -1,5 +1,5 @@
 import { fail } from "./errors.ts";
-import { advanceItem, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
+import { advanceItem, freshEvidence, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
 import { approverIds } from "./roles.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
@@ -48,8 +48,9 @@ export function checkGate(
   by: string,
 ): GateResult {
   const violations: Violation[] = [];
+  const fresh = freshEvidence(state, item);
   for (const kind of gate.evidence) {
-    if (!item.evidence.some((e) => e.kind === kind)) {
+    if (!fresh.some((e) => e.kind === kind)) {
       violations.push({
         rule: "gate:evidence",
         severity: "error",
@@ -170,7 +171,14 @@ export function decide(
     const id = item0.id;
     const gateId = entry.gate ?? gate?.id ?? null;
     if (decision === "approve") {
-      next = advanceItem(next, id, by, false, at);
+      let wantsReview = false;
+      for (let i = state.events.length - 1; i >= 0; i--) {
+        const e = state.events[i]!;
+        if (e.type !== "item.completed" || (e.payload as { id?: string }).id !== id) continue;
+        wantsReview = (e.payload as { verdict?: string }).verdict === "needs-review";
+        break;
+      }
+      next = advanceItem(next, id, by, wantsReview, at);
       next = appendEvent(next, "gate.passed", by, { item: id, gate: gateId }, at);
     } else {
       const onFail = gate?.onFail ?? { action: "block" as const };

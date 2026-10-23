@@ -203,6 +203,10 @@ function selectAuto(state: WorkflowState, budget: Budget): { ids: string[]; skip
       });
       continue;
     }
+    if (budget.turns !== undefined && ids.length >= budget.turns) {
+      skipped.push({ id: item.id, reason: "budget", detail: "turns budget full" });
+      continue;
+    }
     if (budget.tokens !== undefined) {
       const est = estimateTokens(state, item.weight, cfg.fallbackTokensPerWeight, cfg.estimateMode);
       if (tokens + est > budget.tokens) {
@@ -214,9 +218,6 @@ function selectAuto(state: WorkflowState, budget: Budget): { ids: string[]; skip
         continue;
       }
       tokens += est;
-    } else if (budget.turns !== undefined && ids.length >= budget.turns) {
-      skipped.push({ id: item.id, reason: "budget", detail: "turns budget full" });
-      continue;
     }
     ids.push(item.id);
   }
@@ -328,7 +329,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       const carryover = wanted.filter((w) => last?.carryover.includes(w));
       const resumed: string[] = [];
       for (const w of wanted) {
-        const rs = resumeStageOf(getItem(s, w));
+        const rs = resumeStageOf(getItem(s, w), s);
         if (rs) resumed.push(w);
         s = moveItem(
           s,
@@ -389,7 +390,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     return act(state, "ceremony.commit", input, (s, now) => {
       const resumed: string[] = [];
       for (const id of items) {
-        const rs = resumeStageOf(getItem(s, id));
+        const rs = resumeStageOf(getItem(s, id), s);
         if (rs) resumed.push(id);
         s = moveItem(
           s,
