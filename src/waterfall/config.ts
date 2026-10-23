@@ -19,10 +19,7 @@ export interface WaterfallConfig {
   /** tokens per weight unit when there is no accounting history (default 20000, as Scrum) */
   fallbackTokensPerWeight?: number;
 }
-/**
- * WaterfallConfig plus keys not yet in the generated JSON schema (B18); fold into WaterfallConfig
- * and run schema:gen when a schema change is allowed.
- */
+
 export const DEFAULT_PHASE_IDS: readonly string[] = [
   "requirements",
   "design",
