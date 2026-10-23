@@ -104,7 +104,7 @@ State lives in `.workflow/`. Every command prints JSON; errors exit 1, bad usage
 | `account <item> [--line n] [--tokens-in n] [--tokens-out n] [--duration-ms n] [--model m] [--by who]` | `{ ok, line, event }`: rewrites one accounting line of an item (the last by default), adjusts the owning sprint or phase, clears the placeholder flag and records `accounting.corrected` |
 | `ceremony <name> [input.json] [--by who]` | `{ ok, warnings, lastEvent }` |
 | `decide <pendingId> approve\|reject --by who [--note text]` | `{ ok, item }` (runs the methodology's `afterDecide`, e.g. a Waterfall phase baseline) |
-| `config set <patch.json> [--by who]` | `{ ok, warnings, changed, config }`: merges a patch into the methodology config between iterations (refused while an iteration is open, and for locked keys) |
+| `config set <patch.json> [--by who]` | `{ ok, warnings, changed, config }`: merges a patch into the methodology config between iterations (refused while an iteration is open, and for locked keys); the merge is shallow: top-level keys replace wholesale, so `{ "sprintBudget": { "tokens": N } }` drops `turns`/`wallclockMs` |
 | `unblock <item> [--blocker id] [--note text] [--by who]` | `{ ok, warnings, item }`: clears the named open blocker, or every open one |
 | `status` | `{ ok, methodology, openIteration, counts, pending, openQuestions, lastEvent, report }` (`openQuestions` lists the questions a `done` completion left open; `report` is the methodology's own status: Kanban's cadences due, Waterfall's phases, pending gates and traceability coverage; `null` for Scrum) |
 | `board` | `{ ok, columns }` |
@@ -179,7 +179,7 @@ Minor items deferred past 0.5.0-stage:
 - A sprint left in `closing` with `autoClose: false` is not flagged in `exwf status`; run `ceremony review` to close it.
 - `decide(approve)` ignores a `needs-review` verdict.
 - `setDod` hard-codes the `review` stage id in the Scrum methodology.
-- The `closing` sprint state is not enforced on commit, plan or uncommit.
+- The `closing` sprint state is not enforced on commit or uncommit.
 - State is written before briefs; a crash between the two leaves them out of step.
 - `roles/*.json` are re-merged on every load.
 - Evidence can go stale across a rework cycle.
@@ -192,6 +192,11 @@ Minor items deferred past 0.5.0-stage:
 - Waterfall `editItem`/`addItem` called directly (not through `applyAction` or the CLI) bypass `baseline-immutable`.
 - Waterfall phase budgets reuse `Iteration`; `exwf status` shows the open phase as `openIteration`. With no accounting history the planner estimates 20000 tokens per weight unit, so a small phase budget dispatches nothing until `next({ fallbackTokensPerWeight })` is passed or history exists.
 - Phase retrospective applies `agreement` lessons only; other suggested changes are stored for the host.
+- `plan auto` honours `sprintBudget.turns` only when no `tokens` budget is set; with both, it may commit more items than the turns budget can dispatch and the rest carry over.
+- Waterfall `phaseRetrospective` lessons carry no `from` or `item`; attribution is Scrum-only.
+- A carryover left at `awaiting_human` or `blocked` in the review stage re-enters at the sprint start, not at review; only a `review` status resumes (#10).
+- `correctAccounting` attributes a line to the iteration whose window contains `endedAt` and that carried the item; an `endedAt` outside the sprint window gets `iteration: null` and no spent adjustment.
+- A flag given without a value (`--note`, `--model`, `--blocker`) parses as the string "true".
 
 ## Development gate
 

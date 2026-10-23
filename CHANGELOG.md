@@ -4,7 +4,7 @@
 
 Pre-release under the `stage` dist-tag. Phase 5 closes the engine gaps the workflowAI scrum-master dogfood raised (issues #8–#21); the decisions are in the design spec, section 21.
 
-- Planner budget gates and `closing` (#16): the planner gates on `turns` and `wallclockMs` as well as `tokens`; a spent dimension skips each ready item with reason `budget` and answers `budget-exhausted`; an iteration in `closing` answers `budget-exhausted`, not `no-candidates`. `ScrumConfig.autoClose: false` keeps an exhausted sprint in `closing` until `review` or `cancel` closes it.
+- Planner budget gates and `closing` (#16): the planner gates on `turns` and `wallclockMs` as well as `tokens`; in-flight items are counted by the iteration's committed list as well as `item.iteration`; a spent dimension skips each ready item with reason `budget` and answers `budget-exhausted`; an iteration in `closing` answers `budget-exhausted`, not `no-candidates`. `ScrumConfig.autoClose: false` keeps an exhausted sprint in `closing` until `review` or `cancel` closes it.
 - Estimate mode, fallback and CLI flag (#21): `ScrumConfig.estimateMode` (`per-weight` or `per-call`) and `ScrumConfig.fallbackTokensPerWeight`; `exwf next --fallback-tokens-per-weight n`.
 - Zero accounting and `exwf account` (#9): `complete()` refuses 0 tokens unless the handoff is declared an estimate (`exwf complete --estimate`); `correctAccounting` and `exwf account` correct one line of an item's accounting, adjust the owning sprint or phase, and record `accounting.corrected`; Scrum metrics fold corrections made after a sprint closed into its frozen `spent`.
 - `metrics.current` (#15): mid-sprint figures for the open sprint (spent, committed and done weight, cost per point, budget utilisation), all zero when no sprint is open.
@@ -18,6 +18,7 @@ Pre-release under the `stage` dist-tag. Phase 5 closes the engine gaps the workf
 - `dod-not-weakened` at retro (#20): a retro between sprints that drops a Definition of Done policy is refused unless `allowWeaken: true`; `dodChanges` replaces the whole list, `suggestedChange { kind: "dod" }` appends one.
 - Agreements replace and retire (#12): a retro lesson's agreement may `replaces` an earlier one, and `retire` lists agreements to remove, matched by exact text; Waterfall's phase retrospective shares the helper.
 - Lesson `from` and `item` (#13): a retro lesson is attributed to a role (or `human`) and may name an item; `from` defaults to the retro's `by`.
+- Events and hooks: `Methodology.lockedConfigKeys` and `afterConfigChange`; `estimateTokens(state, weight, fallback, mode)`; new event kinds `agreement.retired` and `item.reestimated`; payload additions `item.completed.open_questions`, `sprint.opened.skipped` / `resumed`, `sprint.committed.resumed`, `blocker.cleared.note` and retro `retired`.
 
 Compatibility: every `.workflow/state.json` written by an earlier stage loads unchanged (every new field is optional). Behaviour changes, all deliberate: a 0-token completion now needs `--estimate`; `plan auto` no longer aborts on an incomplete candidate and keeps walking past one that does not fit; a review-stage carryover re-enters at `review`; a retro that drops a DoD policy between sprints needs `allowWeaken: true`; `next` reports `budget-exhausted` for a spent turns budget and for a sprint in `closing`.
 

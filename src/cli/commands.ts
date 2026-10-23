@@ -49,7 +49,7 @@ export const USAGE = [
   "exwf init <scrum|kanban|waterfall> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
   "exwf next [--max n] [--fallback-tokens-per-weight n]",
-  "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--estimate]",
+  "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--estimate] [--role r]",
   "exwf account <item> [--line n] [--tokens-in n] [--tokens-out n] [--duration-ms n] [--model m] [--by who]",
   "exwf ceremony <name> [input.json] [--by who]",
   "exwf decide <pendingId> approve|reject [--by who] [--note text]",
