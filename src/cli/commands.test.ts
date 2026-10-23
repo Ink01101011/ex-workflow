@@ -844,12 +844,13 @@ const COMPLETE = [
 const errOf = (r: { out: unknown }) =>
   out<{ error: { code: string; message: string; fix: string } }>(r).error;
 
+const flagOf = (argv: string[]) => {
+  for (const f of ["--blocker", "--model"]) if (argv.includes(f)) return f;
+  return "--note";
+};
+
 test("a flag given without a value is invalid-input naming the flag (B24)", async () => {
   const { root, h } = await plannedA();
-  const flagOf = (argv: string[]) => {
-    for (const f of ["--blocker", "--model"]) if (argv.includes(f)) return f;
-    return "--note";
-  };
   for (const argv of [
     ["decide", "p1", "approve", "--note"],
     ["unblock", "A", "--blocker"],
