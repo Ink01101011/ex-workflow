@@ -301,3 +301,35 @@ test("carryover-reestimated", () => {
     [],
   );
 });
+
+test("sprint-closing refuses commit into a closing sprint; uncommit stays allowed (B07)", () => {
+  let s = m.ceremonies["plan"]!(withBacklog(), {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A"],
+  }).state;
+  const commit: Action = {
+    type: "ceremony.commit",
+    by: "product-owner",
+    payload: { items: ["B"], goalImpact: "none" },
+  };
+  assert.deepEqual(run(s, commit), []);
+  s = { ...s, iterations: s.iterations.map((i) => ({ ...i, closing: true })) };
+  assert.deepEqual(run(s, commit), ["error:sprint-closing"]);
+  assert.deepEqual(
+    run(s, { type: "ceremony.uncommit", by: "product-owner", payload: { items: ["A"] } }),
+    [],
+  );
+  assert.throws(
+    () =>
+      m.ceremonies["commit"]!(s, {
+        by: "product-owner",
+        now: T1,
+        items: ["B"],
+        goalImpact: "none",
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "rule-violation" && /review or cancel/.test(e.fix),
+  );
+});

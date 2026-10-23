@@ -203,6 +203,10 @@ function selectAuto(state: WorkflowState, budget: Budget): { ids: string[]; skip
       });
       continue;
     }
+    if (budget.turns !== undefined && ids.length >= budget.turns) {
+      skipped.push({ id: item.id, reason: "budget", detail: "turns budget full" });
+      continue;
+    }
     if (budget.tokens !== undefined) {
       const est = estimateTokens(state, item.weight, cfg.fallbackTokensPerWeight, cfg.estimateMode);
       if (tokens + est > budget.tokens) {
@@ -214,9 +218,6 @@ function selectAuto(state: WorkflowState, budget: Budget): { ids: string[]; skip
         continue;
       }
       tokens += est;
-    } else if (budget.turns !== undefined && ids.length >= budget.turns) {
-      skipped.push({ id: item.id, reason: "budget", detail: "turns budget full" });
-      continue;
     }
     ids.push(item.id);
   }

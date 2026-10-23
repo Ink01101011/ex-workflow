@@ -181,6 +181,19 @@ export function scrum(): Methodology<ScrumConfig> {
     ceremonies: scrumCeremonies(scrum),
     rules: scrumRules(),
     metrics: (state) => ({ ...scrumMetrics(state) }),
+    report(state) {
+      const it = openIteration(state);
+      return {
+        closing: it?.closing === true,
+        sprint: it?.id ?? null,
+        reason: it?.closing ? "budget" : null,
+        inFlight: it
+          ? Object.values(state.items)
+              .filter((i) => i.iteration === it.id && i.status === "in_progress")
+              .map((i) => i.id)
+          : [],
+      };
+    },
     humanDefaults: { gates: ["sprint-review"] },
     afterConfigChange(state) {
       return setDod(state, configOf(state).definitionOfDone);

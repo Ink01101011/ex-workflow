@@ -1,3 +1,4 @@
+import { fail } from "../errors.ts";
 import { openIteration } from "../planner.ts";
 import type { Budget, Iteration, Policy, Rule, Violation, WorkflowState } from "../types.ts";
 import type { ItemPatch } from "../items.ts";
@@ -122,6 +123,42 @@ export function scrumRules(): Rule[] {
     },
   };
 
+  const closing: Rule = {
+    id: "sprint-closing",
+    severity: "error",
+    check: (s, a) => {
+      const it = openIteration(s);
+      return a.type === "ceremony.commit" && it?.closing
+        ? [
+            v(
+              "sprint-closing",
+              "error",
+              `sprint ${it.id} is closing: its budget is spent and no new work can start`,
+              "run ceremony review or cancel first, then plan the next sprint",
+            ),
+          ]
+        : [];
+    },
+  };
+
+  const stageIds: Rule = {
+    id: "scrum-stage-ids",
+    severity: "error",
+    check: (s, a) => {
+      if (a.type !== "init") return [];
+      const missing = ["backlog", "sprint", "review"].filter(
+        (id) => !s.stages.some((st) => st.id === id),
+      );
+      if (missing.length)
+        fail(
+          "config-invalid",
+          `scrum stages lack the required id(s): ${missing.join(", ")}`,
+          "keep the stages backlog, sprint and review (omit stages to use the defaults), then run exwf init scrum again",
+        );
+      return [];
+    },
+  };
+
   const poOrders: Rule = {
     id: "po-orders-backlog",
     severity: "error",
@@ -212,5 +249,5 @@ export function scrumRules(): Rule[] {
     },
   };
 
-  return [oneOpen, retroFirst, budgetFixed, scope, poOrders, dod, carry];
+  return [oneOpen, retroFirst, budgetFixed, closing, stageIds, scope, poOrders, dod, carry];
 }

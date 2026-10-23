@@ -278,10 +278,15 @@ test("kanban: init → replenishment → next → complete → status report →
   );
 });
 
-test("status.report is null for scrum", async () => {
+test("status.report is the closing report for scrum", async () => {
   const { root, cfg } = await project();
   await runCommand(["init", "scrum", "--config", cfg], root);
-  assert.equal(out<{ report: unknown }>(await runCommand(["status"], root)).report, null);
+  assert.deepEqual(out<{ report: unknown }>(await runCommand(["status"], root)).report, {
+    closing: false,
+    sprint: null,
+    reason: null,
+    inFlight: [],
+  });
 });
 
 test("add and edit are checked by methodology rules and surface rule violations", async () => {

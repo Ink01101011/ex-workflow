@@ -690,3 +690,19 @@ test("#12 #13 retro replaces and retires agreements, and attributes lessons to t
     "invalid-input",
   );
 });
+
+test("plan auto applies tokens and turns together (B20)", () => {
+  const s = {
+    ...backlog(),
+    config: { ...config, sprintBudget: { tokens: 100000, turns: 1 } },
+  };
+  const r = c["plan"]!(s, { by: "scrum-master", now: T0, goal: "g", items: "auto" });
+  assert.equal(r.state.iterations[0]!.committed.length, 1);
+  const skipped = (
+    r.state.events.find((e) => e.type === "sprint.opened")!.payload as {
+      skipped: Array<{ reason: string; detail: string }>;
+    }
+  ).skipped;
+  assert.equal(skipped.length, 2);
+  assert.ok(skipped.every((x) => x.reason === "budget" && x.detail === "turns budget full"));
+});
