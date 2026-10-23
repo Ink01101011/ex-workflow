@@ -61,6 +61,16 @@
         "default": "./dist/kanban/index.cjs"
       }
     },
+    "./waterfall": {
+      "import": {
+        "types": "./dist/waterfall/index.d.ts",
+        "default": "./dist/waterfall/index.mjs"
+      },
+      "require": {
+        "types": "./dist/waterfall/index.d.cts",
+        "default": "./dist/waterfall/index.cjs"
+      }
+    },
     "./adapters": {
       "import": {
         "types": "./dist/adapters/index.d.ts",
@@ -99,6 +109,9 @@
       ],
       "kanban": [
         "dist/kanban/index.d.ts"
+      ],
+      "waterfall": [
+        "dist/waterfall/index.d.ts"
       ],
       "adapters": [
         "dist/adapters/index.d.ts"
