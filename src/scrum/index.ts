@@ -189,7 +189,11 @@ export function scrum(): Methodology<ScrumConfig> {
         reason: it?.closing ? "budget" : null,
         inFlight: it
           ? Object.values(state.items)
-              .filter((i) => i.iteration === it.id && i.status === "in_progress")
+              .filter(
+                (i) =>
+                  (i.iteration === it.id || it.committed.includes(i.id)) &&
+                  i.status === "in_progress",
+              )
               .map((i) => i.id)
           : [],
       };
@@ -202,7 +206,7 @@ export function scrum(): Methodology<ScrumConfig> {
       const it = openIteration(state);
       if (!it || (!it.closing && !isExhausted(it.budget, it.spent))) return state;
       const inFlight = Object.values(state.items).some(
-        (i) => i.iteration === it.id && i.status === "in_progress",
+        (i) => (i.iteration === it.id || it.committed.includes(i.id)) && i.status === "in_progress",
       );
       if (!inFlight && configOf(state).autoClose !== false)
         return closeSprint(state, "budget", now);

@@ -418,6 +418,17 @@ test("report flags a closing sprint with its reason and in-flight items (B04)", 
     },
   };
   assert.deepEqual(m.report!(busy).inFlight, ["B"]);
+  // a committed in-progress item without `iteration` (legacy state) counts too, as in the planner
+  const c = { ...busy.items["B"]!, id: "C" };
+  delete (c as { iteration?: string }).iteration;
+  const legacy = {
+    ...busy,
+    items: { ...busy.items, C: c },
+    iterations: busy.iterations.map((x) =>
+      x.id === "S1" ? { ...x, committed: [...x.committed, "C"] } : x,
+    ),
+  };
+  assert.deepEqual(m.report!(legacy).inFlight, ["B", "C"]);
 });
 
 test("init refuses scrum stages that lack backlog, sprint or review (B06)", () => {
