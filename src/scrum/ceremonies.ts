@@ -237,7 +237,14 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     requireCap(state, input.by, "define-acceptance", "deliver");
     const items = (input["items"] ?? []) as Array<{ id: string; patch: ItemPatch }>;
     const split = (input["split"] ?? []) as Array<{ from: string; into: NewItem[] }>;
-    const reestimate = (input["reestimate"] ?? []) as string[];
+    const reestimateRaw: unknown = input["reestimate"] ?? [];
+    if (!Array.isArray(reestimateRaw) || !reestimateRaw.every((x) => typeof x === "string"))
+      fail(
+        "invalid-input",
+        "refine.reestimate must be a list of item ids",
+        'pass reestimate: ["A"]',
+      );
+    const reestimate = reestimateRaw as string[];
     if (items.length === 0 && split.length === 0 && reestimate.length === 0)
       fail(
         "invalid-input",
@@ -306,8 +313,12 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     if (wanted.length === 0)
       fail(
         "invalid-input",
-        "no backlog items fit the sprint",
-        "refine the backlog (acceptance + estimates) or raise the budget in config",
+        `no backlog items fit the sprint${
+          skipped.length
+            ? `; skipped: ${skipped.map((x) => `${x.id} (${x.reason}: ${x.detail})`).join(", ")}`
+            : ""
+        }`,
+        "refine the backlog (acceptance + estimates) or raise the budget with exwf config set",
       );
     for (const id of wanted) assertCommittable(state, id);
     return act(state, "ceremony.plan", input, (s, now) => {

@@ -527,6 +527,12 @@ test("#11 refine reestimate confirms a weight and satisfies carryover-reestimate
     codeOf(() => c["refine"]!(noWeight, { by: "product-owner", now: T1, reestimate: ["N"] })),
     "invalid-input",
   );
+  for (const bad of ["B", 7, { id: "B" }, [1]])
+    assert.equal(
+      codeOf(() => c["refine"]!(s, { by: "product-owner", now: T1, reestimate: bad })),
+      "invalid-input",
+      `reestimate ${JSON.stringify(bad)} is refused`,
+    );
 });
 
 test("#18 plan auto skips incomplete and oversized candidates and reports them", () => {
