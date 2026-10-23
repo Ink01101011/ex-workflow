@@ -251,7 +251,7 @@ export function freshEvidence(state: WorkflowState, item: WorkItem): Evidence[] 
     }
     if (ev.type === "item.evidence") after++;
   }
-  return found ? item.evidence.slice(item.evidence.length - after) : item.evidence;
+  return found ? item.evidence.slice(Math.max(0, item.evidence.length - after)) : item.evidence;
 }
 
 export function addEvidence(

@@ -805,3 +805,23 @@ test("plan auto applies tokens and turns together (B20)", () => {
   assert.equal(skipped.length, 2);
   assert.ok(skipped.every((x) => x.reason === "budget" && x.detail === "turns budget full"));
 });
+
+test("plan auto skips a candidate that would overrun the tokens budget when turns remain (B20)", () => {
+  const s = {
+    ...backlog(),
+    config: {
+      ...config,
+      sprintBudget: { tokens: 30000, turns: 10 },
+      fallbackTokensPerWeight: 20000,
+    },
+  };
+  const r = c["plan"]!(s, { by: "scrum-master", now: T0, goal: "g", items: "auto" });
+  assert.deepEqual(r.state.iterations[0]!.committed, ["A"]);
+  const skipped = (
+    r.state.events.find((e) => e.type === "sprint.opened")!.payload as {
+      skipped: Array<{ id: string; reason: string; detail: string }>;
+    }
+  ).skipped;
+  assert.ok(skipped.length > 0);
+  assert.ok(skipped.every((x) => x.reason === "budget" && x.detail.includes("needs about")));
+});

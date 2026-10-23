@@ -120,3 +120,13 @@ test("B10: freshness follows event order, not timestamps: evidence before the re
   s = appendEvent(s, "item.rework", "qa", { id: "B", by: "qa", notes: "n" }, T1);
   assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
 });
+
+test("B10: a hand-built state with more item.evidence events than entries keeps every entry", () => {
+  let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci1", by: "dev" }, T0);
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "n" }, T0);
+  s = addEvidence(s, "A", { kind: "code", ref: "x", by: "dev" }, T0);
+  s = addEvidence(s, "A", { kind: "code", ref: "y", by: "dev" }, T0);
+  for (let i = 0; i < 3; i++) s = appendEvent(s, "item.evidence", "dev", { id: "A" }, T0);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
+});

@@ -264,6 +264,31 @@ const dispatchedWith = (cfg: Record<string, unknown>) => {
   return next(s, m, { now: T1 }).briefs.map((b) => b.item.id);
 };
 
+test("changeConfig accepts fallbackTokensPerWeight between phases and refuses it while a phase is open (B18)", () => {
+  const m = waterfall();
+  const { state } = init({
+    methodology: m,
+    config: { phases: [{ id: "requirements", budget: { tokens: 5000 } }] },
+    now: T0,
+  });
+  const ok = changeConfig(state, m, { fallbackTokensPerWeight: 500 }, "human", T1);
+  assert.equal(
+    (ok.state.config as { fallbackTokensPerWeight: number }).fallbackTokensPerWeight,
+    500,
+  );
+  let s = addItem(
+    state,
+    { id: "R1", title: "r1", phase: "requirements", weight: 1 },
+    "business-analyst",
+    T0,
+  );
+  s = m.ceremonies["kickoff"]!(s, { by: "project-manager", now: T1, phase: "requirements" }).state;
+  assert.throws(
+    () => changeConfig(s, m, { fallbackTokensPerWeight: 500 }, "human", T1),
+    (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+  );
+});
+
 test("fallbackTokensPerWeight is validated and lets a small phase budget dispatch (B18)", () => {
   bad({ fallbackTokensPerWeight: 0 }, /fallbackTokensPerWeight/);
   bad({ fallbackTokensPerWeight: "x" }, /fallbackTokensPerWeight/);

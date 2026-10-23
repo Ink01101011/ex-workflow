@@ -845,7 +845,11 @@ const errOf = (r: { out: unknown }) =>
   out<{ error: { code: string; message: string; fix: string } }>(r).error;
 
 test("a flag given without a value is invalid-input naming the flag (B24)", async () => {
-  const { root, cfg, h } = await plannedA();
+  const { root, h } = await plannedA();
+  const flagOf = (argv: string[]) => {
+    for (const f of ["--blocker", "--model"]) if (argv.includes(f)) return f;
+    return "--note";
+  };
   for (const argv of [
     ["decide", "p1", "approve", "--note"],
     ["unblock", "A", "--blocker"],
@@ -855,18 +859,14 @@ test("a flag given without a value is invalid-input naming the flag (B24)", asyn
     const r = await runCommand(argv, root);
     assert.equal(r.exit, 1, argv.join(" "));
     assert.equal(errOf(r).code, "invalid-input");
-    const flag = argv.includes("--blocker")
-      ? "--blocker"
-      : argv.includes("--model")
-        ? "--model"
-        : "--note";
+    const flag = flagOf(argv);
     assert.equal(errOf(r).message, `${flag} needs a value`);
     assert.equal(errOf(r).fix, `pass ${flag} <text>`);
   }
   // read-only commands are refused too, and the error is a result, not a throw
   assert.equal((await runCommand(["init", "scrum", "--config"], root)).exit, 1);
-  void cfg;
   assert.throws(() => parseArgs(["unblock", "A", "--note"]), /--note needs a value/);
+  assert.equal(parseArgs(["x", "--by", "-1"]).flags.by, "-1");
 });
 
 test("--estimate stays a boolean flag and never swallows the next token (B24)", () => {
