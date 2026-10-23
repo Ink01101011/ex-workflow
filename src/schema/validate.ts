@@ -53,19 +53,45 @@ function resolve(ref: string, root: JsonSchema): JsonSchema {
   return def;
 }
 
-/** Errors in the branch with the best fit: a const mismatch (a discriminator) weighs 100 plain errors. */
-function rank(errors: SchemaError[]): number {
-  return errors.reduce((n, e) => n + (e.keyword === "const" ? 100 : 1), 0);
+/**
+ * Misfit of one anyOf branch (lower is a better fit): a `type` error at the branch's own path (the value is the
+ * wrong kind entirely) weighs 1000, a `const` mismatch (a discriminator) 100, anything else 1.
+ */
+function rank(errors: SchemaError[], branchPath: string): number {
+  const own = branchPath === "" ? "/" : branchPath;
+  return errors.reduce(
+    (n, e) => n + (e.keyword === "type" && e.path === own ? 1000 : e.keyword === "const" ? 100 : 1),
+    0,
+  );
 }
 
-/** Validate `value` against `schema`; `$ref`s resolve against `root` (the document). Returns every error found. */
-export function validate(
-  schema: JsonSchema,
-  value: unknown,
-  root: JsonSchema = schema,
-  path = "",
-): SchemaError[] {
-  if (schema.$ref !== undefined) return validate(resolve(schema.$ref, root), value, root, path);
+/** When every failed branch has a `const` error at one pointer (the discriminator), report that once as an enum. */
+function collapse(branches: SchemaError[][]): SchemaError | undefined {
+  const first = branches[0]?.filter((e) => e.keyword === "const") ?? [];
+  for (const candidate of first) {
+    const consts = branches.map((b) =>
+      b.find((e) => e.keyword === "const" && e.path === candidate.path),
+    );
+    if (consts.some((c) => c === undefined)) continue;
+    const expected = [...new Set(consts.map((c) => c?.expected))].join(" | ");
+    return {
+      path: candidate.path,
+      keyword: "enum",
+      message: `expected one of ${expected}`,
+      expected,
+      found: candidate.found,
+    };
+  }
+  return undefined;
+}
+
+/** Validate `value` against `schema` (a document: `$ref`s resolve against its `definitions`). Returns every error found. */
+export function validate(schema: JsonSchema, value: unknown): SchemaError[] {
+  return walk(schema, value, schema, "");
+}
+
+function walk(schema: JsonSchema, value: unknown, root: JsonSchema, path: string): SchemaError[] {
+  if (schema.$ref !== undefined) return walk(resolve(schema.$ref, root), value, root, path);
   const out: SchemaError[] = [];
   if (schema.type !== undefined) {
     const types = Array.isArray(schema.type) ? schema.type : [schema.type];
@@ -116,7 +142,7 @@ export function validate(
   }
   if (Array.isArray(value) && schema.items !== undefined) {
     const items = schema.items;
-    value.forEach((v, i) => out.push(...validate(items, v, root, `${path}/${i}`)));
+    value.forEach((v, i) => out.push(...walk(items, v, root, `${path}/${i}`)));
   }
   if (kindOf(value) === "object") {
     const obj = value as Record<string, unknown>;
@@ -126,7 +152,7 @@ export function validate(
           ? schema.properties[key]
           : undefined;
       const at = `${path}/${esc(key)}`;
-      if (prop) out.push(...validate(prop, v, root, at));
+      if (prop) out.push(...walk(prop, v, root, at));
       else if (schema.additionalProperties === false) {
         const known = Object.keys(schema.properties ?? {}).join(", ");
         out.push(
@@ -139,7 +165,7 @@ export function validate(
           ),
         );
       } else if (typeof schema.additionalProperties === "object")
-        out.push(...validate(schema.additionalProperties, v, root, at));
+        out.push(...walk(schema.additionalProperties, v, root, at));
     }
     for (const key of schema.required ?? [])
       if (!Object.hasOwn(obj, key))
@@ -155,15 +181,19 @@ export function validate(
   }
   if (schema.anyOf !== undefined) {
     let best: SchemaError[] | undefined;
+    const failed: SchemaError[][] = [];
     for (const branch of schema.anyOf) {
-      const errors = validate(branch, value, root, path);
+      const errors = walk(branch, value, root, path);
       if (errors.length === 0) {
         best = [];
         break;
       }
-      if (best === undefined || rank(errors) < rank(best)) best = errors;
+      failed.push(errors);
+      if (best === undefined || rank(errors, path) < rank(best, path)) best = errors;
     }
-    if (best) out.push(...best);
+    const merged = best && best.length > 0 ? collapse(failed) : undefined;
+    if (merged) out.push(merged);
+    else if (best) out.push(...best);
   }
   return out;
 }

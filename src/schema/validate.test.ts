@@ -2,10 +2,20 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkflowError } from "../errors.ts";
 import type { JsonSchema } from "./types.ts";
+import { CORE_DEFINITIONS, WATERFALL_DEFINITIONS } from "./generated.ts";
 import { assertValid, validate } from "./validate.ts";
 
 const paths = (schema: JsonSchema, value: unknown) =>
   validate(schema, value).map((e) => `${e.path} ${e.keyword}`);
+
+const def = (name: string): JsonSchema => ({
+  $ref: `#/definitions/${name}`,
+  definitions: CORE_DEFINITIONS,
+});
+const defW = (name: string): JsonSchema => ({
+  $ref: `#/definitions/${name}`,
+  definitions: WATERFALL_DEFINITIONS,
+});
 
 test("type, const, enum, number and string keywords", () => {
   assert.deepEqual(paths({ type: "string" }, "x"), []);
@@ -104,10 +114,31 @@ test("anyOf: a branch that matches wins; otherwise the branch whose discriminato
   assert.deepEqual(paths(policy, { kind: "evidence", evidenceKind: "test-output" }), []);
   // discriminator says branch 0; its single missing field is the report, not branch 1's const mismatch
   assert.deepEqual(paths(policy, { kind: "evidence" }), ["/evidenceKind required"]);
-  // unknown discriminator: the fewest-errors branch (branch 1: one const error) is reported
-  assert.deepEqual(paths(policy, { kind: "nope" }), ["/kind const"]);
-  // wrong type entirely: one error from the first branch
+  // unknown discriminator: every branch has a const error at /kind, so it is reported once as an enum
+  assert.deepEqual(paths(policy, { kind: "nope" }), ["/kind enum"]);
+  // wrong type entirely: every branch weighs the same (a root type error), so the first branch reports
   assert.deepEqual(paths(policy, "str"), ["/ type"]);
+});
+
+test("anyOf discriminators: a typo is reported as an enum of the discriminator values; a scalar against object branches names the const", () => {
+  const policy = validate(def("Policy"), { kind: "nope" });
+  assert.deepEqual(
+    policy.map((e) => `${e.path} ${e.keyword}`),
+    ["/kind enum"],
+  );
+  assert.match(policy[0]?.expected ?? "", /"evidence"/);
+  assert.match(policy[0]?.expected ?? "", /"custom"/);
+  assert.deepEqual(paths(def("LessonChange"), { kind: "nope", text: "t" }), ["/kind enum"]);
+  const req = validate(def("GateRequirement"), "humna");
+  assert.deepEqual(
+    req.map((e) => `${e.path} ${e.keyword}`),
+    ["/ const"],
+  );
+  assert.equal(req[0]?.expected, '"human"');
+  assert.deepEqual(
+    paths(defW("Gate"), { id: "g", requires: [], evidence: [], onFail: { action: "blok" } }),
+    ["/onFail/action enum"],
+  );
 });
 
 test("assertValid throws invalid-input naming what, the first path, the count and a fix", () => {
