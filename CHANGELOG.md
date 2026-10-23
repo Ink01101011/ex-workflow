@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.3.0-stage (unreleased)
+## 0.4.0-stage (unreleased)
+
+Pre-release under the `stage` dist-tag.
+
+- Schema entry (`ex-workflow/schema`): JSON Schema (draft-07) documents generated from the TypeScript types for `WorkflowState`, `Role` (manifest), `NewItem`, `Handoff`, `ScrumConfig`, `KanbanConfig`, `WaterfallConfig`, plus a dependency-free `validate` / `assertValid` for the subset the generator emits. `pnpm schema:check` fails the build when the types and the committed schema drift.
+- Adapters: `loadState` validates `.workflow/state.json` and every `roles/*.json` manifest against the schema after the version check; a state that fails is never returned.
+- CLI: `exwf add`, `exwf complete` and `exwf role add` validate their input file before the engine sees it; errors name the file, the JSON pointer and the expected shape.
+- Size: `dist/schema/index.mjs` and `schema` budgeted at measured size; `core+scrum`, `core+kanban`, `core+waterfall` unchanged.
+
+## 0.3.0-stage (2026-10-23)
 
 Pre-release under the `stage` dist-tag.
 
