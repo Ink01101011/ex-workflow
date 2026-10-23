@@ -17,6 +17,14 @@ export interface WaterfallConfig {
   traceability: { from: string; to: string[] };
   humanGates: "all" | string[];
 }
+/**
+ * WaterfallConfig plus keys not yet in the generated JSON schema (B18); fold into WaterfallConfig
+ * and run schema:gen when a schema change is allowed.
+ */
+export interface WaterfallRuntimeConfig extends WaterfallConfig {
+  /** Tokens per weight unit when no accounting history exists; default 20000. */
+  fallbackTokensPerWeight?: number;
+}
 
 export const DEFAULT_PHASE_IDS: readonly string[] = [
   "requirements",
@@ -75,8 +83,8 @@ export function defaultPhases(): WaterfallPhaseConfig[] {
   });
 }
 
-export function configOf(state: WorkflowState): WaterfallConfig {
-  return state.config as WaterfallConfig;
+export function configOf(state: WorkflowState): WaterfallRuntimeConfig {
+  return state.config as WaterfallRuntimeConfig;
 }
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
@@ -189,7 +197,7 @@ function phase(raw: unknown, i: number, human: (id: string) => boolean): Waterfa
   return out;
 }
 
-export function validateWaterfallConfig(raw: unknown): WaterfallConfig {
+export function validateWaterfallConfig(raw: unknown): WaterfallRuntimeConfig {
   const c = (raw ?? {}) as Record<string, unknown>;
   if (c["phases"] !== undefined && !Array.isArray(c["phases"]))
     fail(
@@ -288,10 +296,22 @@ export function validateWaterfallConfig(raw: unknown): WaterfallConfig {
     }
     traceability = { from: tr["from"], to: [...to] };
   }
-  return {
+  const fallback = c["fallbackTokensPerWeight"];
+  if (
+    fallback !== undefined &&
+    (typeof fallback !== "number" || !Number.isFinite(fallback) || fallback <= 0)
+  )
+    fail(
+      "config-invalid",
+      "waterfall config.fallbackTokensPerWeight must be a positive finite number",
+      "omit it for the default 20000",
+    );
+  const out: WaterfallRuntimeConfig = {
     phases,
     changeControl,
     traceability,
     humanGates: hg === "all" ? "all" : [...(hg as string[])],
   };
+  if (fallback !== undefined) out.fallbackTokensPerWeight = fallback;
+  return out;
 }

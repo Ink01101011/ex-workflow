@@ -508,3 +508,31 @@ test("only a human may decide a phase gate or a change pending; the state is unt
   s2 = decide(s2, pid, "approve", "human", "ok", T2, m);
   assert.equal(getItem(s2, "CR-1").status, "done");
 });
+
+test("phaseRetrospective lessons carry from and item (B21)", () => {
+  const s = baselinedThrough(["requirements"]);
+  const run = (lessons: unknown[]) =>
+    c["phaseRetrospective"]!(s, { by: pm, now: T1, lessons }).state.lessons;
+  const ls = run([
+    { text: "a", scope: "spec", from: "qa", item: "R1" },
+    { text: "b", scope: "spec" },
+    { text: "c", scope: "spec", from: "human" },
+  ]);
+  assert.equal(ls[0]!.from, "qa");
+  assert.equal(ls[0]!.item, "R1");
+  assert.equal(ls[1]!.from, pm);
+  assert.equal("item" in ls[1]!, false);
+  assert.equal(ls[2]!.from, "human");
+  assert.throws(
+    () => run([{ text: "a", scope: "spec", item: "NOPE" }]),
+    err("unknown-item", /NOPE/),
+  );
+  assert.throws(
+    () => run([{ text: "a", scope: "spec", from: "ghost" }]),
+    err("invalid-input", /not a role/),
+  );
+  assert.throws(
+    () => run([{ text: "a", scope: "spec", item: 5 }]),
+    err("invalid-input", /item id/),
+  );
+});

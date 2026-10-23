@@ -133,7 +133,7 @@ export function waterfall(): Methodology<WaterfallConfig> {
     requiredCapabilities: ["facilitate", "control-change", "approve-gate", "deliver", "verify"],
     exclusiveCapabilities: [],
     plannerOptions(state): PlannerOptions {
-      return {
+      const po: PlannerOptions = {
         schedulerMode: "level",
         // questions keep the escalation role core gave them; reviews use the planner's reviewer logic
         roleFor: (item) =>
@@ -141,6 +141,9 @@ export function waterfall(): Methodology<WaterfallConfig> {
             ? deliverRoleFor(state, item)
             : undefined,
       };
+      const fallback = configOf(state).fallbackTokensPerWeight;
+      if (fallback !== undefined) po.fallbackTokensPerWeight = fallback;
+      return po;
     },
     candidates(state): WorkItem[] {
       const open = openPhase(state);
