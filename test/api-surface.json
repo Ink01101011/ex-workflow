@@ -203,6 +203,7 @@
     "ceremony.refine",
     "change.decided",
     "change.recommended",
+    "config.changed",
     "daily",
     "gate.failed",
     "gate.passed",
@@ -216,6 +217,7 @@
     "item.rework",
     "item.transition",
     "lesson.raised",
+    "needs-review",
     "pending.decided",
     "pending.dropped",
     "pending.raised",
@@ -230,11 +232,14 @@
     "planner.resolved",
     "retro",
     "role.registered",
+    "role.retired",
     "sprint.cancelled",
     "sprint.closed",
+    "sprint.closing",
     "sprint.committed",
     "sprint.opened",
     "sprint.uncommitted",
+    "state.created",
     "traceability.computed"
   ]
 }

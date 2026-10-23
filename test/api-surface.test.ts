@@ -27,10 +27,14 @@ function sources(dir: string): string[] {
   });
 }
 
+// createState writes its first event by hand (src/state.ts), not through appendEvent
+const HAND_BUILT_KINDS = ["state.created"];
+
 function eventKinds(): string[] {
-  const kinds = new Set<string>();
+  const kinds = new Set<string>(HAND_BUILT_KINDS);
+  // the first quoted string after appendEvent( is the kind, whatever the state expression before it
   for (const file of sources(SRC))
-    for (const m of readFileSync(file, "utf8").matchAll(/appendEvent\(\s*[^,]+,\s*"([^"]+)"/g))
+    for (const m of readFileSync(file, "utf8").matchAll(/appendEvent\([^"]*"([^"]+)"/g))
       kinds.add(m[1]!);
   return sorted(kinds);
 }
