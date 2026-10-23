@@ -1,5 +1,6 @@
 import { timSort } from "exsorted";
 import { estimateTokens, remaining } from "../budget.ts";
+import { applyAgreement, retireAgreement } from "../agreements.ts";
 import { fail } from "../errors.ts";
 import {
   addItem,
@@ -521,8 +522,40 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     const newLessons = (input["lessons"] ?? []) as Array<{
       text: string;
       scope: Lesson["scope"];
+      from?: string;
+      item?: string;
       suggestedChange?: LessonChange;
     }>;
+    const roleIds = ["human", ...Object.keys(state.roles)];
+    for (const l of newLessons) {
+      if (l.from !== undefined && (typeof l.from !== "string" || !roleIds.includes(l.from)))
+        fail(
+          "invalid-input",
+          `lesson from ${JSON.stringify(l.from)} is not a role`,
+          `from is "human" or one of the roles: ${Object.keys(state.roles).join(", ") || "(none)"}`,
+        );
+      if (l.item !== undefined) {
+        if (typeof l.item !== "string")
+          fail(
+            "invalid-input",
+            "lesson item must be an item id",
+            "name an item with addItem first",
+          );
+        getItem(state, l.item);
+      }
+    }
+    const retireRaw: unknown = input["retire"] ?? [];
+    if (
+      !Array.isArray(retireRaw) ||
+      !retireRaw.every((x) => typeof x === "string") ||
+      retireRaw.some((x, i) => retireRaw.indexOf(x) !== i)
+    )
+      fail(
+        "invalid-input",
+        "retro.retire must be a list of distinct agreement texts",
+        'e.g. { "retire": ["review in a fresh worker"] }; each agreement once',
+      );
+    const retire = retireRaw as string[];
     const adopt = (input["adopt"] ?? []) as Array<{ id: string; suggestedChange?: LessonChange }>;
     const dismiss = (input["dismiss"] ?? []) as string[];
     const dod = input["dodChanges"] as Policy[] | undefined;
@@ -562,7 +595,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       const applyChange = (c: LessonChange | undefined) => {
         if (!c) return;
         if (c.kind === "agreement") {
-          if (!s.agreements.includes(c.text)) s = { ...s, agreements: [...s.agreements, c.text] };
+          s = applyAgreement(s, c, input.by, now);
           agreements.push(c.text);
         } else if (c.kind === "dod") {
           const cur = configOf(s).definitionOfDone;
@@ -588,8 +621,9 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           text: l.text,
           scope: l.scope,
           status: "adopted",
-          from: input.by,
+          from: l.from ?? input.by,
         };
+        if (l.item !== undefined) lesson.item = l.item;
         if (l.suggestedChange) lesson.suggestedChange = l.suggestedChange;
         s = { ...s, lessons: [...s.lessons, lesson] };
         adopted.push(id);
@@ -616,6 +650,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           ...s,
           lessons: s.lessons.map((x) => (x.id === d ? { ...x, status: "dismissed" as const } : x)),
         };
+      for (const text of retire) s = retireAgreement(s, text, input.by, now);
       if (dod) {
         dodChanged = true;
         s = setDod(s, dod);
@@ -629,6 +664,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           adopted,
           dismissed: dismiss,
           agreements,
+          retired: retire,
           dodChanged,
           backlogAdded,
         },

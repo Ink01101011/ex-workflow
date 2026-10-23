@@ -439,12 +439,37 @@ test("phaseRetrospective stores lessons, adopts and dismisses, applies agreement
     adopted: ["L1"],
     dismissed: [],
     agreements: ["qa reads the srs before the requirements gate"],
+    retired: [],
   });
   assert.throws(
     () => c["phaseRetrospective"]!(s, { by: pm, now: T1, dismiss: ["L1"] }),
     err("invalid-input", /already adopted/),
   );
   assert.equal(s.baseline!.version, 1); // untouched
+  // #12: a later retro replaces one agreement and retires another
+  const r2 = c["phaseRetrospective"]!(s, {
+    by: pm,
+    now: T1,
+    lessons: [
+      {
+        text: "qa reads the srs and the plan",
+        scope: "policy",
+        suggestedChange: {
+          kind: "agreement",
+          text: "qa reads the srs and the plan before the gate",
+          replaces: "qa reads the srs before the requirements gate",
+        },
+      },
+      { text: "temp", scope: "policy", suggestedChange: { kind: "agreement", text: "temp rule" } },
+    ],
+    retire: ["temp rule"],
+  });
+  assert.deepEqual(r2.state.agreements, ["qa reads the srs and the plan before the gate"]);
+  assert.deepEqual((last(r2.state).payload as { retired: string[] }).retired, ["temp rule"]);
+  assert.throws(
+    () => c["phaseRetrospective"]!(s, { by: pm, now: T1, retire: ["never agreed"] }),
+    err("invalid-input", /never agreed/),
+  );
 });
 
 test("only a human may decide a phase gate or a change pending; the state is untouched on refusal", () => {

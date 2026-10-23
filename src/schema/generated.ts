@@ -496,6 +496,9 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
           text: {
             type: "string",
           },
+          replaces: {
+            type: "string",
+          },
         },
         required: ["kind", "text"],
         additionalProperties: false,

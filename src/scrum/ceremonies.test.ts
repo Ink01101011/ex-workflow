@@ -588,3 +588,92 @@ test("#20 retro dodChanges that drops a Definition of Done policy is a rule viol
       e instanceof WorkflowError && e.code === "rule-violation" && e.rule === "dod-not-weakened",
   );
 });
+
+test("#12 #13 retro replaces and retires agreements, and attributes lessons to the raising role", () => {
+  let s = c["plan"]!(backlog(), { by: "scrum-master", now: T0, goal: "g", items: ["A"] }).state;
+  s = c["cancel"]!(s, { by: "product-owner", now: T0, reason: "x" }).state;
+  s = c["retro"]!(s, {
+    by: "scrum-master",
+    now: T0,
+    lessons: [
+      {
+        text: "reviews drift",
+        scope: "policy",
+        suggestedChange: { kind: "agreement", text: "review in a fresh worker" },
+      },
+    ],
+  }).state;
+  s = c["plan"]!(s, { by: "scrum-master", now: T0, goal: "g2", items: ["B"] }).state;
+  s = c["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state;
+  const T3 = "2026-10-19T03:00:00.000Z";
+  const r = c["retro"]!(s, {
+    by: "scrum-master",
+    now: T3,
+    lessons: [
+      {
+        text: "reviews need the file list",
+        scope: "review",
+        from: "developer",
+        item: "A",
+        suggestedChange: {
+          kind: "agreement",
+          text: "review in a fresh worker with the file list",
+          replaces: "review in a fresh worker",
+        },
+      },
+      {
+        text: "ok",
+        scope: "memory",
+        suggestedChange: { kind: "agreement", text: "temporary" },
+      },
+    ],
+    retire: ["temporary"],
+  });
+  assert.deepEqual(r.state.agreements, ["review in a fresh worker with the file list"]);
+  const retired = r.state.events
+    .filter((e) => e.type === "agreement.retired")
+    .map((e) => e.payload);
+  assert.deepEqual(retired, [
+    { text: "review in a fresh worker", replacedBy: "review in a fresh worker with the file list" },
+    { text: "temporary", replacedBy: null },
+  ]);
+  const l = r.state.lessons.find((x) => x.text === "reviews need the file list")!;
+  assert.equal(l.from, "developer");
+  assert.equal(l.item, "A");
+  assert.equal(r.state.lessons.find((x) => x.text === "ok")!.from, "scrum-master");
+  assert.equal(r.state.lessons.find((x) => x.text === "ok")!.item, undefined);
+  assert.deepEqual((r.state.events.at(-1)!.payload as { retired: string[] }).retired, [
+    "temporary",
+  ]);
+  const base = { by: "scrum-master", now: T3 };
+  assert.equal(
+    codeOf(() =>
+      c["retro"]!(s, { ...base, lessons: [{ text: "x", scope: "policy", from: "nobody" }] }),
+    ),
+    "invalid-input",
+  );
+  assert.equal(
+    codeOf(() =>
+      c["retro"]!(s, { ...base, lessons: [{ text: "x", scope: "policy", item: "ZZ" }] }),
+    ),
+    "unknown-item",
+  );
+  assert.equal(
+    codeOf(() => c["retro"]!(s, { ...base, retire: ["never agreed"] })),
+    "invalid-input",
+  );
+  assert.equal(
+    codeOf(() => c["retro"]!(s, { ...base, retire: "temporary" })),
+    "invalid-input",
+  );
+  assert.equal(
+    codeOf(() =>
+      c["retro"]!(s, { ...base, retire: ["review in a fresh worker", "review in a fresh worker"] }),
+    ),
+    "invalid-input",
+  );
+  assert.equal(
+    codeOf(() => c["retro"]!(s, { ...base, lessons: [{ text: "x", scope: "policy", from: 3 }] })),
+    "invalid-input",
+  );
+});

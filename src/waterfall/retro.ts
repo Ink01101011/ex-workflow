@@ -1,3 +1,4 @@
+import { applyAgreement, retireAgreement } from "../agreements.ts";
 import { fail } from "../errors.ts";
 import { applyAction } from "../methodology.ts";
 import { requireCap } from "../roles.ts";
@@ -83,6 +84,18 @@ export function phaseRetrospective(methodology: () => Methodology): Ceremony {
         'e.g. { "adopt": [{ "id": "L1" }], "dismiss": ["L2"] }',
       );
     assertRefs(state, adopt, dismiss);
+    const retireRaw: unknown = input["retire"] ?? [];
+    if (
+      !Array.isArray(retireRaw) ||
+      !retireRaw.every((x) => typeof x === "string") ||
+      retireRaw.some((x, i) => retireRaw.indexOf(x) !== i)
+    )
+      fail(
+        "invalid-input",
+        "phaseRetrospective.retire must be a list of distinct agreement texts",
+        'e.g. { "retire": ["qa reads the srs"] }; each agreement once',
+      );
+    const retire = retireRaw as string[];
     return applyAction(
       state,
       methodology(),
@@ -93,7 +106,7 @@ export function phaseRetrospective(methodology: () => Methodology): Ceremony {
         const agreements: string[] = [];
         const agree = (ch: LessonChange | undefined) => {
           if (!ch || ch.kind !== "agreement") return;
-          if (!s.agreements.includes(ch.text)) s = { ...s, agreements: [...s.agreements, ch.text] };
+          s = applyAgreement(s, ch, input.by, now);
           agreements.push(ch.text);
         };
         const created: string[] = [];
@@ -136,11 +149,19 @@ export function phaseRetrospective(methodology: () => Methodology): Ceremony {
               x.id === d ? { ...x, status: "dismissed" as const } : x,
             ),
           };
+        for (const text of retire) s = retireAgreement(s, text, input.by, now);
         return appendEvent(
           s,
           "phase.retrospective",
           input.by,
-          { phase: phase?.id ?? null, lessons: created, adopted, dismissed: dismiss, agreements },
+          {
+            phase: phase?.id ?? null,
+            lessons: created,
+            adopted,
+            dismissed: dismiss,
+            agreements,
+            retired: retire,
+          },
           now,
         );
       },

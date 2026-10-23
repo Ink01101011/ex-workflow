@@ -27,6 +27,7 @@ export {
   clearBlocker,
 } from "./items.ts";
 export type { ItemPatch } from "./items.ts";
+export { applyAgreement, retireAgreement } from "./agreements.ts";
 export { evaluatePolicies, assertPolicies } from "./policies.ts";
 export { checkGate, authorOf, lastDispatchBefore, raisePending, decide } from "./gates.ts";
 export type { GateResult } from "./gates.ts";

@@ -216,7 +216,7 @@ export interface PendingHuman {
 }
 
 export type LessonChange =
-  | { kind: "agreement"; text: string } // a working agreement every future brief carries as an invariant
+  | { kind: "agreement"; text: string; replaces?: string } // a working agreement every future brief carries as an invariant; replaces retires an earlier one
   | { kind: "dod"; policy: Policy } // tighten the Definition of Done
   | { kind: "backlog"; item: NewItem } // work for the backlog
   | { kind: "skill"; note: string }; // for the host: change a role prompt / memory
