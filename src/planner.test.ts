@@ -199,7 +199,7 @@ test("a turns budget gates dispatch: remaining turns minus in-flight, then budge
   );
   assert.equal(r1.reason, "budget-exhausted");
   assert.deepEqual(r1.skipped, [
-    { id: "C", reason: "budget", detail: "turns budget spent: 2 of 2 in flight or used" },
+    { id: "C", reason: "budget", detail: "turns budget spent: 0 used + 2 in flight of 2" },
   ]);
   // A is complete (one turn used), B still in flight: the second turn is spoken for
   const done = moveItem(r1.state, "A", { stage: "done", status: "done" }, "dev", T0);
@@ -213,6 +213,23 @@ test("a turns budget gates dispatch: remaining turns minus in-flight, then budge
   const r2 = plan(s2, fakeMethodology(), { now: T0 });
   assert.equal(r2.dispatched.length, 0);
   assert.equal(r2.reason, "budget-exhausted");
+});
+
+test("a turns budget counts in-flight items by the committed list, not only item.iteration", () => {
+  const s = sprintWith({ turns: 1 }, ["A", "B"]);
+  const items = { ...s.items };
+  for (const id of ["A", "B"]) {
+    const { iteration: _iteration, ...rest } = items[id]!;
+    items[id] = rest as (typeof items)[string];
+  }
+  items["A"] = { ...items["A"]!, status: "in_progress" };
+  const res = plan({ ...s, items }, fakeMethodology(), { now: T0 });
+  assert.equal(res.dispatched.length, 0);
+  assert.equal(res.reason, "budget-exhausted");
+  assert.deepEqual(
+    res.skipped.map((x) => [x.id, x.reason]),
+    [["B", "budget"]],
+  );
 });
 
 test("a spent wall-clock budget gates dispatch", () => {

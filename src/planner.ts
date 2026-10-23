@@ -190,7 +190,9 @@ export function plan(
   let tokensLeft = left.tokens;
   const inFlight = iteration
     ? Object.values(state.items).filter(
-        (i) => i.iteration === iteration.id && i.status === "in_progress",
+        (i) =>
+          (i.iteration === iteration.id || iteration.committed.includes(i.id)) &&
+          i.status === "in_progress",
       ).length
     : 0;
   let turnsLeft = left.turns === undefined ? undefined : left.turns - inFlight;
@@ -254,7 +256,7 @@ export function plan(
       skipped.push({
         id: item.id,
         reason: "budget",
-        detail: `turns budget spent: ${iteration!.budget.turns} of ${iteration!.budget.turns} in flight or used`,
+        detail: `turns budget spent: ${iteration!.spent.turns} used + ${inFlight + dispatched.length} in flight of ${iteration!.budget.turns}`,
       });
       continue;
     }
