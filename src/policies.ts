@@ -1,4 +1,5 @@
 import { fail } from "./errors.ts";
+import { freshEvidence } from "./items.ts";
 import type { Policy, Violation, WorkItem, WorkflowState } from "./types.ts";
 
 export function evaluatePolicies(
@@ -7,12 +8,13 @@ export function evaluatePolicies(
   policies: Policy[],
 ): Violation[] {
   const out: Violation[] = [];
+  const fresh = freshEvidence(state, item);
   const v = (rule: string, message: string, fix: string) =>
     out.push({ rule, severity: "error", item: item.id, message, fix });
   for (const p of policies) {
     switch (p.kind) {
       case "evidence":
-        if (!item.evidence.some((e) => e.kind === p.evidenceKind))
+        if (!fresh.some((e) => e.kind === p.evidenceKind))
           v(
             "policy:evidence",
             `item "${item.id}" has no evidence of kind "${p.evidenceKind}"`,
@@ -56,7 +58,7 @@ export function evaluatePolicies(
         break;
       }
       case "custom":
-        if (!item.evidence.some((e) => e.kind === `policy:${p.id}`))
+        if (!fresh.some((e) => e.kind === `policy:${p.id}`))
           v(
             `policy:custom:${p.id}`,
             `item "${item.id}" has not satisfied "${p.description}"`,

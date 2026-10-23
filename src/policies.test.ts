@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createState } from "./state.ts";
+import { appendEvent, createState } from "./state.ts";
 import { addEvidence, addItem, moveItem } from "./items.ts";
 import { assertPolicies, evaluatePolicies } from "./policies.ts";
 import { WorkflowError } from "./errors.ts";
@@ -63,4 +63,48 @@ test("assertPolicies throws policy-unmet naming all fixes", () => {
       /test-output/.test(e.fix) &&
       /acceptance/.test(e.fix),
   );
+});
+
+const T1 = "2026-10-19T01:00:00.000Z";
+const T2 = "2026-10-19T02:00:00.000Z";
+const T3 = "2026-10-19T03:00:00.000Z";
+const evPolicy: Policy[] = [
+  { kind: "evidence", evidenceKind: "test-output" },
+  { kind: "custom", id: "lint", description: "lint passes" },
+];
+
+test("B10: evidence from before the last rework no longer satisfies evidence or custom policies", () => {
+  let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci1", by: "dev" }, T0);
+  s = addEvidence(s, "A", { kind: "policy:lint", ref: "ci1", by: "dev" }, T0);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy), []);
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "again" }, T1);
+  assert.deepEqual(
+    evaluatePolicies(s, s.items["A"]!, evPolicy).map((x) => x.rule),
+    ["policy:evidence", "policy:custom:lint"],
+  );
+  assert.equal(s.items["A"]!.evidence.length, 2); // kept, just not counted
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci2", by: "dev" }, T2);
+  s = addEvidence(s, "A", { kind: "policy:lint", ref: "ci2", by: "dev" }, T2);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy), []);
+});
+
+test("B10: a second rework resets freshness again; another item's rework does not", () => {
+  let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  s = addItem(s, { id: "B", title: "b" }, "po", T0);
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci1", by: "dev" }, T0);
+  s = appendEvent(s, "item.rework", "qa", { id: "B", by: "qa", notes: "x" }, T1);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "x" }, T1);
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci2", by: "dev" }, T2);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "y" }, T3);
+  assert.equal(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)).length, 1);
+});
+
+test("B10: evidence attached in the same completion as the rework (same timestamp) still counts", () => {
+  let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  s = addEvidence(s, "A", { kind: "test-output", ref: "ci", by: "dev" }, T1);
+  s = appendEvent(s, "item.rework", "dev", { id: "A", by: "dev", notes: "n" }, T1);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
 });

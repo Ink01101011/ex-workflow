@@ -234,6 +234,20 @@ export function moveItem(
   );
 }
 
+/** Evidence recorded at or after the item's last `item.rework` event; evidence stays stored, but earlier entries no longer count toward policies or gates. Never-reworked items keep all evidence. */
+export function freshEvidence(state: WorkflowState, item: WorkItem): Evidence[] {
+  let since: string | undefined;
+  for (let i = state.events.length - 1; i >= 0; i--) {
+    const ev = state.events[i]!;
+    if (ev.type !== "item.rework") continue;
+    if ((ev.payload as { id?: string } | null)?.id === item.id) {
+      since = ev.at;
+      break;
+    }
+  }
+  return since === undefined ? item.evidence : item.evidence.filter((e) => e.at >= since);
+}
+
 export function addEvidence(
   state: WorkflowState,
   id: string,

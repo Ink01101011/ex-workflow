@@ -1,5 +1,5 @@
 import { fail } from "./errors.ts";
-import { advanceItem, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
+import { advanceItem, freshEvidence, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
 import { approverIds } from "./roles.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
@@ -48,8 +48,9 @@ export function checkGate(
   by: string,
 ): GateResult {
   const violations: Violation[] = [];
+  const fresh = freshEvidence(state, item);
   for (const kind of gate.evidence) {
-    if (!item.evidence.some((e) => e.kind === kind)) {
+    if (!fresh.some((e) => e.kind === kind)) {
       violations.push({
         rule: "gate:evidence",
         severity: "error",
