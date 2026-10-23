@@ -52,12 +52,12 @@ export async function withStateLock<T>(
       held = true;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      const age = await stat(lock).then(
-        (st) => Date.now() - st.mtimeMs,
-        () => 0,
-      );
-      if (age > staleMs) {
-        await unlink(lock).catch(() => undefined);
+      const snap = await stat(lock).catch(() => undefined);
+      if (snap && Date.now() - snap.mtimeMs > staleMs) {
+        // re-stat just before unlink: if another recoverer already replaced the lock, leave it alone
+        const now = await stat(lock).catch(() => undefined);
+        if (now && now.ino === snap.ino && now.mtimeMs === snap.mtimeMs)
+          await unlink(lock).catch(() => undefined);
         continue;
       }
       if (attempt >= retries)

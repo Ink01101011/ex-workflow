@@ -62,6 +62,9 @@ export interface Parsed {
   positional: string[];
   flags: Record<string, string>;
 }
+/** Flags that take no value; every other flag needs one. */
+const BOOLEAN_FLAGS = new Set(["estimate"]);
+
 export function parseArgs(argv: string[]): Parsed {
   const positional: string[] = [];
   const flags: Record<string, string> = {};
@@ -69,11 +72,15 @@ export function parseArgs(argv: string[]): Parsed {
     const a = argv[i]!;
     if (a.startsWith("--")) {
       const key = a.slice(2);
+      if (BOOLEAN_FLAGS.has(key)) {
+        flags[key] = "true";
+        continue;
+      }
       const val = argv[i + 1];
-      if (val !== undefined && !val.startsWith("--")) {
-        flags[key] = val;
-        i++;
-      } else flags[key] = "true";
+      if (val === undefined || val.startsWith("--"))
+        fail("invalid-input", `--${key} needs a value`, `pass --${key} <text>`);
+      flags[key] = val;
+      i++;
     } else positional.push(a);
   }
   return { positional, flags };
@@ -134,11 +141,13 @@ const WRITERS = new Set([
 ]);
 
 export async function runCommand(argv: string[], cwd: string): Promise<CommandResult> {
-  const [cmd, sub] = parseArgs(argv).positional;
-  const writes =
-    cmd !== undefined &&
-    (WRITERS.has(cmd) || (cmd === "role" && sub === "add") || (cmd === "config" && sub === "set"));
   try {
+    const [cmd, sub] = parseArgs(argv).positional;
+    const writes =
+      cmd !== undefined &&
+      (WRITERS.has(cmd) ||
+        (cmd === "role" && sub === "add") ||
+        (cmd === "config" && sub === "set"));
     return writes ? await withStateLock(cwd, () => execute(argv, cwd)) : await execute(argv, cwd);
   } catch (e) {
     if (e instanceof WorkflowError) return { exit: 1, out: { ok: false, error: e.toJSON() } };
@@ -245,8 +254,9 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (flags["fallback-tokens-per-weight"])
         opts.fallbackTokensPerWeight = num(flags, "fallback-tokens-per-weight");
       const res = planNext(state, methodologyOf(state), opts);
-      await saveState(cwd, res.state);
+      // briefs first: a crash then leaves an orphan brief (overwritten next dispatch), never a dispatched item without one
       for (const b of res.briefs) await saveBrief(cwd, b);
+      await saveState(cwd, res.state);
       return {
         exit: 0,
         out: {
@@ -282,8 +292,9 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       };
       if (flags["estimate"] === "true") acc.estimate = true;
       const res = complete(state, methodologyOf(state), { ...handoff, role }, acc, now);
-      await saveState(cwd, res.state);
+      // handoff first: a retry of the same command reproduces the same seq and overwrites an orphan
       await saveHandoff(cwd, handoff, res.state.events.length);
+      await saveState(cwd, res.state);
       return {
         exit: 0,
         out: {

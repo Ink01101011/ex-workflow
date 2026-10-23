@@ -1,9 +1,11 @@
-import { test } from "node:test";
+import { test, mock } from "node:test";
+import fsp from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runCommand } from "./commands.ts";
+import { runCommand, parseArgs } from "./commands.ts";
 
 async function project() {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-cli-"));
@@ -805,4 +807,202 @@ test("complete warns about ignored open questions and status lists them", async 
   );
   assert.equal(st.openQuestions[0]!.item, "A");
   assert.deepEqual(st.openQuestions[0]!.questions, ["which PO?"]);
+});
+
+async function plannedA() {
+  const p = await project();
+  await runCommand(["init", "scrum", "--config", p.cfg], p.root);
+  const a = await p.w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], p.root);
+  const plan = await p.w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], p.root);
+  const h = await p.w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  return { ...p, h };
+}
+const COMPLETE = [
+  "--tokens-in",
+  "10",
+  "--tokens-out",
+  "5",
+  "--duration-ms",
+  "9",
+  "--model",
+  "haiku",
+];
+const errOf = (r: { out: unknown }) =>
+  out<{ error: { code: string; message: string; fix: string } }>(r).error;
+
+test("a flag given without a value is invalid-input naming the flag (B24)", async () => {
+  const { root, cfg, h } = await plannedA();
+  for (const argv of [
+    ["decide", "p1", "approve", "--note"],
+    ["unblock", "A", "--blocker"],
+    ["complete", "A", h, "--tokens-in", "1", "--tokens-out", "1", "--duration-ms", "1", "--model"],
+    ["unblock", "A", "--note", "--by", "x"],
+  ]) {
+    const r = await runCommand(argv, root);
+    assert.equal(r.exit, 1, argv.join(" "));
+    assert.equal(errOf(r).code, "invalid-input");
+    const flag = argv.includes("--blocker")
+      ? "--blocker"
+      : argv.includes("--model")
+        ? "--model"
+        : "--note";
+    assert.equal(errOf(r).message, `${flag} needs a value`);
+    assert.equal(errOf(r).fix, `pass ${flag} <text>`);
+  }
+  // read-only commands are refused too, and the error is a result, not a throw
+  assert.equal((await runCommand(["init", "scrum", "--config"], root)).exit, 1);
+  void cfg;
+  assert.throws(() => parseArgs(["unblock", "A", "--note"]), /--note needs a value/);
+});
+
+test("--estimate stays a boolean flag and never swallows the next token (B24)", () => {
+  assert.deepEqual(parseArgs(["complete", "A", "--estimate", "h.json", "--model", "m"]), {
+    positional: ["complete", "A", "h.json"],
+    flags: { estimate: "true", model: "m" },
+  });
+  assert.deepEqual(parseArgs(["complete", "A", "h.json", "--estimate"]).flags, {
+    estimate: "true",
+  });
+});
+
+/** Fail the rename that publishes state.json, recording every rename target in order. */
+function failStateRename(): string[] {
+  const renames: string[] = [];
+  const real = fsp.rename;
+  mock.method(fsp, "rename", async (from: string, to: string) => {
+    renames.push(path.basename(to));
+    if (path.basename(to) === "state.json") throw new Error("disk full (simulated)");
+    return real(from, to);
+  });
+  syncBuiltinESMExports();
+  return renames;
+}
+function restoreFs(): void {
+  mock.restoreAll();
+  syncBuiltinESMExports();
+}
+
+test("next writes briefs before state: a failed state write leaves the brief on disk, state unchanged (B08)", async () => {
+  const { root } = await plannedA();
+  const before = await readFile(path.join(root, ".workflow", "state.json"), "utf8");
+  const renames = failStateRename();
+  let r;
+  try {
+    r = await runCommand(["next"], root);
+  } finally {
+    restoreFs();
+  }
+  assert.equal(r.exit, 1);
+  assert.equal(errOf(r).code, "invalid-input");
+  assert.deepEqual(renames, ["A.json", "state.json"]);
+  assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["A.json"]);
+  assert.equal(await readFile(path.join(root, ".workflow", "state.json"), "utf8"), before);
+});
+
+test("complete writes the handoff before state: a failed state write leaves the handoff on disk (B08)", async () => {
+  const { root, h } = await plannedA();
+  await runCommand(["next"], root);
+  const before = await readFile(path.join(root, ".workflow", "state.json"), "utf8");
+  const renames = failStateRename();
+  let r;
+  try {
+    r = await runCommand(["complete", "A", h, ...COMPLETE], root);
+  } finally {
+    restoreFs();
+  }
+  assert.equal(r.exit, 1);
+  assert.equal(renames.length, 2);
+  assert.match(renames[0]!, /^A-\d+\.json$/);
+  assert.equal(renames[1], "state.json");
+  assert.equal((await readdir(path.join(root, ".workflow", "handoffs"))).length, 1);
+  assert.equal(await readFile(path.join(root, ".workflow", "state.json"), "utf8"), before);
+  // a retry reproduces the same handoff seq and succeeds
+  assert.equal((await runCommand(["complete", "A", h, ...COMPLETE], root)).exit, 0);
+  assert.equal((await readdir(path.join(root, ".workflow", "handoffs"))).length, 1);
+});
+
+test("decide reject lands the documented outcome; unknown pending lists open ids (B15)", async () => {
+  const { root, w } = await project();
+  const wcfg = await w("waterfall.json", {});
+  await runCommand(["init", "waterfall", "--config", wcfg], root);
+  const r1 = await w("r1.json", {
+    id: "R1",
+    title: "t",
+    phase: "requirements",
+    acceptance: ["ok"],
+  });
+  await runCommand(["add", r1, "--by", "business-analyst"], root);
+  await runCommand(["ceremony", "kickoff", await w("k.json", { phase: "requirements" })], root);
+  for (const role of ["business-analyst", "qa"]) {
+    await runCommand(["next"], root);
+    const h = await w(`h-${role}.json`, {
+      item: "R1",
+      role,
+      produced: role === "qa" ? [] : [{ kind: "srs", ref: "docs/srs.md" }],
+      notes: "n",
+      do_not: [],
+      open_questions: [],
+    });
+    assert.equal((await runCommand(["complete", "R1", h, ...COMPLETE], root)).exit, 0);
+  }
+  await runCommand(
+    [
+      "ceremony",
+      "gateReview",
+      await w("g.json", { phase: "requirements" }),
+      "--by",
+      "project-manager",
+    ],
+    root,
+  );
+  const unknown = await runCommand(["decide", "nope", "approve"], root);
+  assert.equal(unknown.exit, 1);
+  assert.equal(errOf(unknown).code, "unknown-pending");
+  assert.match(errOf(unknown).fix, /open decisions: p1/);
+  const rej = await runCommand(
+    ["decide", "p1", "reject", "--by", "human", "--note", "not yet"],
+    root,
+  );
+  assert.equal(rej.exit, 0);
+  const rep = out<{ report: { phases: Array<{ status: string }>; pendingGates: unknown[] } }>(
+    await runCommand(["status"], root),
+  ).report;
+  assert.deepEqual([rep.phases[0]!.status, rep.pendingGates], ["open", []]);
+  assert.deepEqual(out<{ pending: unknown[] }>(await runCommand(["pending"], root)).pending, []);
+});
+
+test("every command group prints usage and exits 2 when called without its arguments (B15)", async () => {
+  const { root, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  for (const argv of [
+    ["init"],
+    ["init", "scrum"],
+    ["add"],
+    ["edit"],
+    ["edit", "A"],
+    ["complete"],
+    ["complete", "A"],
+    ["account"],
+    ["ceremony"],
+    ["decide"],
+    ["config"],
+    ["config", "set"],
+    ["unblock"],
+    ["validate"],
+    ["role"],
+    ["role", "add"],
+  ]) {
+    const r = await runCommand(argv, root);
+    assert.equal(r.exit, 2, argv.join(" "));
+    assert.ok(Array.isArray(out<{ usage: string[] }>(r).usage), argv.join(" "));
+  }
 });
