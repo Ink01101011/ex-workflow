@@ -193,6 +193,7 @@ The 1.0 definition requires every known gap to be fixed or accepted as a documen
 - Flag values (B24): CLI flags take `--flag value` only; a value beginning with `--` must come via a JSON input file; `--flag=value` is not supported.
 - Stale lock unlink: `withStateLock` retries without reaching the retry cap when a stale lock's unlink keeps failing (EPERM, read-only directory); delete the file by hand.
 - Scrum `status.report.reason`: it is always `budget`; the engine has no other closing cause yet.
+- Carryover in an unflagged stage (B22): a carryover that was `blocked` or `awaiting_human` in a stage without `review: true` restarts at the sprint start and needs a reestimate; only a stage flagged `review`, or an item still at status `review`, resumes where it was. Flag the stage `review: true` to resume there.
 
 ## Development gate
 
