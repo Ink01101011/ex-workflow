@@ -91,6 +91,16 @@
         "default": "./dist/cli/index.cjs"
       }
     },
+    "./schema": {
+      "import": {
+        "types": "./dist/schema/index.d.ts",
+        "default": "./dist/schema/index.mjs"
+      },
+      "require": {
+        "types": "./dist/schema/index.d.cts",
+        "default": "./dist/schema/index.cjs"
+      }
+    },
     "./types": {
       "import": {
         "types": "./dist/types.d.ts",
@@ -112,6 +122,9 @@
       ],
       "waterfall": [
         "dist/waterfall/index.d.ts"
+      ],
+      "schema": [
+        "dist/schema/index.d.ts"
       ],
       "adapters": [
         "dist/adapters/index.d.ts"

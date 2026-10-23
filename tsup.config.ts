@@ -7,6 +7,7 @@ export default defineConfig({
     "scrum/index": "src/scrum/index.ts",
     "kanban/index": "src/kanban/index.ts",
     "waterfall/index": "src/waterfall/index.ts",
+    "schema/index": "src/schema/index.ts",
     "adapters/index": "src/adapters/index.ts",
     "cli/index": "src/cli/index.ts",
     "cli/bin": "src/cli/bin.ts",

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
 import {
   addItem,
   clearBlocker,
@@ -216,4 +217,6 @@ test("two sprints end to end", () => {
   assert.deepEqual(scrumMetrics({ ...s, items: {}, iterations: [], accounting: [] }), mm);
   // invariant: accounting always names the model
   assert.ok(s.accounting.every((a) => a.model === "small-worker"));
+  // §14: the generated schema validates the fixture in the form loadState() sees
+  assertValid(workflowStateSchema, JSON.parse(JSON.stringify(s)), "final scenario state");
 });

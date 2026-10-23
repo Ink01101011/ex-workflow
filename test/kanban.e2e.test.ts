@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
 import { addItem, clearBlocker, complete, getItem, init, next } from "../src/index.ts";
 import { board, cadencesDue, kanban, kanbanMetrics } from "../src/kanban/index.ts";
 import type { Accounting, Brief, Handoff, WorkflowError, WorkflowState } from "../src/index.ts";
@@ -231,4 +232,6 @@ test("one kanban week with an expedite", () => {
     "cadence.strategy-review",
   ])
     assert.ok(types.includes(t), `missing event ${t}`);
+  // §14: the generated schema validates the fixture in the form loadState() sees
+  assertValid(workflowStateSchema, JSON.parse(JSON.stringify(s)), "final scenario state");
 });

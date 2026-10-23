@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
 import {
   addItem,
   applyAction,
@@ -386,4 +387,6 @@ test("one waterfall project with a change request", () => {
     pending: [],
   } as unknown as WorkflowState;
   assert.deepEqual(waterfallMetrics(stripped), mx);
+  // §14: the generated schema validates the fixture in the form loadState() sees
+  assertValid(workflowStateSchema, JSON.parse(JSON.stringify(s)), "final scenario state");
 });
