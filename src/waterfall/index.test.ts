@@ -224,12 +224,21 @@ test("phaseReport lists phases, the current and open phase, pending gates and re
   assert.equal(phaseReport(s).open, "requirements");
 });
 
-test("waterfall refuses to change phases after init but accepts humanGates between phases", () => {
+test("waterfall refuses to change phases, traceability and humanGates after init (gates are built at init) but accepts changeControl between phases", () => {
   const { state } = init({ methodology: waterfall(), config: {}, now: T0 });
-  assert.throws(
-    () => changeConfig(state, waterfall(), { phases: [] }, "human", T1),
-    (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+  for (const patch of [{ phases: [] }, { humanGates: [] }])
+    assert.throws(
+      () => changeConfig(state, waterfall(), patch, "human", T1),
+      (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+    );
+  const r = changeConfig(
+    state,
+    waterfall(),
+    { changeControl: { requiresImpactAnalysis: false, approvers: ["human"] } },
+    "human",
+    T1,
   );
-  const r = changeConfig(state, waterfall(), { humanGates: [] }, "human", T1);
-  assert.deepEqual((r.state.config as { humanGates: unknown }).humanGates, []);
+  const cfg = r.state.config as { changeControl: { requiresImpactAnalysis: boolean } };
+  assert.equal(cfg.changeControl.requiresImpactAnalysis, false);
+  assert.equal(r.state.events.at(-1)!.type, "config.changed");
 });
