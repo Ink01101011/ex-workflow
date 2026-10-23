@@ -18,6 +18,8 @@ export const workflowStateSchema = document("WorkflowState", CORE_DEFINITIONS);
 export const roleSchema = document("Role", CORE_DEFINITIONS);
 /** `exwf add <item.json>` */
 export const newItemSchema = document("NewItem", CORE_DEFINITIONS);
+/** `exwf edit <id> <patch.json>` */
+export const itemPatchSchema = document("ItemPatch", CORE_DEFINITIONS);
 /** `exwf complete <id> <handoff.json>` */
 export const handoffSchema = document("Handoff", CORE_DEFINITIONS);
 /** `exwf init scrum --config` / the scrum-master policy.json */

@@ -77,7 +77,9 @@ export async function withStateLock<T>(
 }
 
 export async function saveState(root: string, state: WorkflowState): Promise<void> {
-  await writeAtomic(statePath(root), JSON.stringify(state, null, 2) + "\n");
+  const json = JSON.stringify(state, null, 2) + "\n";
+  assertValid(workflowStateSchema, JSON.parse(json), statePath(root));
+  await writeAtomic(statePath(root), json);
 }
 
 export async function loadState(root: string): Promise<WorkflowState> {

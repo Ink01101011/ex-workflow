@@ -421,19 +421,30 @@ test("waterfall: init → add → kickoff → next/complete ×2 → status → g
   );
 });
 
-test("add, complete and role add refuse files that fail their schema before touching the state", async () => {
+test("add, edit, complete and role add refuse files that fail their schema before touching the state", async () => {
   const { root, w, cfg } = await project();
   assert.equal((await runCommand(["init", "scrum", "--config", cfg], root)).exit, 0);
   const statePath = path.join(root, ".workflow", "state.json");
+  await w("item-a.json", { id: "A", title: "a" });
+  assert.equal((await runCommand(["add", "item-a.json"], root)).exit, 0);
   const before = await readFile(statePath, "utf8");
 
-  await w("bad-item.json", { id: "A", title: "a", type: "feature" });
+  await w("bad-item.json", { id: "B", title: "b", type: "feature" });
   const add = await runCommand(["add", "bad-item.json"], root);
   assert.equal(add.exit, 1);
   assert.equal(out<{ error: { code: string } }>(add).error.code, "invalid-input");
   assert.match(
     out<{ error: { message: string } }>(add).error.message,
     /bad-item\.json does not match its schema: \/type expected one of/,
+  );
+
+  await w("bad-patch.json", { foo: 1, priority: "high" });
+  const edit = await runCommand(["edit", "A", "bad-patch.json"], root);
+  assert.equal(edit.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(edit).error.code, "invalid-input");
+  assert.match(
+    out<{ error: { message: string } }>(edit).error.message,
+    /bad-patch\.json does not match its schema: \/foo unknown property/,
   );
 
   await w("bad-handoff.json", { item: "A", role: "developer", produced: [], notes: "n" });
@@ -468,4 +479,29 @@ test("add, complete and role add refuse files that fail their schema before touc
   );
 
   assert.equal(await readFile(statePath, "utf8"), before);
+});
+
+test("init --roles refuses a roles file that fails the schema", async () => {
+  const { root, w, cfg } = await project();
+  await w("roles.json", [
+    {
+      id: "dev",
+      name: "Dev",
+      modelTier: "small",
+      capabilities: ["deliver"],
+      canApprove: [],
+      inputs: [],
+      outputs: [],
+      do_not: [],
+    },
+    { id: "qa", name: "QA" },
+  ]);
+  const r = await runCommand(["init", "scrum", "--config", cfg, "--roles", "roles.json"], root);
+  assert.equal(r.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(r).error.code, "invalid-input");
+  assert.match(
+    out<{ error: { message: string } }>(r).error.message,
+    /roles\.json does not match its schema: \/modelTier missing required property/,
+  );
+  await assert.rejects(readFile(path.join(root, ".workflow", "state.json"), "utf8"));
 });

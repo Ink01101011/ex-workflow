@@ -9,7 +9,7 @@ import { createGenerator } from "ts-json-schema-generator";
 
 const OUT = path.join("src", "schema", "generated.ts");
 const GROUPS = [
-  { name: "CORE", path: "src/types.ts", types: ["WorkflowState", "Role", "NewItem", "Handoff"] },
+  { name: "CORE", path: "src/types.ts", types: ["WorkflowState", "Role", "NewItem", "ItemPatch", "Handoff"] },
   { name: "SCRUM", path: "src/scrum/config.ts", types: ["ScrumConfig"] },
   { name: "KANBAN", path: "src/kanban/config.ts", types: ["KanbanConfig"] },
   { name: "WATERFALL", path: "src/waterfall/config.ts", types: ["WaterfallConfig"] },
@@ -90,7 +90,7 @@ if (!check) {
         (n) => a[n] !== b[n],
       );
       console.error(
-        `FAIL ${OUT} is stale (first difference at line ${i + 1}):\n  fresh:     ${a[i]}\n  committed: ${b[i]}`,
+        `FAIL ${OUT} is stale (first difference at line ${i + 1}):\n  fresh:     ${a[i] ?? "(end of file)"}\n  committed: ${b[i] ?? "(end of file)"}`,
       );
       console.error("run `pnpm schema:gen` and commit the result");
       process.exitCode = 1;

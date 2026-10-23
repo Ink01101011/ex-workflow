@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { init } from "../index.ts";
 import { scrum } from "../scrum/index.ts";
 import { kanban } from "../kanban/index.ts";
@@ -10,6 +9,7 @@ import type { Methodology } from "../types.ts";
 import {
   assertValid,
   handoffSchema,
+  itemPatchSchema,
   kanbanConfigSchema,
   newItemSchema,
   roleSchema,
@@ -39,19 +39,13 @@ const SCRUM_CONFIG = {
   definitionOfDone: [{ kind: "evidence", evidenceKind: "test-output" }],
 };
 
-test("generated.ts matches a fresh generation (pnpm schema:check)", () => {
-  const r = spawnSync(process.execPath, ["scripts/gen-schema.mjs", "--check"], {
-    encoding: "utf8",
-  });
-  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
-});
-
 test("every document resolves its root $ref and every $ref inside it", () => {
   const docs = {
     workflowStateSchema,
     roleSchema,
     newItemSchema,
     handoffSchema,
+    itemPatchSchema,
     scrumConfigSchema,
     kanbanConfigSchema,
     waterfallConfigSchema,
@@ -94,6 +88,22 @@ test("negative fixtures fail at the right path", () => {
     "/status additionalProperties",
   ]);
   assert.deepEqual(at({ id: "x", title: "t", type: "feature" }, newItemSchema), ["/type enum"]);
+  assert.deepEqual(at({ foo: 1 }, itemPatchSchema), ["/foo additionalProperties"]);
+  assert.deepEqual(at({ priority: "high" }, itemPatchSchema), ["/priority type"]);
+  const validIteration = {
+    id: "i1",
+    goal: "g",
+    budget: {},
+    spent: { tokens: 0, turns: 0, wallclockMs: 0 },
+    startedAt: T0,
+    committed: [],
+    carryover: [],
+  };
+  assert.deepEqual(at({ ...state, iterations: [{ ...validIteration, spent: {} }] }), [
+    "/iterations/0/spent/tokens required",
+    "/iterations/0/spent/turns required",
+    "/iterations/0/spent/wallclockMs required",
+  ]);
   assert.deepEqual(
     at(
       {

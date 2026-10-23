@@ -324,6 +324,78 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
     required: ["summary", "reopen", "weight"],
     additionalProperties: false,
   },
+  ItemPatch: {
+    type: "object",
+    properties: {
+      type: {
+        $ref: "#/definitions/ItemType",
+      },
+      title: {
+        type: "string",
+      },
+      description: {
+        type: "string",
+      },
+      dependsOn: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+      priority: {
+        type: "number",
+      },
+      weight: {
+        type: "number",
+      },
+      deadline: {
+        type: "string",
+      },
+      classOfService: {
+        $ref: "#/definitions/ClassOfService",
+      },
+      role: {
+        type: "string",
+      },
+      parent: {
+        type: "string",
+      },
+      acceptance: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+      iteration: {
+        type: "string",
+      },
+      traces: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+      tags: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+      affects: {
+        type: "array",
+        items: {
+          type: "string",
+        },
+      },
+      phase: {
+        type: "string",
+      },
+      impactAnalysis: {
+        $ref: "#/definitions/ImpactAnalysis",
+      },
+    },
+    additionalProperties: false,
+  },
   ItemStatus: {
     type: "string",
     enum: ["todo", "in_progress", "blocked", "review", "awaiting_human", "done", "dropped"],
@@ -345,19 +417,7 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
         $ref: "#/definitions/Budget",
       },
       spent: {
-        type: "object",
-        properties: {
-          tokens: {
-            type: "number",
-          },
-          turns: {
-            type: "number",
-          },
-          wallclockMs: {
-            type: "number",
-          },
-        },
-        additionalProperties: false,
+        $ref: "#/definitions/Spent",
       },
       startedAt: {
         type: "string",
@@ -792,6 +852,22 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
       "outputs",
       "do_not",
     ],
+    additionalProperties: false,
+  },
+  Spent: {
+    type: "object",
+    properties: {
+      tokens: {
+        type: "number",
+      },
+      turns: {
+        type: "number",
+      },
+      wallclockMs: {
+        type: "number",
+      },
+    },
+    required: ["tokens", "turns", "wallclockMs"],
     additionalProperties: false,
   },
   Stage: {

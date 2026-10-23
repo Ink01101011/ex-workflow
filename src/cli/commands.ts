@@ -16,7 +16,13 @@ import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
 import { applyAction, init, validateAction } from "../methodology.ts";
 import { openIteration } from "../planner.ts";
 import { registerRole } from "../roles.ts";
-import { assertValid, handoffSchema, newItemSchema, roleSchema } from "../schema/index.ts";
+import {
+  assertValid,
+  handoffSchema,
+  itemPatchSchema,
+  newItemSchema,
+  roleSchema,
+} from "../schema/index.ts";
 import { lastEvent } from "../state.ts";
 import { scrum } from "../scrum/index.ts";
 import { kanban } from "../kanban/index.ts";
@@ -149,6 +155,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const roles = flags["roles"]
         ? await readJson<Role[]>(path.resolve(cwd, flags["roles"]))
         : undefined;
+      if (roles) for (const r of roles) assertValid(roleSchema, r, `roles file ${flags["roles"]}`);
       const res = init(
         roles
           ? { methodology: f(), config, roles, by, now }
@@ -190,6 +197,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const state = await loadState(cwd);
       const id = rest[0];
       const patch = await readJson<ItemPatch>(path.resolve(cwd, rest[1]));
+      assertValid(itemPatchSchema, patch, `patch file ${rest[1]}`);
       const res = applyAction(
         state,
         methodologyOf(state),
