@@ -168,3 +168,39 @@ test("saveBrief and saveHandoff refuse ids that escape .workflow", async () => {
     invalid,
   );
 });
+
+test("loadState refuses a state that fails the schema, naming the file and the path", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const bad = { ...fresh(), items: { X: { id: "X" } } };
+  await saveState(root, bad as never);
+  await assert.rejects(loadState(root), (e: unknown) => {
+    assert.ok(e instanceof WorkflowError);
+    assert.equal(e.code, "invalid-input");
+    assert.match(
+      e.message,
+      /state\.json does not match its schema: \/items\/X\/type missing required property "type"/,
+    );
+    assert.match(e.fix, /\/items\/X\/type/);
+    return true;
+  });
+});
+
+test("loadState refuses a role manifest that fails the schema and does not merge the rest", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveState(root, fresh());
+  const dir = path.join(root, ".workflow", "roles");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    path.join(dir, "qa.json"),
+    JSON.stringify({ ...dev, id: "qa", modelTier: "huge" }),
+  );
+  await assert.rejects(loadState(root), (e: unknown) => {
+    assert.ok(e instanceof WorkflowError);
+    assert.equal(e.code, "invalid-input");
+    assert.match(
+      e.message,
+      /role manifest .*qa\.json does not match its schema: \/modelTier expected one of/,
+    );
+    return true;
+  });
+});

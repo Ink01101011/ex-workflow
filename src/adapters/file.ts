@@ -2,6 +2,7 @@ import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fail } from "../errors.ts";
+import { assertValid, roleSchema, workflowStateSchema } from "../schema/index.ts";
 import type { Brief, Handoff, Role, WorkflowState } from "../types.ts";
 
 export const WORKFLOW_DIR = ".workflow";
@@ -115,6 +116,7 @@ export async function loadState(root: string): Promise<WorkflowState> {
       `${file} has schema version ${String(state.version)}; this ex-workflow reads version 1`,
       "upgrade ex-workflow, or run the migration this version documents in its changelog",
     );
+  assertValid(workflowStateSchema, parsed, file);
   const rolesDir = path.join(root, WORKFLOW_DIR, "roles");
   let manifests: string[] = [];
   try {
@@ -135,13 +137,7 @@ export async function loadState(root: string): Promise<WorkflowState> {
         "fix or delete that manifest",
       );
     }
-    if (typeof role !== "object" || role === null || typeof role.id !== "string") {
-      fail(
-        "invalid-input",
-        `role manifest ${manifestPath} is not an object with a string id`,
-        "a role manifest needs at least an id",
-      );
-    }
+    assertValid(roleSchema, role, `role manifest ${manifestPath}`);
     if (!roles[role.id]) roles[role.id] = role;
   }
   return { ...state, roles };

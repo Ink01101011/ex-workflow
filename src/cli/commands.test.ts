@@ -420,3 +420,52 @@ test("waterfall: init → add → kickoff → next/complete ×2 → status → g
     100,
   );
 });
+
+test("add, complete and role add refuse files that fail their schema before touching the state", async () => {
+  const { root, w, cfg } = await project();
+  assert.equal((await runCommand(["init", "scrum", "--config", cfg], root)).exit, 0);
+  const statePath = path.join(root, ".workflow", "state.json");
+  const before = await readFile(statePath, "utf8");
+
+  await w("bad-item.json", { id: "A", title: "a", type: "feature" });
+  const add = await runCommand(["add", "bad-item.json"], root);
+  assert.equal(add.exit, 1);
+  assert.equal(out<{ error: { code: string } }>(add).error.code, "invalid-input");
+  assert.match(
+    out<{ error: { message: string } }>(add).error.message,
+    /bad-item\.json does not match its schema: \/type expected one of/,
+  );
+
+  await w("bad-handoff.json", { item: "A", role: "developer", produced: [], notes: "n" });
+  const done = await runCommand(
+    [
+      "complete",
+      "A",
+      "bad-handoff.json",
+      "--tokens-in",
+      "1",
+      "--tokens-out",
+      "1",
+      "--duration-ms",
+      "1",
+      "--model",
+      "m",
+    ],
+    root,
+  );
+  assert.equal(done.exit, 1);
+  assert.match(
+    out<{ error: { message: string } }>(done).error.message,
+    /bad-handoff\.json does not match its schema: \/do_not missing required property/,
+  );
+
+  await w("bad-role.json", { id: "qa", name: "QA" });
+  const role = await runCommand(["role", "add", "bad-role.json"], root);
+  assert.equal(role.exit, 1);
+  assert.match(
+    out<{ error: { message: string } }>(role).error.message,
+    /bad-role\.json does not match its schema: \/modelTier missing required property/,
+  );
+
+  assert.equal(await readFile(statePath, "utf8"), before);
+});
