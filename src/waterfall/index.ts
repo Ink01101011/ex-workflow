@@ -175,6 +175,7 @@ export function waterfall(): Methodology<WaterfallConfig> {
     rules: waterfallRules(),
     metrics: (state) => ({ ...waterfallMetrics(state) }),
     humanDefaults: { gates: "all" },
+    lockedConfigKeys: ["phases", "traceability", "humanGates"],
     report: (state) => ({ ...phaseReport(state), coverage: traceabilityMatrix(state).coverage }),
     afterDecide: waterfallAfterDecide,
     afterComplete(state, itemId, _now) {

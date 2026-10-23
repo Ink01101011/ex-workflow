@@ -64,6 +64,16 @@ test("one-open-sprint and sprint-budget-fixed", () => {
     }),
     ["error:sprint-budget-fixed"],
   );
+  const budgetViolation = scrumRules()
+    .flatMap((r) =>
+      r.check(retro, {
+        type: "ceremony.plan",
+        by: "scrum-master",
+        payload: { goal: "g2", items: ["B"], budget: { tokens: 5000 } },
+      }),
+    )
+    .find((v) => v.rule === "sprint-budget-fixed")!;
+  assert.match(budgetViolation.fix, /exwf config set/);
   assert.deepEqual(
     run(retro, {
       type: "ceremony.plan",
@@ -213,6 +223,61 @@ test("dod-not-weakened", () => {
   );
   assert.deepEqual(
     run(s, { type: "ceremony.retro", by: "scrum-master", payload: { lessons: [] } }),
+    [],
+  );
+});
+
+const withDod = (state: WorkflowState): WorkflowState => ({
+  ...state,
+  config: {
+    ...(state.config as object),
+    definitionOfDone: [{ kind: "evidence", evidenceKind: "test-output" }],
+  },
+});
+const retroAction = (payload: Record<string, unknown>): Action => ({
+  type: "ceremony.retro",
+  by: "scrum-master",
+  payload,
+});
+
+test("dod-not-weakened between sprints", () => {
+  let s = m.ceremonies["plan"]!(withBacklog(), {
+    by: "scrum-master",
+    now: T0,
+    goal: "g",
+    items: ["A"],
+  }).state;
+  s = withDod(m.ceremonies["cancel"]!(s, { by: "product-owner", now: T1, reason: "x" }).state);
+  const vs = scrumRules().flatMap((r) =>
+    r.check(s, retroAction({ dodChanges: [{ kind: "acceptance-written" }] })),
+  );
+  assert.equal(vs.length, 1);
+  assert.match(vs[0]!.message, /evidence test-output/);
+  assert.match(vs[0]!.fix, /allowWeaken/);
+  assert.deepEqual(
+    run(s, retroAction({ dodChanges: [{ kind: "acceptance-written" }], allowWeaken: true })),
+    [],
+  );
+  assert.deepEqual(
+    run(
+      s,
+      retroAction({
+        dodChanges: [
+          { kind: "evidence", evidenceKind: "test-output" },
+          { kind: "acceptance-written" },
+        ],
+      }),
+    ),
+    [],
+  );
+  // the same policies written with their keys in another order are not a removal
+  assert.deepEqual(
+    run(
+      s,
+      retroAction({
+        dodChanges: [{ evidenceKind: "test-output", kind: "evidence" }],
+      }),
+    ),
     [],
   );
 });

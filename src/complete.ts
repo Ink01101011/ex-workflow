@@ -22,6 +22,7 @@ import type {
   Handoff,
   Methodology,
   NewItem,
+  Violation,
   WorkItem,
   WorkflowState,
 } from "./types.ts";
@@ -98,6 +99,13 @@ function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void
         { items: [item.id] },
       );
   }
+  if (acc.tokensIn + acc.tokensOut === 0 && acc.estimate !== true)
+    fail(
+      "accounting-invalid",
+      `accounting for "${item.id}" records 0 tokens`,
+      "pass the host's usage figures, or set estimate: true (CLI --estimate) to record a placeholder and correct it later with correctAccounting / exwf account",
+      { items: [item.id] },
+    );
 }
 
 /** Stage the item was pulled from: the `from.stage` of its last transition into in_progress, else its current stage. */
@@ -170,6 +178,15 @@ export function complete(
   }
 
   const verdict = handoff.verdict ?? "done";
+  const warnings: Violation[] = [];
+  if ((verdict === "done" || verdict === "needs-review") && handoff.open_questions.length > 0)
+    warnings.push({
+      rule: "open-questions-ignored",
+      severity: "warning",
+      item: id,
+      message: `"${id}" finished with ${handoff.open_questions.length} open question(s) nobody will see: ${handoff.open_questions.join(" | ")}`,
+      fix: 'use verdict "escalate" to route them to a role with capability escalate, or answer them in the next brief',
+    });
   if (verdict === "rework") {
     if (!handoff.notes || handoff.notes.trim() === "")
       fail(
@@ -275,5 +292,5 @@ export function complete(
     at,
   );
   if (methodology.afterComplete) s = methodology.afterComplete(s, id, at);
-  return { state: s, warnings: [] };
+  return { state: s, warnings };
 }

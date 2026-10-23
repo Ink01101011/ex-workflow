@@ -1,5 +1,6 @@
 import { timSort } from "exsorted";
 import { estimateTokens, remaining } from "../budget.ts";
+import { applyAgreement, retireAgreement } from "../agreements.ts";
 import { fail } from "../errors.ts";
 import {
   addItem,
@@ -12,7 +13,7 @@ import {
   type ItemPatch,
 } from "../items.ts";
 import { applyAction } from "../methodology.ts";
-import { assertPolicies } from "../policies.ts";
+import { assertPolicies, evaluatePolicies } from "../policies.ts";
 import { openIteration } from "../planner.ts";
 import { approverIds, canDo, requireCap } from "../roles.ts";
 export { canDo };
@@ -31,7 +32,7 @@ import type {
   WorkItem,
   WorkflowState,
 } from "../types.ts";
-import { closeSprint, configOf } from "./index.ts";
+import { closeSprint, configOf, resumeStageOf } from "./index.ts";
 
 const STATUSES: ItemStatus[] = [
   "todo",
@@ -172,7 +173,7 @@ function attachQuestions(
 }
 
 /** Set the Definition of Done in the config and on the review stage. */
-function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
+export function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
   return {
     ...state,
     config: { ...configOf(state), definitionOfDone: policies },
@@ -180,18 +181,46 @@ function setDod(state: WorkflowState, policies: Policy[]): WorkflowState {
   };
 }
 
-function selectAuto(state: WorkflowState, budget: Budget): string[] {
-  const out: string[] = [];
+interface Skipped {
+  id: string;
+  reason: "policy" | "budget";
+  detail: string;
+}
+
+function selectAuto(state: WorkflowState, budget: Budget): { ids: string[]; skipped: Skipped[] } {
+  const cfg = configOf(state);
+  const ids: string[] = [];
+  const skipped: Skipped[] = [];
+  const exit = stageOf(state, "backlog").exitPolicy;
   let tokens = 0;
   for (const item of backlogOrdered(state)) {
+    const unmet = evaluatePolicies(state, item, exit);
+    if (unmet.length > 0) {
+      skipped.push({
+        id: item.id,
+        reason: "policy",
+        detail: unmet.map((u) => u.message).join("; "),
+      });
+      continue;
+    }
     if (budget.tokens !== undefined) {
-      const est = estimateTokens(state, item.weight);
-      if (tokens + est > budget.tokens) break;
+      const est = estimateTokens(state, item.weight, cfg.fallbackTokensPerWeight, cfg.estimateMode);
+      if (tokens + est > budget.tokens) {
+        skipped.push({
+          id: item.id,
+          reason: "budget",
+          detail: `needs about ${est} tokens, ${budget.tokens - tokens} left`,
+        });
+        continue;
+      }
       tokens += est;
-    } else if (budget.turns !== undefined && out.length >= budget.turns) break;
-    out.push(item.id);
+    } else if (budget.turns !== undefined && ids.length >= budget.turns) {
+      skipped.push({ id: item.id, reason: "budget", detail: "turns budget full" });
+      continue;
+    }
+    ids.push(item.id);
   }
-  return out;
+  return { ids, skipped };
 }
 
 export function scrumCeremonies(methodology: () => Methodology): Record<string, Ceremony> {
@@ -209,10 +238,40 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     requireCap(state, input.by, "define-acceptance", "deliver");
     const items = (input["items"] ?? []) as Array<{ id: string; patch: ItemPatch }>;
     const split = (input["split"] ?? []) as Array<{ from: string; into: NewItem[] }>;
-    if (items.length === 0 && split.length === 0)
-      fail("invalid-input", "refine needs items[] or split[]", "pass at least one patch or split");
+    const reestimateRaw: unknown = input["reestimate"] ?? [];
+    if (!Array.isArray(reestimateRaw) || !reestimateRaw.every((x) => typeof x === "string"))
+      fail(
+        "invalid-input",
+        "refine.reestimate must be a list of item ids",
+        'pass reestimate: ["A"]',
+      );
+    const reestimate = reestimateRaw as string[];
+    if (items.length === 0 && split.length === 0 && reestimate.length === 0)
+      fail(
+        "invalid-input",
+        "refine needs items[], split[] or reestimate[]",
+        "pass at least one patch, split or reestimate",
+      );
+    for (const id of reestimate) {
+      const it = getItem(state, id);
+      if (it.stage !== "backlog" || it.status !== "todo" || it.weight === undefined)
+        fail(
+          "invalid-input",
+          `item "${id}" has no weight to confirm in the Product Backlog`,
+          "refine it with a patch { weight } instead",
+          { items: [id] },
+        );
+    }
     return act(state, "ceremony.refine", input, (s, now) => {
       for (const { id, patch } of items) s = editItem(s, id, patch, input.by, now);
+      for (const id of reestimate)
+        s = appendEvent(
+          s,
+          "item.reestimated",
+          input.by,
+          { id, weight: getItem(s, id).weight },
+          now,
+        );
       for (const sp of split) {
         getItem(s, sp.from);
         for (const n of sp.into) s = addItem(s, { ...n, parent: sp.from }, input.by, now);
@@ -225,6 +284,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         {
           edited: items.map((i) => i.id),
           split: split.map((x) => ({ from: x.from, into: x.into.map((n) => n.id) })),
+          reestimated: reestimate,
         },
         now,
       );
@@ -242,10 +302,9 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       );
     const cfg = configOf(state);
     const budget = (input["budget"] as Budget | undefined) ?? cfg.sprintBudget;
-    const wanted =
-      input["items"] === "auto"
-        ? selectAuto(state, budget)
-        : (input["items"] as string[] | undefined);
+    const auto = input["items"] === "auto" ? selectAuto(state, budget) : undefined;
+    const skipped = auto?.skipped ?? [];
+    const wanted = auto ? auto.ids : (input["items"] as string[] | undefined);
     if (!Array.isArray(wanted))
       fail(
         "invalid-input",
@@ -255,16 +314,29 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     if (wanted.length === 0)
       fail(
         "invalid-input",
-        "no backlog items fit the sprint",
-        "refine the backlog (acceptance + estimates) or raise the budget in config",
+        `no backlog items fit the sprint${
+          skipped.length
+            ? `; skipped: ${skipped.map((x) => `${x.id} (${x.reason}: ${x.detail})`).join(", ")}`
+            : ""
+        }`,
+        "refine the backlog (acceptance + estimates) or raise the budget with exwf config set",
       );
     for (const id of wanted) assertCommittable(state, id);
     return act(state, "ceremony.plan", input, (s, now) => {
       const id = `S${s.iterations.length + 1}`;
       const last = lastClosedIteration(s);
       const carryover = wanted.filter((w) => last?.carryover.includes(w));
+      const resumed: string[] = [];
       for (const w of wanted) {
-        s = moveItem(s, w, { stage: "sprint", status: "todo" }, input.by, now);
+        const rs = resumeStageOf(getItem(s, w));
+        if (rs) resumed.push(w);
+        s = moveItem(
+          s,
+          w,
+          rs ? { stage: rs, status: "review" } : { stage: "sprint", status: "todo" },
+          input.by,
+          now,
+        );
         s = patchItem(s, w, (it) => ({ ...it, iteration: id }));
       }
       s = attachQuestions(s, wanted, id, input.by, now);
@@ -288,7 +360,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         s,
         "sprint.opened",
         input.by,
-        { id, goal, committed: wanted, committedWeight, budget },
+        { id, goal, committed: wanted, committedWeight, budget, skipped, resumed },
         now,
       );
     });
@@ -315,8 +387,17 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       assertCommittable(state, id);
     }
     return act(state, "ceremony.commit", input, (s, now) => {
+      const resumed: string[] = [];
       for (const id of items) {
-        s = moveItem(s, id, { stage: "sprint", status: "todo" }, input.by, now);
+        const rs = resumeStageOf(getItem(s, id));
+        if (rs) resumed.push(id);
+        s = moveItem(
+          s,
+          id,
+          rs ? { stage: rs, status: "review" } : { stage: "sprint", status: "todo" },
+          input.by,
+          now,
+        );
         s = patchItem(s, id, (x) => ({ ...x, iteration: it.id }));
       }
       s = attachQuestions(s, items, it.id, input.by, now);
@@ -330,7 +411,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
         s,
         "sprint.committed",
         input.by,
-        { id: it.id, items, goalImpact: input["goalImpact"] ?? null },
+        { id: it.id, items, goalImpact: input["goalImpact"] ?? null, resumed },
         now,
       );
     });
@@ -441,8 +522,40 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
     const newLessons = (input["lessons"] ?? []) as Array<{
       text: string;
       scope: Lesson["scope"];
+      from?: string;
+      item?: string;
       suggestedChange?: LessonChange;
     }>;
+    const roleIds = ["human", ...Object.keys(state.roles)];
+    for (const l of newLessons) {
+      if (l.from !== undefined && (typeof l.from !== "string" || !roleIds.includes(l.from)))
+        fail(
+          "invalid-input",
+          `lesson from ${JSON.stringify(l.from)} is not a role`,
+          `from is "human" or one of the roles: ${Object.keys(state.roles).join(", ") || "(none)"}`,
+        );
+      if (l.item !== undefined) {
+        if (typeof l.item !== "string")
+          fail(
+            "invalid-input",
+            "lesson item must be an item id",
+            "name an item with addItem first",
+          );
+        getItem(state, l.item);
+      }
+    }
+    const retireRaw: unknown = input["retire"] ?? [];
+    if (
+      !Array.isArray(retireRaw) ||
+      !retireRaw.every((x) => typeof x === "string") ||
+      retireRaw.some((x, i) => retireRaw.indexOf(x) !== i)
+    )
+      fail(
+        "invalid-input",
+        "retro.retire must be a list of distinct agreement texts",
+        'e.g. { "retire": ["review in a fresh worker"] }; each agreement once',
+      );
+    const retire = retireRaw as string[];
     const adopt = (input["adopt"] ?? []) as Array<{ id: string; suggestedChange?: LessonChange }>;
     const dismiss = (input["dismiss"] ?? []) as string[];
     const dod = input["dodChanges"] as Policy[] | undefined;
@@ -482,7 +595,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
       const applyChange = (c: LessonChange | undefined) => {
         if (!c) return;
         if (c.kind === "agreement") {
-          if (!s.agreements.includes(c.text)) s = { ...s, agreements: [...s.agreements, c.text] };
+          s = applyAgreement(s, c, input.by, now);
           agreements.push(c.text);
         } else if (c.kind === "dod") {
           const cur = configOf(s).definitionOfDone;
@@ -508,8 +621,9 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           text: l.text,
           scope: l.scope,
           status: "adopted",
-          from: input.by,
+          from: l.from ?? input.by,
         };
+        if (l.item !== undefined) lesson.item = l.item;
         if (l.suggestedChange) lesson.suggestedChange = l.suggestedChange;
         s = { ...s, lessons: [...s.lessons, lesson] };
         adopted.push(id);
@@ -536,6 +650,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           ...s,
           lessons: s.lessons.map((x) => (x.id === d ? { ...x, status: "dismissed" as const } : x)),
         };
+      for (const text of retire) s = retireAgreement(s, text, input.by, now);
       if (dod) {
         dodChanged = true;
         s = setDod(s, dod);
@@ -549,6 +664,7 @@ export function scrumCeremonies(methodology: () => Methodology): Record<string, 
           adopted,
           dismissed: dismiss,
           agreements,
+          retired: retire,
           dodChanged,
           backlogAdded,
         },

@@ -213,6 +213,7 @@ export function kanban(): Methodology<KanbanConfig> {
     rules: kanbanRules(),
     metrics: (state) => ({ ...kanbanMetrics(state) }),
     humanDefaults: { gates: "none" },
+    lockedConfigKeys: ["columns", "classesOfService"],
     report: (state) => ({ cadencesDue: cadencesDue(state) }),
   };
 }

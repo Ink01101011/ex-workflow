@@ -8,13 +8,14 @@ import {
   statePath,
   withStateLock,
 } from "../adapters/file.ts";
-import { next as planNext } from "../brief.ts";
+import { next as planNext, openQuestions } from "../brief.ts";
 import { complete } from "../complete.ts";
+import { correctAccounting, type AccountingPatch } from "../accounting.ts";
 import { WorkflowError, fail } from "../errors.ts";
 import { decide } from "../gates.ts";
-import { addItem, editItem, getItem, type ItemPatch } from "../items.ts";
-import { applyAction, init, validateAction } from "../methodology.ts";
-import { openIteration } from "../planner.ts";
+import { addItem, clearBlocker, editItem, getItem, type ItemPatch } from "../items.ts";
+import { applyAction, changeConfig, init, validateAction } from "../methodology.ts";
+import { openIteration, type PlanOptions } from "../planner.ts";
 import { registerRole } from "../roles.ts";
 import {
   assertValid,
@@ -47,9 +48,12 @@ const METHODOLOGIES: Record<string, () => Methodology> = {
 export const USAGE = [
   "exwf init <scrum|kanban|waterfall> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
-  "exwf next [--max n]                  exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m",
+  "exwf next [--max n] [--fallback-tokens-per-weight n]",
+  "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--estimate] [--role r]",
+  "exwf account <item> [--line n] [--tokens-in n] [--tokens-out n] [--duration-ms n] [--model m] [--by who]",
   "exwf ceremony <name> [input.json] [--by who]",
   "exwf decide <pendingId> approve|reject [--by who] [--note text]",
+  "exwf config set <patch.json> [--by who]       exwf unblock <item> [--blocker id] [--note text] [--by who]",
   "exwf status | board | metrics | pending | lessons",
   "exwf validate <action.json>          exwf role add <manifest.json> | role list",
 ];
@@ -117,11 +121,23 @@ export interface CommandResult {
 }
 
 /** Commands that load, change and save the state: they run under .workflow/state.lock. */
-const WRITERS = new Set(["init", "add", "edit", "next", "complete", "ceremony", "decide"]);
+const WRITERS = new Set([
+  "init",
+  "add",
+  "edit",
+  "next",
+  "complete",
+  "account",
+  "ceremony",
+  "decide",
+  "unblock",
+]);
 
 export async function runCommand(argv: string[], cwd: string): Promise<CommandResult> {
   const [cmd, sub] = parseArgs(argv).positional;
-  const writes = cmd !== undefined && (WRITERS.has(cmd) || (cmd === "role" && sub === "add"));
+  const writes =
+    cmd !== undefined &&
+    (WRITERS.has(cmd) || (cmd === "role" && sub === "add") || (cmd === "config" && sub === "set"));
   try {
     return writes ? await withStateLock(cwd, () => execute(argv, cwd)) : await execute(argv, cwd);
   } catch (e) {
@@ -197,7 +213,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       await saveState(cwd, res.state);
       return {
         exit: 0,
-        out: { ok: true, warnings: res.warnings, item: getItem(res.state, item.id) },
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          item: getItem(res.state, item.id),
+        },
       };
     }
     case "edit": {
@@ -213,17 +233,28 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         (s) => editItem(s, id, patch, by, now),
       );
       await saveState(cwd, res.state);
-      return { exit: 0, out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) } };
+      return {
+        exit: 0,
+        out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) },
+      };
     }
     case "next": {
       const state = await loadState(cwd);
-      const opts = flags["max"] ? { max: num(flags, "max"), now } : { now };
+      const opts: PlanOptions = { now };
+      if (flags["max"]) opts.max = num(flags, "max");
+      if (flags["fallback-tokens-per-weight"])
+        opts.fallbackTokensPerWeight = num(flags, "fallback-tokens-per-weight");
       const res = planNext(state, methodologyOf(state), opts);
       await saveState(cwd, res.state);
       for (const b of res.briefs) await saveBrief(cwd, b);
       return {
         exit: 0,
-        out: { ok: true, reason: res.reason ?? null, skipped: res.skipped, briefs: res.briefs },
+        out: {
+          ok: true,
+          reason: res.reason ?? null,
+          skipped: res.skipped,
+          briefs: res.briefs,
+        },
       };
     }
     case "complete": {
@@ -249,13 +280,34 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         startedAt: new Date(Date.parse(now) - durationMs).toISOString(),
         endedAt: now,
       };
+      if (flags["estimate"] === "true") acc.estimate = true;
       const res = complete(state, methodologyOf(state), { ...handoff, role }, acc, now);
       await saveState(cwd, res.state);
       await saveHandoff(cwd, handoff, res.state.events.length);
       return {
         exit: 0,
-        out: { ok: true, warnings: res.warnings, item: getItem(res.state, rest[0]) },
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          item: getItem(res.state, rest[0]),
+        },
       };
+    }
+    case "account": {
+      if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
+      const state = await loadState(cwd);
+      const patch: AccountingPatch = {};
+      if (flags["tokens-in"] !== undefined) patch.tokensIn = num(flags, "tokens-in");
+      if (flags["tokens-out"] !== undefined) patch.tokensOut = num(flags, "tokens-out");
+      if (flags["duration-ms"] !== undefined) patch.durationMs = num(flags, "duration-ms");
+      if (flags["model"] !== undefined) patch.model = flags["model"];
+      const line = flags["line"] !== undefined ? num(flags, "line") : undefined;
+      const s2 = correctAccounting(state, rest[0], patch, flags["by"] ?? "human", now, line);
+      await saveState(cwd, s2);
+      const ev = lastEvent(s2)!;
+      const idx = (ev.payload as { line: number }).line;
+      const mine = s2.accounting.filter((a) => a.item === rest[0]);
+      return { exit: 0, out: { ok: true, line: mine[idx - 1], event: ev } };
     }
     case "ceremony": {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
@@ -275,8 +327,52 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       await saveState(cwd, res.state);
       return {
         exit: 0,
-        out: { ok: true, warnings: res.warnings, lastEvent: lastEvent(res.state) },
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          lastEvent: lastEvent(res.state),
+        },
       };
+    }
+    case "config": {
+      if (rest[0] !== "set" || !rest[1]) return { exit: 2, out: { ok: false, usage: USAGE } };
+      const state = await loadState(cwd);
+      const patch = await readJson<Record<string, unknown>>(path.resolve(cwd, rest[1]));
+      const res = changeConfig(state, methodologyOf(state), patch, by, now);
+      await saveState(cwd, res.state);
+      return {
+        exit: 0,
+        out: {
+          ok: true,
+          warnings: res.warnings,
+          changed: (lastEvent(res.state)!.payload as { changed: string[] }).changed,
+          config: res.state.config,
+        },
+      };
+    }
+    case "unblock": {
+      if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
+      const id = rest[0];
+      const state = await loadState(cwd);
+      const open = getItem(state, id)
+        .blockers.filter((b) => !b.clearedAt)
+        .map((b) => b.id);
+      if (open.length === 0)
+        fail(
+          "invalid-input",
+          `item ${id} has no open blocker`,
+          "nothing to clear; check exwf board",
+        );
+      const blockers = flags["blocker"] !== undefined ? [flags["blocker"]] : open;
+      const note = flags["note"];
+      const res = applyAction(
+        state,
+        methodologyOf(state),
+        { type: "blocker.clear", by, payload: { id, blockers, note: note ?? null } },
+        (s) => blockers.reduce((acc, b) => clearBlocker(acc, id, b, by, now, note), s),
+      );
+      await saveState(cwd, res.state);
+      return { exit: 0, out: { ok: true, warnings: res.warnings, item: getItem(res.state, id) } };
     }
     case "decide": {
       if (!rest[0] || (rest[1] !== "approve" && rest[1] !== "reject"))
@@ -293,7 +389,10 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         methodologyOf(state),
       );
       await saveState(cwd, s2);
-      return { exit: 0, out: { ok: true, item: entry?.item ? getItem(s2, entry.item) : null } };
+      return {
+        exit: 0,
+        out: { ok: true, item: entry?.item ? getItem(s2, entry.item) : null },
+      };
     }
     case "status": {
       const state = await loadState(cwd);
@@ -316,6 +415,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
           openIteration: openIteration(state) ?? null,
           counts,
           pending: state.pending,
+          openQuestions: openQuestions(state),
           lastEvent: lastEvent(state),
           report: m.report ? m.report(state) : null,
         },
@@ -342,19 +442,31 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
     }
     case "metrics": {
       const state = await loadState(cwd);
-      return { exit: 0, out: { ok: true, metrics: methodologyOf(state).metrics(state) } };
+      return {
+        exit: 0,
+        out: { ok: true, metrics: methodologyOf(state).metrics(state) },
+      };
     }
     case "pending":
-      return { exit: 0, out: { ok: true, pending: (await loadState(cwd)).pending } };
+      return {
+        exit: 0,
+        out: { ok: true, pending: (await loadState(cwd)).pending },
+      };
     case "lessons":
-      return { exit: 0, out: { ok: true, lessons: (await loadState(cwd)).lessons } };
+      return {
+        exit: 0,
+        out: { ok: true, lessons: (await loadState(cwd)).lessons },
+      };
     case "validate": {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const action = await readJson<Action>(path.resolve(cwd, rest[0]));
       return {
         exit: 0,
-        out: { ok: true, violations: validateAction(state, methodologyOf(state), action) },
+        out: {
+          ok: true,
+          violations: validateAction(state, methodologyOf(state), action),
+        },
       };
     }
     case "role": {
@@ -362,7 +474,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (rest[0] === "list")
         return {
           exit: 0,
-          out: { ok: true, roles: Object.keys(state.roles), detail: state.roles },
+          out: {
+            ok: true,
+            roles: Object.keys(state.roles),
+            detail: state.roles,
+          },
         };
       if (rest[0] === "add" && rest[1]) {
         const manifest = await readJson<Role>(path.resolve(cwd, rest[1]));

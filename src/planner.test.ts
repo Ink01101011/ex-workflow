@@ -159,6 +159,125 @@ test("plan stops at the open iteration's remaining budget", () => {
   assert.equal(res.reason, "budget-exhausted");
 });
 
+function sprintWith(
+  budget: { tokens?: number; turns?: number; wallclockMs?: number },
+  ids: string[],
+) {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages,
+    roles: [r("dev", ["deliver"])],
+    now: T0,
+  });
+  ids.forEach((id, n) => {
+    s = addItem(s, { id, title: id, priority: 10 - n, weight: 1 }, "po", T0);
+    s = { ...s, items: { ...s.items, [id]: { ...s.items[id]!, iteration: "S1" } } };
+  });
+  return {
+    ...s,
+    iterations: [
+      {
+        id: "S1",
+        goal: "g",
+        budget,
+        spent: { tokens: 0, turns: 0, wallclockMs: 0 },
+        startedAt: T0,
+        committed: ids,
+        carryover: [],
+      },
+    ],
+  };
+}
+
+test("a turns budget gates dispatch: remaining turns minus in-flight, then budget-exhausted", () => {
+  const s = sprintWith({ turns: 2 }, ["A", "B", "C"]);
+  const r1 = plan(s, fakeMethodology(), { now: T0 });
+  assert.deepEqual(
+    r1.dispatched.map((d) => d.id),
+    ["A", "B"],
+  );
+  assert.equal(r1.reason, "budget-exhausted");
+  assert.deepEqual(r1.skipped, [
+    { id: "C", reason: "budget", detail: "turns budget spent: 0 used + 2 in flight of 2" },
+  ]);
+  // A is complete (one turn used), B still in flight: the second turn is spoken for
+  const done = moveItem(r1.state, "A", { stage: "done", status: "done" }, "dev", T0);
+  const s2 = {
+    ...done,
+    iterations: done.iterations.map((it) => ({
+      ...it,
+      spent: { tokens: 10, turns: 1, wallclockMs: 10 },
+    })),
+  };
+  const r2 = plan(s2, fakeMethodology(), { now: T0 });
+  assert.equal(r2.dispatched.length, 0);
+  assert.equal(r2.reason, "budget-exhausted");
+});
+
+test("a turns budget counts in-flight items by the committed list, not only item.iteration", () => {
+  const s = sprintWith({ turns: 1 }, ["A", "B"]);
+  const items = { ...s.items };
+  for (const id of ["A", "B"]) {
+    const { iteration: _iteration, ...rest } = items[id]!;
+    items[id] = rest as (typeof items)[string];
+  }
+  items["A"] = { ...items["A"]!, status: "in_progress" };
+  const res = plan({ ...s, items }, fakeMethodology(), { now: T0 });
+  assert.equal(res.dispatched.length, 0);
+  assert.equal(res.reason, "budget-exhausted");
+  assert.deepEqual(
+    res.skipped.map((x) => [x.id, x.reason]),
+    [["B", "budget"]],
+  );
+});
+
+test("a spent wall-clock budget gates dispatch", () => {
+  const s = sprintWith({ wallclockMs: 100 }, ["A"]);
+  const spent = {
+    ...s,
+    iterations: s.iterations.map((it) => ({
+      ...it,
+      spent: { tokens: 0, turns: 0, wallclockMs: 100 },
+    })),
+  };
+  const res = plan(spent, fakeMethodology(), { now: T0 });
+  assert.equal(res.dispatched.length, 0);
+  assert.equal(res.reason, "budget-exhausted");
+  assert.equal(res.skipped[0]!.detail, "wall-clock budget spent");
+});
+
+test("an iteration in closing answers budget-exhausted, not no-candidates", () => {
+  const s = sprintWith({ tokens: 100 }, ["A"]);
+  const closing = { ...s, iterations: s.iterations.map((it) => ({ ...it, closing: true })) };
+  const m = fakeMethodology({ candidates: () => [] });
+  assert.equal(plan(closing, m).reason, "budget-exhausted");
+  assert.equal(plan(s, m).reason, "no-candidates");
+});
+
+test("plan takes fallbackTokensPerWeight and estimateMode from PlannerOptions, PlanOptions wins", () => {
+  const s = sprintWith({ tokens: 100 }, ["A"]);
+  const po = fakeMethodology({
+    plannerOptions: () => ({
+      schedulerMode: "throughput",
+      concurrencyCap: 10,
+      fallbackTokensPerWeight: 50,
+    }),
+  });
+  assert.deepEqual(
+    plan(s, po, { now: T0 }).dispatched.map((d) => d.id),
+    ["A"],
+  );
+  assert.equal(plan(s, po, { now: T0, fallbackTokensPerWeight: 500 }).reason, "budget-exhausted");
+  // per-call mode prices a candidate at one call regardless of weight
+  const perCall = fakeMethodology({
+    plannerOptions: () => ({ schedulerMode: "throughput", estimateMode: "per-call" }),
+  });
+  const heavy = sprintWith({ tokens: 100 }, ["A"]);
+  const w = { ...heavy, items: { ...heavy.items, A: { ...heavy.items["A"]!, weight: 9 } } };
+  assert.equal(plan(w, perCall, { now: T0, fallbackTokensPerWeight: 60 }).dispatched.length, 1);
+});
+
 test("plan wraps ex-flow errors", () => {
   let s = seed();
   s = { ...s, items: { ...s.items, A: { ...s.items["A"]!, dependsOn: ["B"] } } }; // A↔B cycle

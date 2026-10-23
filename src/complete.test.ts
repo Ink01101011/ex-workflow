@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
 import { addItem, clearBlocker, getItem } from "./items.ts";
-import { next, synthesizeBrief } from "./brief.ts";
+import { next, openQuestions, synthesizeBrief } from "./brief.ts";
 import { complete } from "./complete.ts";
 import { authorOf, decide } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
@@ -83,7 +83,13 @@ const acc = (over: Partial<Accounting> = {}): Accounting => ({
 const code = (e: unknown) => (e instanceof WorkflowError ? e.code : String(e));
 
 function started() {
-  let s = createState({ methodology: "kanban", config: {}, stages, roles, now: T0 });
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages,
+    roles,
+    now: T0,
+  });
   s = addItem(s, { id: "A", title: "a", weight: 1 }, "po", T0);
   s = {
     ...s,
@@ -124,7 +130,13 @@ test("complete validates item status, handoff and accounting", () => {
     () => complete(s, m(), handoff(), acc({ tokensIn: -1 }), T0),
     (e) => code(e) === "accounting-invalid",
   );
-  const fresh = createState({ methodology: "kanban", config: {}, stages, roles, now: T0 });
+  const fresh = createState({
+    methodology: "kanban",
+    config: {},
+    stages,
+    roles,
+    now: T0,
+  });
   const notStarted = addItem(fresh, { id: "A", title: "a" }, "po", T0);
   assert.throws(
     () => complete(notStarted, m(), handoff(), acc(), T0),
@@ -143,7 +155,11 @@ test("complete done: records accounting, evidence, spent, advances to review", (
     ["code"],
   );
   assert.equal(s.accounting.length, 1);
-  assert.deepEqual(s.iterations[0]!.spent, { tokens: 150, turns: 1, wallclockMs: 1000 });
+  assert.deepEqual(s.iterations[0]!.spent, {
+    tokens: 150,
+    turns: 1,
+    wallclockMs: 1000,
+  });
   const ev = s.events.at(-1)!;
   assert.equal(ev.type, "item.completed");
   assert.equal((ev.payload as { model: string }).model, "haiku");
@@ -242,7 +258,10 @@ test("lessons raised in a handoff are stored as raised, and adopted agreements a
     item: "A",
   });
   assert.equal(s.events.filter((e) => e.type === "lesson.raised").length, 1);
-  const withAgreement = { ...s, agreements: ["always name the DB in acceptance criteria"] };
+  const withAgreement = {
+    ...s,
+    agreements: ["always name the DB in acceptance criteria"],
+  };
   const s2 = addItem(withAgreement, { id: "B", title: "b", role: "dev" }, "po", T0);
   const b = synthesizeBriefFor(s2, "B");
   assert.ok(b.invariants.includes("always name the DB in acceptance criteria"));
@@ -252,7 +271,9 @@ test("follow_ups are added to the first stage with parent and tag, outside the i
   const s = complete(
     started(),
     m(),
-    handoff({ follow_ups: [{ id: "A-f1", title: "refactor later", weight: 1 }] }),
+    handoff({
+      follow_ups: [{ id: "A-f1", title: "refactor later", weight: 1 }],
+    }),
     acc(),
     T0,
   ).state;
@@ -263,8 +284,11 @@ test("follow_ups are added to the first stage with parent and tag, outside the i
   assert.deepEqual(f.tags, ["follow-up"]);
   assert.equal(f.iteration, undefined);
   assert.deepEqual(
-    (s.events.find((e) => e.type === "item.completed")!.payload as { followUps: string[] })
-      .followUps,
+    (
+      s.events.find((e) => e.type === "item.completed")!.payload as {
+        followUps: string[];
+      }
+    ).followUps,
     ["A-f1"],
   );
 });
@@ -288,7 +312,12 @@ test("rework from the review stage returns to the author stage with role cleared
   s = complete(
     s,
     m(),
-    handoff({ role: "qa", produced: [], verdict: "rework", notes: "missing edge cases" }),
+    handoff({
+      role: "qa",
+      produced: [],
+      verdict: "rework",
+      notes: "missing edge cases",
+    }),
     acc({ role: "qa" }),
     T0,
   ).state;
@@ -331,7 +360,10 @@ test("a question item completes straight to the last stage, skipping policies, a
 
 const gateRoles = [
   r("dev", ["deliver"]),
-  { ...r("qa", ["review", "approve-gate" as Role["capabilities"][number]]), canApprove: ["qa"] },
+  {
+    ...r("qa", ["review", "approve-gate" as Role["capabilities"][number]]),
+    canApprove: ["qa"],
+  },
 ];
 function gated(evidence: string[], mid = false) {
   const st: Stage[] = [
@@ -356,7 +388,13 @@ function gated(evidence: string[], mid = false) {
     },
     { id: "done", name: "Done", entryPolicy: [], exitPolicy: [] },
   ];
-  let s = createState({ methodology: "kanban", config: {}, stages: st, roles: gateRoles, now: T0 });
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: st,
+    roles: gateRoles,
+    now: T0,
+  });
   s = addItem(s, { id: "A", title: "a" }, "po", T0);
   return next(s, m(), { now: T0 }).state;
 }
@@ -400,7 +438,12 @@ test("two rework cycles: the item stays in the author stage and the author is st
   s = complete(
     s,
     m(),
-    handoff({ role: "qa", produced: [], verdict: "rework", notes: "round one" }),
+    handoff({
+      role: "qa",
+      produced: [],
+      verdict: "rework",
+      notes: "round one",
+    }),
     acc({ role: "qa" }),
     T0,
   ).state;
@@ -416,7 +459,13 @@ function atHumanGate(
   onFail: Stage["gate"] extends infer G ? (G extends { onFail: infer F } ? F : never) : never,
 ) {
   const st = stages.map((x) => (x.id === "review" ? { ...x, gate: { ...x.gate!, onFail } } : x));
-  let s = createState({ methodology: "kanban", config: {}, stages: st, roles, now: T0 });
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: st,
+    roles,
+    now: T0,
+  });
   s = addItem(s, { id: "A", title: "a", weight: 1 }, "po", T0);
   s = next(s, m(), { now: T0 }).state;
   s = complete(s, m(), handoff(), acc(), T0).state;
@@ -483,11 +532,67 @@ test("complete rejects an unknown verdict and malformed produced, lessons and fo
 
 test("escalate without an escalate role is missing-capability", () => {
   const noLead = roles.filter((x) => x.id !== "lead");
-  let s = createState({ methodology: "kanban", config: {}, stages, roles: noLead, now: T0 });
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages,
+    roles: noLead,
+    now: T0,
+  });
   s = addItem(s, { id: "A", title: "a", weight: 1 }, "po", T0);
   s = next(s, m(), { now: T0 }).state;
   assert.throws(
     () => complete(s, m(), handoff({ verdict: "escalate", open_questions: ["?"] }), acc(), T0),
     (e) => code(e) === "missing-capability",
   );
+});
+
+test("a completion with 0 tokens is refused unless it is a declared estimate", () => {
+  const s = started();
+  const zero = acc({ tokensIn: 0, tokensOut: 0 });
+  assert.throws(
+    () => complete(s, m(), handoff(), zero, T0),
+    (e: unknown) =>
+      code(e) === "accounting-invalid" &&
+      /--estimate|estimate: true/.test((e as WorkflowError).fix),
+  );
+  const res = complete(s, m(), handoff(), { ...zero, estimate: true }, T0);
+  assert.equal(res.state.accounting.at(-1)!.estimate, true);
+});
+
+test("a done handoff with open questions is accepted with an open-questions-ignored warning", () => {
+  const res = complete(started(), m(), handoff({ open_questions: ["which PO?"] }), acc(), T0);
+  assert.equal(res.state.items["A"]!.status, "review");
+  assert.deepEqual(
+    res.warnings.map((w) => w.rule),
+    ["open-questions-ignored"],
+  );
+  assert.equal(res.warnings[0]!.item, "A");
+  assert.match(res.warnings[0]!.fix, /escalate/);
+  assert.deepEqual(openQuestions(res.state), [
+    { item: "A", role: "dev", questions: ["which PO?"], at: T0 },
+  ]);
+  const esc = complete(
+    started(),
+    m(),
+    handoff({ verdict: "escalate", open_questions: ["q"] }),
+    acc(),
+    T0,
+  );
+  assert.deepEqual(esc.warnings, []);
+  assert.deepEqual(openQuestions(esc.state), []);
+});
+
+test("openQuestions is last-wins: a rework then a done without questions drops the item", () => {
+  let s = complete(started(), m(), handoff({ open_questions: ["which PO?"] }), acc(), T0).state;
+  assert.equal(openQuestions(s).length, 1);
+  s = {
+    ...s,
+    items: {
+      ...s.items,
+      A: { ...s.items["A"]!, stage: "todo", status: "in_progress", role: "dev" },
+    },
+  };
+  s = complete(s, m(), handoff({ open_questions: [] }), acc(), T0).state;
+  assert.deepEqual(openQuestions(s), []);
 });

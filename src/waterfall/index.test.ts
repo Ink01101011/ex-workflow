@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { init } from "../methodology.ts";
+import { changeConfig, init } from "../methodology.ts";
 import { addItem, getItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { WorkflowError } from "../errors.ts";
@@ -222,4 +222,23 @@ test("phaseReport lists phases, the current and open phase, pending gates and re
     phasesOf(s).map((p) => (p.id === "requirements" ? { ...p, status: "open" } : p)),
   );
   assert.equal(phaseReport(s).open, "requirements");
+});
+
+test("waterfall refuses to change phases, traceability and humanGates after init (gates are built at init) but accepts changeControl between phases", () => {
+  const { state } = init({ methodology: waterfall(), config: {}, now: T0 });
+  for (const patch of [{ phases: [] }, { humanGates: [] }])
+    assert.throws(
+      () => changeConfig(state, waterfall(), patch, "human", T1),
+      (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input",
+    );
+  const r = changeConfig(
+    state,
+    waterfall(),
+    { changeControl: { requiresImpactAnalysis: false, approvers: ["human"] } },
+    "human",
+    T1,
+  );
+  const cfg = r.state.config as { changeControl: { requiresImpactAnalysis: boolean } };
+  assert.equal(cfg.changeControl.requiresImpactAnalysis, false);
+  assert.equal(r.state.events.at(-1)!.type, "config.changed");
 });

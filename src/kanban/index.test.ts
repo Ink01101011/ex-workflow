@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { timSort } from "exsorted";
-import { init } from "../methodology.ts";
+import { changeConfig, init } from "../methodology.ts";
 import { addItem, editItem, getItem, moveItem } from "../items.ts";
 import { next } from "../brief.ts";
 import { complete } from "../complete.ts";
@@ -357,4 +357,18 @@ test("an escalation question is pulled past a content policy on the commitment c
   assert.equal(getItem(s, "A").stage, "done");
   assert.equal(getItem(s, "A-q1").status, "done");
   assert.ok(!skippedIds.includes("A-q1"));
+});
+
+test("kanban refuses to change columns after init but accepts maxExpedite", () => {
+  const { state } = init({ methodology: kanban(), config: {}, now: T0 });
+  try {
+    changeConfig(state, kanban(), { columns: [] }, "human", T1);
+    assert.fail("expected invalid-input");
+  } catch (e) {
+    assert.ok(e instanceof WorkflowError);
+    assert.equal(e.code, "invalid-input");
+    assert.match(e.fix, /service-delivery-review/);
+  }
+  const r = changeConfig(state, kanban(), { maxExpedite: 2 }, "human", T1);
+  assert.equal((r.state.config as { maxExpedite: number }).maxExpedite, 2);
 });

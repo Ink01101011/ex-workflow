@@ -194,6 +194,8 @@ export interface Accounting {
   durationMs: number;
   startedAt: string;
   endedAt: string;
+  /** The tokens are a placeholder the host will correct with correctAccounting, not the host's usage figures. */
+  estimate?: boolean;
 }
 
 export interface Event {
@@ -214,7 +216,7 @@ export interface PendingHuman {
 }
 
 export type LessonChange =
-  | { kind: "agreement"; text: string } // a working agreement every future brief carries as an invariant
+  | { kind: "agreement"; text: string; replaces?: string } // a working agreement every future brief carries as an invariant; replaces retires an earlier one
   | { kind: "dod"; policy: Policy } // tighten the Definition of Done
   | { kind: "backlog"; item: NewItem } // work for the backlog
   | { kind: "skill"; note: string }; // for the host: change a role prompt / memory
@@ -320,6 +322,15 @@ export interface Brief {
   relatedBugs: Array<{ id: string; title: string; affects: string[] }>;
   budgetRemaining: Budget;
   gateAhead?: Gate;
+  /** for a question item: the escalating item's last handoff */
+  parent?: {
+    item: string;
+    role: string;
+    notes: string;
+    produced: Handoff["produced"];
+    open_questions: string[];
+    do_not: string[];
+  };
 }
 
 export type CoreTerm =
@@ -352,6 +363,10 @@ export interface PlannerOptions {
   wipLimitOf?(stage: Stage, item: WorkItem): number | undefined;
   /** Role id to dispatch a todo item to (e.g. the phase's deliverer); undefined = default (item.role, then reviewer/deliverer by capability). */
   roleFor?(item: WorkItem): string | undefined;
+  /** How estimateTokens prices a candidate; default "per-weight". */
+  estimateMode?: "per-weight" | "per-call";
+  /** Tokens per weight unit when no accounting history exists; default 20000. PlanOptions.fallbackTokensPerWeight wins. */
+  fallbackTokensPerWeight?: number;
 }
 
 export interface Methodology<C = unknown> {
@@ -371,6 +386,10 @@ export interface Methodology<C = unknown> {
   humanDefaults: { gates: "all" | "none" | string[] };
   /** Called after complete(); lets the methodology react (e.g. close a sprint when the budget is gone). */
   afterComplete?(state: WorkflowState, itemId: string, now: string): WorkflowState;
+  /** Config keys that cannot change after init (changeConfig refuses them). */
+  lockedConfigKeys?: string[];
+  /** Called by changeConfig after the new config is stored; keeps derived state (e.g. stage policies) in step. */
+  afterConfigChange?(state: WorkflowState, now: string): WorkflowState;
   /** Methodology-specific status for hosts (e.g. cadences due); printed by `exwf status`. */
   report?(state: WorkflowState): Record<string, unknown>;
   /** Called by decide() after a pending entry is resolved; lets the methodology act on it (e.g. baseline a phase gate, apply a change-request decision). */

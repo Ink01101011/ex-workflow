@@ -27,21 +27,30 @@ export function isExhausted(budget: Budget, spent: Required<Budget>): boolean {
   );
 }
 
+export type EstimateMode = "per-weight" | "per-call";
+
 export function estimateTokens(
   state: WorkflowState,
   weight: number | undefined,
   fallbackPerWeight = 20000,
+  mode: EstimateMode = "per-weight",
 ): number {
   const w = weight ?? 1;
   const samples: number[] = [];
   for (const a of state.accounting) {
+    if (a.estimate === true) continue;
+    const total = a.tokensIn + a.tokensOut;
+    if (mode === "per-call") {
+      samples.push(total);
+      continue;
+    }
     const iw = state.items[a.item]?.weight;
     if (iw === undefined || iw <= 0) continue;
-    samples.push((a.tokensIn + a.tokensOut) / iw);
+    samples.push(total / iw);
   }
-  if (samples.length === 0) return fallbackPerWeight * w;
+  if (samples.length === 0) return mode === "per-call" ? fallbackPerWeight : fallbackPerWeight * w;
   samples.sort((x, y) => x - y);
   const mid = Math.floor(samples.length / 2);
   const median = samples.length % 2 ? samples[mid]! : (samples[mid - 1]! + samples[mid]!) / 2;
-  return Math.round(median * w);
+  return Math.round(mode === "per-call" ? median : median * w);
 }

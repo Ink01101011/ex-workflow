@@ -3,7 +3,7 @@ import { getItem, moveItem, patchItem, stripItemFields } from "../items.ts";
 import { openIteration } from "../planner.ts";
 import { appendEvent } from "../state.ts";
 import type { CoreTerm, Methodology, PlannerOptions, WorkItem, WorkflowState } from "../types.ts";
-import { scrumCeremonies } from "./ceremonies.ts";
+import { scrumCeremonies, setDod } from "./ceremonies.ts";
 import { validateScrumConfig, type ScrumConfig } from "./config.ts";
 import { scrumMetrics, type ScrumMetrics } from "./metrics.ts";
 import { scrumRoles } from "./roles.ts";
@@ -29,6 +29,18 @@ export const SCRUM_VOCABULARY: Record<CoreTerm, string> = {
 /** Advanced; used by ceremonies. */
 export function configOf(state: WorkflowState): ScrumConfig {
   return state.config as ScrumConfig;
+}
+
+/** The stage a carried-over item was returned from when it was in review: it resumes there, not at the sprint start. */
+export function resumeStageOf(item: WorkItem): string | undefined {
+  const t = item.transitions.at(-1);
+  return t &&
+    t.by === "system" &&
+    t.to.stage === "backlog" &&
+    t.to.status === "todo" &&
+    t.from.status === "review"
+    ? t.from.stage
+    : undefined;
 }
 
 /** Send an item back to the backlog: clear its open blockers and pending decisions, strip iteration and role. */
@@ -137,10 +149,13 @@ export function scrum(): Methodology<ScrumConfig> {
     requiredCapabilities: ["order-backlog", "facilitate", "deliver"],
     exclusiveCapabilities: ["order-backlog"],
     plannerOptions(state): PlannerOptions {
-      const cap = configOf(state).inProgressWipLimit;
-      return cap === undefined
-        ? { schedulerMode: "level", dispatchStage: "in_progress" }
-        : { schedulerMode: "level", dispatchStage: "in_progress", concurrencyCap: cap };
+      const cfg = configOf(state);
+      const po: PlannerOptions = { schedulerMode: "level", dispatchStage: "in_progress" };
+      if (cfg.inProgressWipLimit !== undefined) po.concurrencyCap = cfg.inProgressWipLimit;
+      if (cfg.estimateMode !== undefined) po.estimateMode = cfg.estimateMode;
+      if (cfg.fallbackTokensPerWeight !== undefined)
+        po.fallbackTokensPerWeight = cfg.fallbackTokensPerWeight;
+      return po;
     },
     candidates(state): WorkItem[] {
       const it = openIteration(state);
@@ -167,13 +182,17 @@ export function scrum(): Methodology<ScrumConfig> {
     rules: scrumRules(),
     metrics: (state) => ({ ...scrumMetrics(state) }),
     humanDefaults: { gates: ["sprint-review"] },
+    afterConfigChange(state) {
+      return setDod(state, configOf(state).definitionOfDone);
+    },
     afterComplete(state, _itemId, now) {
       const it = openIteration(state);
       if (!it || (!it.closing && !isExhausted(it.budget, it.spent))) return state;
       const inFlight = Object.values(state.items).some(
         (i) => i.iteration === it.id && i.status === "in_progress",
       );
-      if (!inFlight) return closeSprint(state, "budget", now);
+      if (!inFlight && configOf(state).autoClose !== false)
+        return closeSprint(state, "budget", now);
       if (it.closing) return state;
       return appendEvent(
         {
