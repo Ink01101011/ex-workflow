@@ -2,9 +2,11 @@ import { ZERO_SPENT } from "../budget.ts";
 import { fail } from "../errors.ts";
 import { raisePending } from "../gates.ts";
 import { applyAction } from "../methodology.ts";
-import { approverIds, requireCap } from "../roles.ts";
+import { getItem } from "../items.ts";
+import { approverIds, canDo, requireCap, rolesWith } from "../roles.ts";
 import { appendEvent, nowOf } from "../state.ts";
 import type {
+  Capability,
   Ceremony,
   CeremonyInput,
   Methodology,
@@ -13,8 +15,10 @@ import type {
   WorkflowState,
 } from "../types.ts";
 import { baselinePhase } from "./baseline.ts";
+import { approveChange, rejectChange } from "./change.ts";
 import { configOf } from "./config.ts";
 import { getPhase, itemsInPhase, lastToPhase, phasesOf, withPhases } from "./phases.ts";
+import { phaseRetrospective } from "./retro.ts";
 import { traceabilityMatrix } from "./traceability.ts";
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
@@ -53,6 +57,8 @@ function recordDeliverable(
   );
   return appendEvent(s, "phase.deliverable", by, { phase: phaseId, kind, ref }, now);
 }
+
+export { approveChange, rejectChange } from "./change.ts";
 
 export function waterfallCeremonies(methodology: () => Methodology): Record<string, Ceremony> {
   const act = (
@@ -203,7 +209,97 @@ export function waterfallCeremonies(methodology: () => Methodology): Record<stri
     });
   };
 
-  return { kickoff, gateReview };
+  const changeControlBoard: Ceremony = (state, input) => {
+    requireCap(state, input.by, "control-change");
+    const id = input["change"];
+    if (typeof id !== "string" || id.trim() === "")
+      fail(
+        "invalid-input",
+        "changeControlBoard needs change: string (a change-request id)",
+        'e.g. { "change": "CR-1", "decision": "approve", "note": "why" }',
+      );
+    const cr = getItem(state, id);
+    if (cr.type !== "change-request")
+      fail(
+        "invalid-input",
+        `item "${id}" is a ${cr.type}, not a change-request`,
+        "only change-request items go through the board",
+        { items: [id] },
+      );
+    if (cr.status === "done" || cr.status === "dropped")
+      fail(
+        "invalid-transition",
+        `change "${id}" is already ${cr.status === "done" ? "approved" : "rejected"}`,
+        "raise a new change-request",
+        { items: [id] },
+      );
+    if (cr.status === "awaiting_human") {
+      const p = state.pending.find((x) => x.item === id);
+      fail(
+        "no-op",
+        `change "${id}" is awaiting the human decision${p ? ` (${p.id})` : ""}`,
+        `decide ${p?.id ?? "<pending id>"} approve|reject`,
+        { items: [id] },
+      );
+    }
+    const decision = input["decision"];
+    if (decision !== "approve" && decision !== "reject")
+      fail(
+        "invalid-input",
+        'changeControlBoard.decision must be "approve" or "reject"',
+        "state the board's decision",
+      );
+    const note = typeof input["note"] === "string" ? input["note"] : "";
+    const approvers = configOf(state).changeControl.approvers;
+    for (const q of approvers) {
+      if (
+        q === "human" ||
+        input.by === "human" ||
+        canDo(state, input.by, q.capability as Capability)
+      )
+        continue;
+      fail(
+        "gate-unmet",
+        `"${input.by}" lacks capability "${q.capability}" required by change control`,
+        `decide as one of: human${rolesWith(state, q.capability as Capability)
+          .map((r) => `, ${r.id}`)
+          .join("")}`,
+        { rule: "change-control", items: [id] },
+      );
+    }
+    const needsHuman = approvers.includes("human") && input.by !== "human";
+    return act(state, "ceremony.changeControlBoard", input, (s, now) => {
+      if (needsHuman) {
+        s = raisePending(
+          s,
+          {
+            kind: "decision",
+            item: id,
+            question: `Change "${id}" (${cr.title}): the board (${input.by}) recommends ${decision}${note ? `: ${note}` : ""}. Approve or reject the change?`,
+          },
+          now,
+        );
+        const pending = s.pending[s.pending.length - 1]!.id;
+        return appendEvent(
+          s,
+          "change.recommended",
+          input.by,
+          { change: id, decision, note, pending },
+          now,
+        );
+      }
+      return decision === "approve"
+        ? approveChange(s, id, input.by, note, now)
+        : rejectChange(s, id, input.by, note, now);
+    });
+  };
+
+  return {
+    kickoff,
+    gateReview,
+    changeControlBoard,
+    phaseRetrospective: phaseRetrospective(methodology),
+  };
 }
 
 /** decide() hook: a phase gate's human decision baselines the phase or records the failure. */
@@ -238,6 +334,17 @@ export function waterfallAfterDecide(
       { phase: phase.id, gate: entry.gate, note },
       now,
     );
+  }
+  if (
+    entry.kind === "decision" &&
+    entry.item !== undefined &&
+    Object.hasOwn(state.items, entry.item)
+  ) {
+    const item = state.items[entry.item]!;
+    if (item.type !== "change-request") return state;
+    return decision === "approve"
+      ? approveChange(state, item.id, by, note, now)
+      : rejectChange(state, item.id, by, note, now);
   }
   return state;
 }

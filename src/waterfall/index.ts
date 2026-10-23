@@ -50,7 +50,13 @@ export {
 export { waterfallStages } from "./stages.ts";
 export { waterfallRoles } from "./roles.ts";
 export { waterfallRules } from "./rules.ts";
-export { waterfallCeremonies, waterfallAfterDecide, wantPhase } from "./ceremonies.ts";
+export {
+  waterfallCeremonies,
+  waterfallAfterDecide,
+  wantPhase,
+  approveChange,
+  rejectChange,
+} from "./ceremonies.ts";
 export { traceabilityMatrix, missingTraces } from "./traceability.ts";
 export type { TraceabilityMatrix, TraceRow } from "./traceability.ts";
 export { baselinePhase, reopenPhases } from "./baseline.ts";
