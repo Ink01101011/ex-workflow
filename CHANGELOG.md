@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 (2026-10-24)
+
+Documentation release; no code, schema, CLI or `state.json` change.
+
+- README rewritten for users of the package: a contents table, a methodology comparison (roles, flow, ceremonies, metrics), the run loop, quick starts for Scrum, Kanban and Waterfall, the `.workflow/` layout, the full CLI reference, configuration keys per methodology, every ceremony with its input shape, the item, brief, handoff and accounting contracts, the error shape with every code, the JSON Schema entry point, the package entry points, the compatibility promise and the known limitations written as what happens and what to do.
+- Removed from the README: the workflowAI layer roadmap, the per-stage status history, the development gate, the publishing notes and the internal reasoning behind each accepted limitation; the design spec and CHANGELOG keep that history.
+- `VERSION` is `"1.0.1"`.
+
 ## 1.0.0 (2026-10-24)
 
 First stable release, published to `latest`. Phase 7 fixes the five engine gaps the workflowAI S2 dogfood raised (#23-#27) and closes the 1.0 definition; the decisions are in the design spec, section 23.
