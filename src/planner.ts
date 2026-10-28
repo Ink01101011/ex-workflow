@@ -187,7 +187,8 @@ export function plan(
   const caps = resourceCapsFor(state);
   const iteration = openIteration(state);
   const left = iteration ? remaining(iteration.budget, iteration.spent) : {};
-  let tokensLeft = left.tokens;
+  let tokensLeft =
+    left.tokens === undefined ? undefined : Math.max(0, left.tokens - (po.reservedTokens ?? 0));
   const inFlight = iteration
     ? Object.values(state.items).filter(
         (i) =>

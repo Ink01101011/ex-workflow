@@ -3,6 +3,8 @@ import {
   KANBAN_DEFINITIONS,
   SCRUM_DEFINITIONS,
   WATERFALL_DEFINITIONS,
+  INVESTIGATION_DEFINITIONS,
+  EXPERIMENTATION_DEFINITIONS,
 } from "./generated.ts";
 import type { JsonSchema, JsonSchemaDocument } from "./types.ts";
 
@@ -26,6 +28,11 @@ export const handoffSchema = document("Handoff", CORE_DEFINITIONS);
 export const scrumConfigSchema = document("ScrumConfig", SCRUM_DEFINITIONS);
 export const kanbanConfigSchema = document("KanbanConfig", KANBAN_DEFINITIONS);
 export const waterfallConfigSchema = document("WaterfallConfig", WATERFALL_DEFINITIONS);
+export const investigationConfigSchema = document("InvestigationConfig", INVESTIGATION_DEFINITIONS);
+export const experimentationConfigSchema = document(
+  "ExperimentationConfig",
+  EXPERIMENTATION_DEFINITIONS,
+);
 
 export { validate, assertValid } from "./validate.ts";
 export type { JsonSchema, JsonSchemaDocument, SchemaError } from "./types.ts";

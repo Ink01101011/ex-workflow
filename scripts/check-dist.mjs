@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
-function verify(label, core, scrum, kanban, waterfall, schema) {
+function verify(label, core, scrum, kanban, waterfall, schema, investigation, experimentation) {
   try {
     let caught;
     try {
@@ -31,6 +31,13 @@ function verify(label, core, scrum, kanban, waterfall, schema) {
     if (!(wcaught instanceof core.WorkflowError)) throw new Error("waterfall error is not instanceof core WorkflowError");
     if (wcaught.code !== "config-invalid") throw new Error(`unexpected waterfall code ${wcaught.code}`);
     if (waterfall.waterfall().name !== "waterfall") throw new Error("waterfall().name is not waterfall");
+    for (const [name, module] of Object.entries({ investigation, experimentation })) {
+      if (module[name]().name !== name) throw new Error(`${name} factory name`);
+      let caught;
+      try { module[`validate${name[0].toUpperCase()}${name.slice(1)}Config`]({}); } catch (error) { caught = error; }
+      if (!(caught instanceof core.WorkflowError) || caught.code !== "config-invalid")
+        throw new Error(`${name} error identity or code differs from core WorkflowError`);
+    }
     let scaught;
     try {
       schema.assertValid(schema.roleSchema, { id: 1 }, "role");
@@ -47,7 +54,7 @@ function verify(label, core, scrum, kanban, waterfall, schema) {
 }
 
 const url = (p) => pathToFileURL(resolve(p)).href;
-verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")), await import(url("dist/waterfall/index.mjs")), await import(url("dist/schema/index.mjs")));
+verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")), await import(url("dist/waterfall/index.mjs")), await import(url("dist/schema/index.mjs")), await import(url("dist/investigation/index.mjs")), await import(url("dist/experimentation/index.mjs")));
 const require = createRequire(import.meta.url);
-verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"), require("./../dist/waterfall/index.cjs"), require("./../dist/schema/index.cjs"));
+verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"), require("./../dist/waterfall/index.cjs"), require("./../dist/schema/index.cjs"), require("./../dist/investigation/index.cjs"), require("./../dist/experimentation/index.cjs"));
 console.log("ok");

@@ -1,6 +1,6 @@
 # ex-workflow
 
-**Methodology engine for AI agent teams.** Scrum, Kanban and Waterfall as data-driven state machines in TypeScript: the engine decides which item may move, who may approve and whether an iteration may close; your agents only do the work.
+**Methodology engine for AI agent teams.** Scrum, Kanban, Waterfall, Investigation and Experimentation as data-driven state machines in TypeScript: the engine decides which item may move, who may approve and whether an iteration may close; your agents only do the work.
 
 [![npm](https://img.shields.io/npm/v/ex-workflow)](https://www.npmjs.com/package/ex-workflow) [![license](https://img.shields.io/npm/l/ex-workflow)](LICENSE) Node >= 18 · macOS, Linux, Windows · ESM + CommonJS · no I/O in core
 
@@ -17,18 +17,19 @@
 4. [Quick start: Scrum](#quick-start-scrum)
 5. [Quick start: Kanban](#quick-start-kanban)
 6. [Quick start: Waterfall](#quick-start-waterfall)
-7. [Persisting state](#persisting-state)
-8. [CLI reference (`exwf`)](#cli-reference-exwf)
-9. [Configuration](#configuration)
-10. [Ceremonies](#ceremonies)
-11. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
-12. [Errors](#errors)
-13. [JSON Schema](#json-schema)
-14. [Package entry points](#package-entry-points)
-15. [Compatibility and versioning](#compatibility-and-versioning)
-16. [Known limitations](#known-limitations)
-17. [Contributing](#contributing)
-18. [License](#license)
+7. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
+8. [Persisting state](#persisting-state)
+9. [CLI reference (`exwf`)](#cli-reference-exwf)
+10. [Configuration](#configuration)
+11. [Ceremonies](#ceremonies)
+12. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
+13. [Errors](#errors)
+14. [JSON Schema](#json-schema)
+15. [Package entry points](#package-entry-points)
+16. [Compatibility and versioning](#compatibility-and-versioning)
+17. [Known limitations](#known-limitations)
+18. [Contributing](#contributing)
+19. [License](#license)
 
 ## Install
 
@@ -37,7 +38,7 @@ npm install ex-workflow      # or: pnpm add ex-workflow
 npx exwf                     # prints the CLI usage
 ```
 
-`latest` is the supported line (1.0.1). Pre-releases, when any, are published under the `stage` dist-tag.
+This source tree targets version 1.1.0. Pre-releases, when any, are published under the `stage` dist-tag.
 
 ## Pick a methodology
 
@@ -50,7 +51,9 @@ npx exwf                     # prints the CLI usage
 | Ceremonies | refine, plan, commit, uncommit, daily, review, retro, cancel | replenishment, delivery-planning, service-delivery-review, operations-review, risk-review, strategy-review | kickoff, gateReview, changeControlBoard, phaseRetrospective |
 | Metrics | velocity, cost per point, budget utilisation | lead and cycle time, throughput, WIP, flow efficiency, aging, CFD, SLE compliance | phase report, requirement coverage, traceability matrix |
 
-All three share one core: the same item model, the same brief and handoff contracts, the same CLI and the same `.workflow/` files. Roles are data (capabilities, not names), so you can replace or extend the presets with `exwf role add`.
+Scrum, Kanban and Waterfall share one core: the same item model, the same brief and handoff contracts, the same CLI and the same `.workflow/` files. Roles are data (capabilities, not names), so you can replace or extend the presets with `exwf role add`.
+
+Standalone [Investigation and Experimentation](#standalone-investigation-and-experimentation) add evidence-driven inquiry and isolated candidate comparison; each runs in its own state.
 
 ## How a run works
 
@@ -131,6 +134,60 @@ state = decide(state, state.pending[0]!.id, "approve", "human", "ok", undefined,
 
 Phases open one at a time (`kickoff`) and close through a gate (`gateReview`), human-approved by default. An approved gate **baselines** the phase: its items are frozen and can only change through an approved change-request (`changeControlBoard`, with an impact analysis). Requirements must trace to design and verification items before those gates close; the engine generates the `traceability-matrix` deliverable. Default deliverables per phase: `srs`; `design-doc`, `interface-spec`; `code-baseline`; `test-report`, `traceability-matrix`; `release-notes`, `deployment-record`; `change-log`.
 
+## Standalone investigation and experimentation
+
+Run the complete synthetic SDK examples from this repository:
+
+```sh
+pnpm exec tsx scripts/example-investigation.ts
+pnpm exec tsx scripts/example-experimentation.ts
+```
+
+[Investigation example](scripts/example-investigation.ts) exercises execution, observation, rejected review, independent replay and a resolved conclusion. [Experimentation example](scripts/example-experimentation.ts) compares two candidates (one nonreproducible), records exact-SHA integration, validates it afresh and cleans up. Both use explicitly synthetic in-memory host outputs and assert their final outcomes; they do not execute procedures, benchmarks, Git or filesystem operations.
+
+These methodologies run in their own workflow state. They do not nest inside, migrate into, or coordinate Scrum, Kanban, Waterfall or each other. The host executes procedures, creates isolated workspaces, runs benchmarks and performs Git operations; the engine records and validates the resulting artifacts.
+
+```ts
+import { init } from "ex-workflow";
+import { investigation } from "ex-workflow/investigation";
+
+const m = investigation();
+let { state } = init({ methodology: m, config: {
+  question: "Why do repeated requests miss the cache?",
+  maxRounds: 3, budget: { tokens: 100_000, turns: 20 },
+} });
+state = m.ceremonies["intake"]!(state, { by: "investigator", item: "CACHE" }).state;
+state = m.ceremonies["hypotheses"]!(state, { by: "investigator", hypotheses: [
+  { id: "key", claim: "Keys differ", falsifiedBy: "Identical keys" },
+  { id: "expiry", claim: "Entries expire", falsifiedBy: "Live entries" },
+] }).state;
+```
+
+Investigation requires a question, positive `maxRounds` and a finite positive `budget` (`tokens`, `turns`, `wallclockMs`). Its ceremonies are `intake { item }`, `hypotheses { hypotheses: [{ id, claim, falsifiedBy }], singleHypothesisRationale? }`, `preregister { experiment: { id, procedureRef, predictions: [{ hypothesis, prediction }], replayOf? } }`, `observe { experiment, result: { id, valid, summary, provenanceRefs } }`, `update-belief { result, assessments: [{ hypothesis, assessment, reason }], next: "round" | "conclusion" }`, `conclude { outcome, summary, evidenceRefs, supportedHypothesis? }`, `review-conclusion { approve, reason, replayRefs?, next?: "round" | "conclusion" }` and `stop { reason }`. Assessments are `supported`, `refuted` or `uncertain`; outcomes are `resolved` or `inconclusive`. Execute each preregistered run with `next()` and `complete()` before observing it, producing `experiment-output` evidence. A resolved conclusion needs supporting valid evidence, a valid replay and an independent `conclusion-reviewer`; `investigator` handles the other ceremonies. Invalid runs remain recorded.
+
+```ts
+import { init, addItem } from "ex-workflow";
+import { experimentation } from "ex-workflow/experimentation";
+
+const m = experimentation();
+let { state } = init({ methodology: m, config: {
+  objective: "Lowest median latency", direction: "minimize", tieBreak: "candidate-id",
+  concurrencyCap: 2, maxCandidates: 4,
+  candidateBudget: { turns: 10 }, totalBudget: { turns: 40 },
+} });
+state = addItem(state, { id: "A", title: "Candidate A", acceptance: ["Pass frozen benchmark"] }, "coordinator");
+state = m.ceremonies["freeze"]!(state, { by: "coordinator", baseSha: "a".repeat(40),
+  harness: "bench-v1", candidates: [{ id: "a", item: "A", author: "builder" }],
+}).state;
+state = m.ceremonies["provision"]!(state, { by: "coordinator", candidate: "a", workspace: "/worktrees/a", baseSha: "a".repeat(40), isolated: true }).state;
+```
+
+Experimentation requires `objective`; `direction` defaults to `minimize` (`maximize` also supported), `tieBreak` to `candidate-id`, `concurrencyCap` to 2, `maxCandidates` to 4, and positive `candidateBudget` / `totalBudget` to 10 / 40 turns. Freeze the full baseline SHA, harness identity and candidate authors before work. The host must provision distinct isolated workspaces at that baseline and enforce their ownership; workspace strings are recorded identities, not filesystem operations.
+
+Ceremonies continue with `start { candidate }` and `submit { candidate, sha, score, baseSha, workspace, harness, command, log, spent: { tokens, turns, wallclockMs } }` by the builder; `validate { candidate, sha, harness, passed, reproducible, evidence, spent }` by an independent validator; `compare` by the coordinator; `integrate { selectedSha, targetSha, integrationSha, spent }` by the integrator; and `validate-integration { sha, targetSha, harness, passed, evidence, spent }` by a validator independent of the author and integrator. SHAs are full lowercase commit hashes. Comparison ranks eligible validated candidates by score then candidate id. Promotion records the exact selected SHA; fresh validation checks the integration SHA against the current target and frozen harness. The coordinator may `terminate { candidate, status: "failed" | "timed-out" | "cancelled", reason, spent, log }`, `stop { reason, spent }`, then `cleanup { workspaces }` after closure. Terminate every dispatched, running or submitted candidate with final cumulative usage and logs before stopping; stop only automatically cancels candidates that never started. Cleanup records host-confirmed release; the host removes workspaces itself.
+
+The CLI supports `exwf init investigation --config investigation.json` and `exwf init experimentation --config experimentation.json`, followed by the same `ceremony`, `next`, `complete`, `status`, `metrics` and persistence commands. Ceremony input files contain the objects above; pass the role with `--by`.
+
 ## Persisting state
 
 Core performs no I/O. The file adapter is the only part that touches disk, and the CLI is built on it.
@@ -162,7 +219,7 @@ Run from the directory that holds `.workflow/`. Every command prints JSON on std
 
 | Command | Returns |
 |---|---|
-| `init <scrum\|kanban\|waterfall> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
+| `init <scrum\|kanban\|waterfall\|investigation\|experimentation> --config <file> [--roles <file>]` | `{ ok, state: { methodology, stages, roles } }` |
 | `add <item.json> [--by who]` | `{ ok, warnings, item }`, checked by the methodology rules |
 | `edit <id> <patch.json> [--by who]` | `{ ok, warnings, item }` |
 | `next [--max n] [--fallback-tokens-per-weight n]` | `{ ok, reason, skipped, briefs }`; writes `.workflow/briefs/<id>.json`. `--max` caps the briefs returned; the fallback prices a candidate with no accounting history (default 20000 tokens per weight unit) |
@@ -282,7 +339,7 @@ Codes: `unknown-item`, `duplicate-item`, `unknown-role`, `duplicate-role`, `unkn
 
 `ex-workflow/schema` exports draft-07 documents generated from the TypeScript types, plus a dependency-free validator:
 
-`workflowStateSchema`, `roleSchema`, `newItemSchema`, `itemPatchSchema`, `handoffSchema`, `scrumConfigSchema`, `kanbanConfigSchema`, `waterfallConfigSchema`
+`workflowStateSchema`, `roleSchema`, `newItemSchema`, `itemPatchSchema`, `handoffSchema`, `scrumConfigSchema`, `kanbanConfigSchema`, `waterfallConfigSchema`, `investigationConfigSchema`, `experimentationConfigSchema`
 
 ```ts
 import { assertValid, validate, handoffSchema } from "ex-workflow/schema";
@@ -301,8 +358,10 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/scrum` | `scrum()`, `scrumMetrics`, `dailyReport`, `closeSprint`, presets |
 | `ex-workflow/kanban` | `kanban()`, `board`, `kanbanMetrics`, `opsReport`, `riskReport`, `cadencesDue`, `DEFAULT_COLUMNS`, presets |
 | `ex-workflow/waterfall` | `waterfall()`, `phaseReport`, `traceabilityMatrix`, `waterfallMetrics`, `baselinePhase`, `reopenPhases`, presets |
+| `ex-workflow/investigation` | `investigation()`, config validation and artifact types |
+| `ex-workflow/experimentation` | `experimentation()`, config validation and artifact types |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
-| `ex-workflow/schema` | the eight schema documents, `validate`, `assertValid` |
+| `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
 | `ex-workflow/types` | every public type |
 
@@ -310,7 +369,7 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 6
 
 ## Compatibility and versioning
 
-- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the eight schema documents, the 52 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
+- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
 

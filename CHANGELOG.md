@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 (2026-10-28)
+
+- Add standalone Investigation (#37) and Experimentation (#38) methodologies, public subpath entries, CLI initialization, persisted lifecycle artifacts, configuration schemas and integration coverage. Investigation records falsifiable hypotheses, preregistered runs, observations, belief updates, replay and independent conclusion review. Experimentation records frozen baselines and harnesses, isolated candidate identities, bounded execution, exact-SHA validation, deterministic selection and freshly validated integration. Hosts own execution, Git and workspace lifecycle; cross-methodology workflows are unsupported.
+
 ## 1.0.1 (2026-10-24)
 
 Documentation release; no code, schema, CLI or `state.json` change.

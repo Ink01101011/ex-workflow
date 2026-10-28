@@ -485,3 +485,19 @@ test("roleFor picks the dispatch role before the deliver default; unknown ids fa
   const nodes = toExNodes([item], s, undefined, () => "arch");
   assert.equal(nodes[0]!.resourceClass, "arch");
 });
+
+test("planner subtracts methodology-reserved tokens before dispatch", () => {
+  const s = sprintWith({ tokens: 2 }, ["A", "B"]);
+  const method = fakeMethodology({
+    plannerOptions: () => ({
+      schedulerMode: "throughput",
+      fallbackTokensPerWeight: 1,
+      reservedTokens: 1,
+    }),
+  });
+  assert.equal(plan(s, method).dispatched.length, 1);
+  const ordinary = fakeMethodology({
+    plannerOptions: () => ({ schedulerMode: "throughput", fallbackTokensPerWeight: 1 }),
+  });
+  assert.equal(plan(s, ordinary).dispatched.length, 2);
+});

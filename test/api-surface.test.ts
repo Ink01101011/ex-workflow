@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -7,6 +8,8 @@ import * as core from "../src/index.ts";
 import * as scrum from "../src/scrum/index.ts";
 import * as kanban from "../src/kanban/index.ts";
 import * as waterfall from "../src/waterfall/index.ts";
+import * as investigation from "../src/investigation/index.ts";
+import * as experimentation from "../src/experimentation/index.ts";
 import * as schema from "../src/schema/index.ts";
 import { USAGE } from "../src/cli/commands.ts";
 
@@ -32,10 +35,45 @@ const HAND_BUILT_KINDS = ["state.created"];
 
 function eventKinds(): string[] {
   const kinds = new Set<string>(HAND_BUILT_KINDS);
-  // the first quoted string after appendEvent( is the kind, whatever the state expression before it
-  for (const file of sources(SRC))
-    for (const m of readFileSync(file, "utf8").matchAll(/appendEvent\([^"]*"([^"]+)"/g))
-      kinds.add(m[1]!);
+  for (const file of sources(SRC)) {
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const isInvestigation = file.endsWith(`${path.sep}investigation${path.sep}ceremonies.ts`);
+    const isExperimentation = file.endsWith(`${path.sep}experimentation${path.sep}ceremonies.ts`);
+    const visit = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        const name = node.expression.text;
+        const argument =
+          name === "appendEvent"
+            ? node.arguments[1]
+            : isInvestigation && name === "save"
+              ? node.arguments[3]
+              : isExperimentation && name === "reduce"
+                ? node.arguments[0]
+                : undefined;
+        if (argument && ts.isStringLiteral(argument))
+          kinds.add(
+            name === "appendEvent"
+              ? argument.text
+              : `${isInvestigation ? "investigation" : "experimentation"}.${argument.text}`,
+          );
+      }
+      // closed() forwards its typed outcome into save(), including a dynamic conclusion outcome.
+      if (isInvestigation && ts.isFunctionDeclaration(node) && node.name?.text === "closed") {
+        const type = node.parameters[3]?.type;
+        if (type && ts.isUnionTypeNode(type))
+          for (const member of type.types)
+            if (ts.isLiteralTypeNode(member) && ts.isStringLiteral(member.literal))
+              kinds.add(`investigation.${member.literal.text}`);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
   return sorted(kinds);
 }
 
@@ -46,6 +84,8 @@ function current() {
       "./scrum": names(scrum),
       "./kanban": names(kanban),
       "./waterfall": names(waterfall),
+      "./investigation": names(investigation),
+      "./experimentation": names(experimentation),
       "./schema": names(schema),
     },
     usage: [...USAGE],
