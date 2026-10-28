@@ -8,6 +8,8 @@ for (const [name, entry] of [
   ["measure", "scripts/measure-entry.ts"],
   ["measure-kanban", "scripts/measure-kanban-entry.ts"],
   ["measure-waterfall", "scripts/measure-waterfall-entry.ts"],
+  ["measure-investigation", "scripts/measure-investigation-entry.ts"],
+  ["measure-experimentation", "scripts/measure-experimentation-entry.ts"],
   ["measure-schema", "scripts/measure-schema-entry.ts"],
 ]) {
   await build({
@@ -37,6 +39,10 @@ const measured = {
   "dist/waterfall/index.mjs": statSync("dist/waterfall/index.mjs").size,
   "core+waterfall": statSync(".size-measure/measure-waterfall.mjs").size,
   "dist/schema/index.mjs": statSync("dist/schema/index.mjs").size,
+  "dist/investigation/index.mjs": statSync("dist/investigation/index.mjs").size,
+  "core+investigation": statSync(".size-measure/measure-investigation.mjs").size,
+  "dist/experimentation/index.mjs": statSync("dist/experimentation/index.mjs").size,
+  "core+experimentation": statSync(".size-measure/measure-experimentation.mjs").size,
   schema: statSync(".size-measure/measure-schema.mjs").size,
 };
 const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};

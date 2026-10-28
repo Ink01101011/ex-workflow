@@ -1,3 +1,6 @@
+import type { InvestigationState } from "./investigation/state.ts";
+import type { ExperimentationState } from "./experimentation/state.ts";
+
 // ---- items ------------------------------------------------------------
 export type ItemType =
   | "epic"
@@ -258,11 +261,20 @@ export interface Baseline {
 }
 
 // ---- state -----------------------------------------------------------
-export type MethodologyName = "scrum" | "kanban" | "waterfall";
+export type MethodologyName =
+  | "scrum"
+  | "kanban"
+  | "waterfall"
+  | "investigation"
+  | "experimentation";
 export interface WorkflowState {
   version: 1;
   methodology: MethodologyName;
   config: unknown;
+  /** Standalone investigation lifecycle, created by its intake ceremony. */
+  investigation?: InvestigationState;
+  /** Standalone isolated candidate experiment, created by its freeze ceremony. */
+  experimentation?: ExperimentationState;
   items: Record<string, WorkItem>;
   stages: Stage[];
   roles: Record<string, Role>;
@@ -363,6 +375,8 @@ export interface PlannerOptions {
   wipLimitOf?(stage: Stage, item: WorkItem): number | undefined;
   /** Role id to dispatch a todo item to (e.g. the phase's deliverer); undefined = default (item.role, then reviewer/deliverer by capability). */
   roleFor?(item: WorkItem): string | undefined;
+  /** Tokens reserved for work already in flight, deducted from the iteration remainder. */
+  reservedTokens?: number;
   /** How estimateTokens prices a candidate; default "per-weight". */
   estimateMode?: "per-weight" | "per-call";
   /** Tokens per weight unit when no accounting history exists; default 20000. PlanOptions.fallbackTokensPerWeight wins. */

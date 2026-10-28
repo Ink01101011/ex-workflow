@@ -28,6 +28,8 @@ import { lastEvent } from "../state.ts";
 import { scrum } from "../scrum/index.ts";
 import { kanban } from "../kanban/index.ts";
 import { waterfall } from "../waterfall/index.ts";
+import { investigation } from "../investigation/index.ts";
+import { experimentation } from "../experimentation/index.ts";
 import type {
   Accounting,
   Action,
@@ -43,10 +45,12 @@ const METHODOLOGIES: Record<string, () => Methodology> = {
   scrum: scrum as () => Methodology,
   kanban: kanban as () => Methodology,
   waterfall: waterfall as () => Methodology,
+  investigation: investigation as () => Methodology,
+  experimentation: experimentation as () => Methodology,
 };
 
 export const USAGE = [
-  "exwf init <scrum|kanban|waterfall> --config <file> [--roles <file>]",
+  "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",
   "exwf add <item.json> [--by who]      exwf edit <id> <patch.json> [--by who]",
   "exwf next [--max n] [--fallback-tokens-per-weight n]",
   "exwf complete <id> <handoff.json> --tokens-in n --tokens-out n --duration-ms n --model m [--estimate] [--role r]",
