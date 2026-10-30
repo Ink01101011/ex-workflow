@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "methodology": "kanban",
+  "config": {
+    "columns": [
+      {
+        "id": "options",
+        "name": "Options",
+        "policies": [
+          {
+            "kind": "acceptance-written"
+          }
+        ]
+      },
+      {
+        "id": "ready",
+        "name": "Ready",
+        "wipLimit": 4,
+        "commitmentPoint": true,
+        "policies": [
+          {
+            "kind": "dependencies-done"
+          }
+        ]
+      },
+      {
+        "id": "dev",
+        "name": "Development",
+        "wipLimit": 3,
+        "policies": [
+          {
+            "kind": "evidence",
+            "evidenceKind": "test-output"
+          }
+        ]
+      },
+      {
+        "id": "review",
+        "name": "Review",
+        "wipLimit": 2,
+        "review": true,
+        "policies": [
+          {
+            "kind": "no-open-blockers"
+          }
+        ]
+      },
+      {
+        "id": "done",
+        "name": "Done",
+        "deliveryPoint": true,
+        "policies": []
+      }
+    ],
+    "classesOfService": {
+      "standard": {
+        "sle": {
+          "percentile": 85,
+          "targetMs": 3600000
+        }
+      }
+    },
+    "fairness": {
+      "aging": true,
+      "maxDeferralRounds": 5
+    },
+    "cadences": {
+      "replenishment": {
+        "everyTurns": 4
+      }
+    },
+    "throughputWindowMs": 3600000,
+    "maxExpedite": 1
+  },
+  "items": {
+    "A1": {
+      "type": "task",
+      "acceptance": ["it works"],
+      "dependsOn": [],
+      "id": "A1",
+      "title": "first item",
+      "weight": 3,
+      "priority": 5,
+      "stage": "options",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    },
+    "A2": {
+      "type": "task",
+      "acceptance": ["it is documented"],
+      "dependsOn": [],
+      "id": "A2",
+      "title": "second item",
+      "priority": 1,
+      "stage": "options",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    }
+  },
+  "stages": [
+    {
+      "id": "options",
+      "name": "Options",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "acceptance-written"
+        }
+      ]
+    },
+    {
+      "id": "ready",
+      "name": "Ready",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "dependencies-done"
+        }
+      ],
+      "wipLimit": 4,
+      "commitmentPoint": true
+    },
+    {
+      "id": "dev",
+      "name": "Development",
+      "entryPolicy": [
+        {
+          "kind": "dependencies-done"
+        }
+      ],
+      "exitPolicy": [
+        {
+          "kind": "evidence",
+          "evidenceKind": "test-output"
+        }
+      ],
+      "wipLimit": 3
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "no-open-blockers"
+        }
+      ],
+      "wipLimit": 2,
+      "review": true
+    },
+    {
+      "id": "done",
+      "name": "Done",
+      "entryPolicy": [],
+      "exitPolicy": [],
+      "deliveryPoint": true
+    }
+  ],
+  "roles": {
+    "service-request-manager": {
+      "id": "service-request-manager",
+      "name": "Service Request Manager",
+      "modelTier": "large",
+      "capabilities": ["order-backlog", "define-acceptance", "manage-flow", "escalate"],
+      "canApprove": [],
+      "inputs": ["stakeholder-requests", "options"],
+      "outputs": ["ordered-options", "acceptance-criteria", "classes-of-service"],
+      "do_not": [
+        "do not implement items yourself",
+        "do not push work past the commitment point outside replenishment"
+      ]
+    },
+    "service-delivery-manager": {
+      "id": "service-delivery-manager",
+      "name": "Service Delivery Manager",
+      "modelTier": "large",
+      "capabilities": ["facilitate", "manage-flow", "escalate"],
+      "canApprove": [],
+      "inputs": ["board", "flow-metrics", "blockers"],
+      "outputs": ["cadence-records", "wip-and-policy-changes", "lessons"],
+      "do_not": ["do not reorder the options", "do not assign work; the planner pulls"]
+    },
+    "worker": {
+      "id": "worker",
+      "name": "Worker",
+      "modelTier": "small",
+      "capabilities": ["deliver", "review", "verify"],
+      "canApprove": [],
+      "inputs": ["brief"],
+      "outputs": ["code", "test-output"],
+      "do_not": [
+        "do not change acceptance criteria",
+        "do not pull more work while your card is open"
+      ]
+    }
+  },
+  "iterations": [],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-30T04:04:24.655Z",
+      "type": "state.created",
+      "by": "system",
+      "payload": {
+        "methodology": "kanban"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-30T04:04:24.684Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A1",
+        "type": "task",
+        "stage": "options",
+        "weight": 3,
+        "priority": 5,
+        "phase": null,
+        "parent": null
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-30T04:04:24.714Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A2",
+        "type": "task",
+        "stage": "options",
+        "weight": null,
+        "priority": 1,
+        "phase": null,
+        "parent": null
+      }
+    }
+  ],
+  "accounting": [],
+  "pending": [],
+  "lessons": [],
+  "agreements": []
+}

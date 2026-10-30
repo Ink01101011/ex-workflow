@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "methodology": "experimentation",
+  "config": {
+    "objective": "lowest median latency",
+    "direction": "minimize",
+    "tieBreak": "candidate-id",
+    "concurrencyCap": 2,
+    "maxCandidates": 2,
+    "candidateBudget": {
+      "turns": 5
+    },
+    "totalBudget": {
+      "turns": 20
+    }
+  },
+  "items": {
+    "A1": {
+      "type": "task",
+      "acceptance": ["it works"],
+      "dependsOn": [],
+      "id": "A1",
+      "title": "first item",
+      "weight": 3,
+      "priority": 5,
+      "stage": "building",
+      "status": "in_progress",
+      "evidence": [],
+      "blockers": [],
+      "transitions": [
+        {
+          "from": {
+            "stage": "candidate",
+            "status": "todo"
+          },
+          "to": {
+            "stage": "building",
+            "status": "in_progress"
+          },
+          "at": "2026-10-30T04:04:25.661Z",
+          "by": "builder"
+        }
+      ],
+      "role": "builder"
+    },
+    "A2": {
+      "type": "task",
+      "acceptance": ["it is documented"],
+      "dependsOn": [],
+      "id": "A2",
+      "title": "second item",
+      "priority": 1,
+      "stage": "candidate",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    }
+  },
+  "stages": [
+    {
+      "id": "candidate",
+      "name": "Frozen candidate",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "acceptance-written"
+        },
+        {
+          "kind": "no-open-blockers"
+        },
+        {
+          "kind": "dependencies-done"
+        }
+      ]
+    },
+    {
+      "id": "building",
+      "name": "Isolated candidate execution",
+      "entryPolicy": [
+        {
+          "kind": "acceptance-written"
+        },
+        {
+          "kind": "no-open-blockers"
+        },
+        {
+          "kind": "dependencies-done"
+        }
+      ],
+      "exitPolicy": [
+        {
+          "kind": "evidence",
+          "evidenceKind": "candidate-sha"
+        },
+        {
+          "kind": "evidence",
+          "evidenceKind": "benchmark-result"
+        }
+      ]
+    },
+    {
+      "id": "validation",
+      "name": "Independent exact-SHA validation",
+      "review": true,
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "evidence",
+          "evidenceKind": "validation"
+        }
+      ],
+      "gate": {
+        "id": "experiment-validation",
+        "requires": [
+          {
+            "capability": "verify"
+          }
+        ],
+        "evidence": ["validation"],
+        "onFail": {
+          "action": "block"
+        }
+      }
+    },
+    {
+      "id": "done",
+      "name": "Candidate work complete",
+      "entryPolicy": [],
+      "exitPolicy": [],
+      "deliveryPoint": true
+    }
+  ],
+  "roles": {
+    "coordinator": {
+      "id": "coordinator",
+      "name": "Experiment coordinator",
+      "modelTier": "large",
+      "capabilities": ["facilitate", "order-backlog", "manage-flow"],
+      "canApprove": [],
+      "inputs": ["objective", "budgets"],
+      "outputs": ["comparison"],
+      "do_not": ["Change the frozen baseline or harness"]
+    },
+    "builder": {
+      "id": "builder",
+      "name": "Candidate builder",
+      "modelTier": "large",
+      "capabilities": ["deliver"],
+      "canApprove": [],
+      "inputs": ["frozen harness", "isolated workspace"],
+      "outputs": ["candidate-sha", "benchmark-result"],
+      "do_not": ["Validate your own candidate", "Change another candidate workspace"]
+    },
+    "validator": {
+      "id": "validator",
+      "name": "Independent validator",
+      "modelTier": "large",
+      "capabilities": ["verify", "review", "approve-gate"],
+      "canApprove": ["experiment-validation"],
+      "inputs": ["exact candidate SHA", "frozen harness"],
+      "outputs": ["validation"],
+      "do_not": ["Approve your own work"]
+    },
+    "integrator": {
+      "id": "integrator",
+      "name": "Selected candidate integrator",
+      "modelTier": "large",
+      "capabilities": ["deliver", "control-change"],
+      "canApprove": [],
+      "inputs": ["selected SHA", "current target SHA"],
+      "outputs": ["integration SHA"],
+      "do_not": ["Declare integration validated"]
+    }
+  },
+  "iterations": [
+    {
+      "id": "experiment",
+      "goal": "lowest median latency",
+      "budget": {
+        "turns": 20
+      },
+      "spent": {
+        "tokens": 0,
+        "turns": 0,
+        "wallclockMs": 0
+      },
+      "startedAt": "2026-10-30T04:04:25.597Z",
+      "committed": ["A1", "A2"],
+      "carryover": []
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-30T04:04:25.506Z",
+      "type": "state.created",
+      "by": "system",
+      "payload": {
+        "methodology": "experimentation"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-30T04:04:25.536Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A1",
+        "type": "task",
+        "stage": "candidate",
+        "weight": 3,
+        "priority": 5,
+        "phase": null,
+        "parent": null
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-30T04:04:25.566Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A2",
+        "type": "task",
+        "stage": "candidate",
+        "weight": null,
+        "priority": 1,
+        "phase": null,
+        "parent": null
+      }
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-30T04:04:25.597Z",
+      "type": "experimentation.frozen",
+      "by": "coordinator",
+      "payload": {
+        "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "harness": "synthetic:latency-harness-v1",
+        "candidates": [
+          {
+            "id": "A1",
+            "item": "A1",
+            "author": "builder"
+          },
+          {
+            "id": "A2",
+            "item": "A2",
+            "author": "builder"
+          }
+        ],
+        "by": "coordinator",
+        "now": "2026-10-30T04:04:25.597Z"
+      }
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-30T04:04:25.630Z",
+      "type": "experimentation.provisioned",
+      "by": "coordinator",
+      "payload": {
+        "candidate": "A1",
+        "workspace": "synthetic:workspace-A1",
+        "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "isolated": true,
+        "by": "coordinator",
+        "now": "2026-10-30T04:04:25.630Z"
+      }
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-30T04:04:25.661Z",
+      "type": "item.transition",
+      "by": "builder",
+      "payload": {
+        "id": "A1",
+        "from": {
+          "stage": "candidate",
+          "status": "todo"
+        },
+        "to": {
+          "stage": "building",
+          "status": "in_progress"
+        }
+      }
+    },
+    {
+      "seq": 7,
+      "at": "2026-10-30T04:04:25.661Z",
+      "type": "experimentation.started",
+      "by": "builder",
+      "payload": {
+        "candidate": "A1",
+        "by": "builder",
+        "now": "2026-10-30T04:04:25.661Z"
+      }
+    }
+  ],
+  "accounting": [],
+  "pending": [],
+  "lessons": [],
+  "agreements": [],
+  "experimentation": {
+    "status": "running",
+    "baseSha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "harness": "synthetic:latency-harness-v1",
+    "candidates": {
+      "A1": {
+        "id": "A1",
+        "item": "A1",
+        "author": "builder",
+        "status": "running",
+        "spent": {
+          "tokens": 0,
+          "turns": 0,
+          "wallclockMs": 0
+        },
+        "workspace": "synthetic:workspace-A1"
+      },
+      "A2": {
+        "id": "A2",
+        "item": "A2",
+        "author": "builder",
+        "status": "pending",
+        "spent": {
+          "tokens": 0,
+          "turns": 0,
+          "wallclockMs": 0
+        }
+      }
+    },
+    "released": [],
+    "overhead": {
+      "tokens": 0,
+      "turns": 0,
+      "wallclockMs": 0
+    }
+  }
+}
