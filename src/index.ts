@@ -1,4 +1,4 @@
-export const VERSION = "1.1.0";
+export const VERSION = "1.1.1";
 export * from "./types.ts";
 export { WorkflowError, fail } from "./errors.ts";
 export { createState, appendEvent, lastEvent, nowOf } from "./state.ts";

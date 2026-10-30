@@ -3,5 +3,5 @@ import assert from "node:assert/strict";
 import { VERSION } from "./index.ts";
 
 test("package exposes a version", () => {
-  assert.equal(VERSION, "1.1.0");
+  assert.equal(VERSION, "1.1.1");
 });

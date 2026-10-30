@@ -38,7 +38,7 @@ npm install ex-workflow      # or: pnpm add ex-workflow
 npx exwf                     # prints the CLI usage
 ```
 
-`latest` is the supported line (1.1.0). Pre-releases, when any, are published under the `stage` dist-tag.
+`latest` is the supported line (1.1.1). Pre-releases, when any, are published under the `stage` dist-tag.
 
 ## Pick a methodology
 
@@ -323,10 +323,10 @@ Every config is validated at `init` (`config-invalid` names the key and an examp
 - `changeControlBoard { change, decision, note? }` approves or rejects a change-request; an approval reopens the phases its impact analysis names.
 - `phaseRetrospective { lessons?, adopt?, dismiss?, retire? }`; `adopt` entries are `[{ id }]`. Only `agreement` suggestions apply (baselines and config are locked); others are stored for the host.
 
-**Investigation** (`investigator` unless noted; every input also takes `by`)
+**Investigation** (`investigator` unless noted; every input also takes `by`; every record is a closed object, an unknown key is refused)
 - `intake { item }` names the question item and opens the investigation.
 - `hypotheses { hypotheses: [{ id, claim, falsifiedBy }], singleHypothesisRationale? }` registers unique, falsifiable, competing hypotheses; a single hypothesis needs the rationale.
-- `preregister { experiment: { id, procedureRef, predictions: [{ hypothesis, prediction }], replayOf? } }` creates the run item; `replayOf` names an earlier valid experiment with the same procedure and predictions, and is executed by a role that did not run it.
+- `preregister { experiment: { id, procedureRef, predictions: [{ hypothesis, prediction }], replayOf? } }` creates the run item; `replayOf` names an earlier valid experiment with the same procedure and predictions, and is executed by a role that did not run it. Refused once `maxRounds` or the budget is spent; `stop` closes the investigation.
 - `observe { experiment, result: { id, valid, summary, provenanceRefs } }` records the outcome once the run item is `done` with `experiment-output` evidence; an invalid run stays recorded.
 - `update-belief { result, assessments: [{ hypothesis, assessment, reason }], next }` with `assessment` `supported` | `refuted` | `uncertain` and `next` `round` | `conclusion`.
 - `conclude { outcome, summary, evidenceRefs, supportedHypothesis? }` with `outcome` `resolved` | `inconclusive`; `resolved` needs a supported hypothesis, valid supporting evidence and a valid replay.
@@ -338,7 +338,7 @@ Every config is validated at `init` (`config-invalid` names the key and an examp
 - `provision { candidate, workspace, baseSha, isolated: true }` by `coordinator` records the host-created isolated workspace at the frozen base; the candidate becomes `ready`.
 - `start { candidate }` by the builder marks the dispatched candidate `running`.
 - `submit { candidate, sha, score, baseSha, workspace, harness, command, log, spent }` by the builder records the exact commit, the benchmark result and the usage.
-- `validate { candidate, sha, harness, passed, reproducible, evidence, spent }` by a `validator` other than the author, at the submitted SHA and frozen harness; a failed or nonreproducible candidate is ineligible.
+- `validate { candidate, sha, harness, passed, reproducible, evidence, spent }` by a `validator` other than the author, at the submitted SHA and frozen harness; a failed or nonreproducible candidate is ineligible. A candidate the planner dispatched (`next`) is validated after its builder's `complete`; one the host started by ceremony needs no completion.
 - `compare` by `coordinator` ranks the eligible validated candidates by score, then candidate id, and selects the winner; with none eligible the run stops without a winner.
 - `integrate { selectedSha, targetSha, integrationSha, spent }` by `integrator` records the exact selected SHA merged into the current target.
 - `validate-integration { sha, targetSha, harness, passed, evidence, spent }` by a validator independent of the author and the integrator; a pass closes the run `integrated`, a fail stops it.
