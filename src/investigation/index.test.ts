@@ -682,3 +682,105 @@ test("prototype actor produces a workflow error", () => {
     WorkflowError,
   );
 });
+
+// 1.1.1 review wave (findings 1, 6, 7 of the 2026-10-30 review).
+import { experimentation } from "../experimentation/index.ts";
+import { validate as validateSchema, workflowStateSchema } from "../schema/index.ts";
+test("R1 input records with unknown keys are refused and a lifecycle state validates against the state schema", () => {
+  let fresh = init({
+    methodology: m(),
+    config: { question: "why", maxRounds: 3, budget: { turns: 10 } },
+  }).state;
+  fresh = m().ceremonies["intake"]!(fresh, { by: "investigator", item: "q" }).state;
+  const unchanged = JSON.stringify(fresh);
+  assert.throws(
+    () =>
+      m().ceremonies["hypotheses"]!(fresh, {
+        by: "investigator",
+        hypotheses: [
+          { id: "a", claim: "A", falsifiedBy: "not A", notes: "extra" },
+          { id: "b", claim: "B", falsifiedBy: "not B" },
+        ],
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "invalid-input" && /notes/.test(e.message),
+  );
+  assert.equal(JSON.stringify(fresh), unchanged);
+  const h = harness();
+  const before = JSON.stringify(h.state);
+  assert.throws(
+    () =>
+      h.call("preregister", {
+        experiment: {
+          id: "e1",
+          procedureRef: "proc",
+          predictions: [
+            { hypothesis: "a", prediction: "yes", weight: 1 },
+            { hypothesis: "b", prediction: "no" },
+          ],
+        },
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "invalid-input" && /weight/.test(e.message),
+  );
+  assert.equal(JSON.stringify(h.state), before);
+  preregister(h);
+  h.dispatch();
+  h.finish();
+  assert.throws(
+    () =>
+      h.call("observe", {
+        experiment: "e1",
+        result: { id: "r1", valid: true, summary: "s", provenanceRefs: ["actual"], raw: {} },
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "invalid-input" && /raw/.test(e.message),
+  );
+  observe(h);
+  assert.throws(
+    () =>
+      h.call("update-belief", {
+        result: "r1",
+        assessments: [
+          { hypothesis: "a", assessment: "supported", reason: "r", confidence: 0.9 },
+          { hypothesis: "b", assessment: "refuted", reason: "r" },
+        ],
+        next: "conclusion",
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "invalid-input" && /confidence/.test(e.message),
+  );
+  update(h, "e1", "conclusion");
+  assert.deepEqual(validateSchema(workflowStateSchema, h.state), []);
+});
+test("R6 preregister refuses when the budget is spent instead of closing silently", () => {
+  const h = harness(3, 10);
+  h.run("e1", true, undefined, "round");
+  h.setState({
+    ...h.state,
+    iterations: h.state.iterations.map((it) =>
+      it.id === "investigation" ? { ...it, spent: { ...it.spent, turns: 10 } } : it,
+    ),
+  });
+  const before = JSON.stringify(h.state);
+  assert.throws(
+    () => preregister(h, "e2"),
+    (e: unknown) => e instanceof WorkflowError && e.code === "invalid-input" && /stop/.test(e.fix),
+  );
+  assert.equal(JSON.stringify(h.state), before);
+  assert.equal(h.state.investigation!.phase, "preregister");
+  h.call("stop", { reason: "budget spent" });
+  assert.equal(h.state.investigation!.outcome, "stopped");
+});
+test("R7 intake refuses a workflow of another methodology", () => {
+  const foreign = init({ methodology: experimentation(), config: { objective: "latency" } }).state;
+  const before = JSON.stringify(foreign);
+  assert.throws(
+    () => m().ceremonies["intake"]!(foreign, { by: "coordinator", item: "q" }),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "invalid-input" && /experimentation/.test(e.message),
+  );
+  assert.equal(JSON.stringify(foreign), before);
+  assert.equal(foreign.investigation, undefined);
+  assert.equal(foreign.iterations.length, 0);
+});
