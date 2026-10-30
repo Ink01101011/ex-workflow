@@ -1,69 +1,5 @@
 # ex-workflow — design spec
 
-## 2026-10-28 — #37 and #38 standalone methodologies
-
-User-approved direction: ship two new methodologies, `investigation` (#37) and
-`experimentation` (#38), rather than extensions to Scrum, Kanban or Waterfall.
-The research reports in `docs/research/` are historical proposals; the user's
-standalone-methodology decision supersedes their composition recommendation.
-
-### Scope and architecture
-
-Each methodology owns its factory, validated config, default roles and stages,
-rules, ceremonies, serializable lifecycle record, report and metrics. Both use
-the existing item/brief/handoff/accounting/planner contracts. Pure functions only:
-the host executes commands, provisions isolation, captures immutable artifacts
-and authenticates reviewers. Engine validation checks structured records and
-provenance linkage; a ref alone cannot prove external artifact contents.
-
-Investigation bounds an intake, registers falsifiable competing hypotheses,
-preregisters discriminating experiments, records observations and belief updates,
-and requires independent review before resolving a conclusion. Inconclusive and
-stopped outcomes are first-class; rounds and accounting are bounded.
-
-Experimentation freezes a shared base and harness, tracks separate candidate
-attempts and workspace identities, records terminal failures/timeouts, requires
-independent validation at the submitted SHA, compares eligible candidates under
-preregistered ranking, and guards integration with fresh validation at the
-integration SHA. All-fail produces no winner. Host resource cleanup is reported,
-never performed implicitly by core.
-
-### Implementation plan and verification
-
-Execution shape: independent methodology modules, then sequential shared package
-integration and final review. Each task is test → implement → spec review →
-code-quality review. No unrelated cleanup or new runtime dependencies.
-
-- [x] Investigation: write failing colocated lifecycle/invalid-transition tests;
-  implement `src/investigation/{config,state,roles,stages,ceremonies,index}.ts`
-  (split rules/metrics if needed); run the focused tests; review against #37 and
-  existing pure-state, capability-based authorization and actionable-error patterns.
-- [x] Experimentation: write failing colocated lifecycle/provenance/timeout tests;
-  implement `src/experimentation/{config,state,roles,stages,ceremonies,index}.ts`
-  (split rules/metrics if needed); run focused tests; review against #38, exact-SHA
-  promotion and all-fail/no-winner requirements.
-- [x] Package integration: extend `MethodologyName` and optional lifecycle state
-  fields in `src/types.ts`; add CLI factories, package exports/typesVersions and
-  tsup entries; generate both config schemas and lifecycle state schemas via
-  `scripts/gen-schema.mjs`; extend the API snapshot additively. Test CLI init,
-  save/load and ceremony dispatch for both new names, and keep old fixtures valid.
-- [x] Documentation and final verification: add runnable end-to-end SDK examples
-  and host boundaries to README, record additions in CHANGELOG; run `pnpm run ci`;
-  inspect schema/API/size diffs, review spec compliance then code quality. Final
-  verification: 372 tests and both executable examples pass. Independent SDD
-  review findings closed. Optional planner `reservedTokens` preserves existing
-  dispatch behavior when omitted and accounts for in-flight experiment estimates. New
-  entry budgets must be measured; existing entry budgets must not be loosened
-  without explaining a measured additive cost.
-
-### Out of scope
-
-Cross-methodology composition or integration, automatic git/worktree/process
-execution, sandbox provisioning, LLM calls, automatic merge/publish, and claims
-that illustrative research pilots establish measured effectiveness.
-
----
-
 Date: 2026-10-19
 Status: approved in brainstorm, awaiting written review
 Owner: Supakit (Ink01101011)
@@ -972,3 +908,68 @@ The owner's instruction of 2026-10-24: fix every open issue (#23–#27, label `e
 | 1.0-c | Version and tags | `1.0.0` in `package.json` and `VERSION`; `npm publish` without a tag moves `latest` to 1.0.0; the `stage` tag stays on 0.6.0-stage. README: Install resolves to 1.0.0, the Publishing section drops the `stage` instruction, Status names 1.0.0. CHANGELOG `## 1.0.0 (2026-10-24)` with a Migration paragraph (from any 0.N.0-stage: states load unchanged; behaviour changes of 0.5.0 and 0.6.0 apply; the new Waterfall add-time refusals (#23, #24) and the `coverage` recount (#25) are the only new observable changes). Size budgets re-recorded at measured size. |
 
 Out of Phase 7: Kanban `backlog` lesson changes creating cards (the host adds them through `replenishment`); a Scrum-style `dod` in Kanban (Kanban has no Definition of Done; exit policies are edited by the same review).
+
+## 24. Phase 8 implementation addenda (1.1.0: Investigation #37 and Experimentation #38)
+
+Date: 2026-10-28. Released as 1.1.0 (tag `v1.1.0`, npm `latest`).
+
+User-approved direction: ship two new methodologies, `investigation` (#37) and
+`experimentation` (#38), rather than extensions to Scrum, Kanban or Waterfall.
+The research reports in `docs/research/` are the input; the owner's
+standalone-methodology decision supersedes their composition recommendation.
+
+### Scope and architecture
+
+Each methodology owns its factory, validated config, default roles and stages,
+rules, ceremonies, serializable lifecycle record, report and metrics. Both use
+the existing item/brief/handoff/accounting/planner contracts. Pure functions only:
+the host executes commands, provisions isolation, captures immutable artifacts
+and authenticates reviewers. Engine validation checks structured records and
+provenance linkage; a ref alone cannot prove external artifact contents.
+
+Investigation bounds an intake, registers falsifiable competing hypotheses,
+preregisters discriminating experiments, records observations and belief updates,
+and requires independent review before resolving a conclusion. Inconclusive and
+stopped outcomes are first-class; rounds and accounting are bounded.
+
+Experimentation freezes a shared base and harness, tracks separate candidate
+attempts and workspace identities, records terminal failures/timeouts, requires
+independent validation at the submitted SHA, compares eligible candidates under
+preregistered ranking, and guards integration with fresh validation at the
+integration SHA. All-fail produces no winner. Host resource cleanup is reported,
+never performed implicitly by core.
+
+### Implementation plan and verification
+
+Execution shape: independent methodology modules, then sequential shared package
+integration and final review. Each task is test → implement → spec review →
+code-quality review. No unrelated cleanup or new runtime dependencies.
+
+- [x] Investigation: write failing colocated lifecycle/invalid-transition tests;
+  implement `src/investigation/{config,state,roles,stages,ceremonies,index}.ts`
+  (split rules/metrics if needed); run the focused tests; review against #37 and
+  existing pure-state, capability-based authorization and actionable-error patterns.
+- [x] Experimentation: write failing colocated lifecycle/provenance/timeout tests;
+  implement `src/experimentation/{config,state,roles,stages,ceremonies,index}.ts`
+  (split rules/metrics if needed); run focused tests; review against #38, exact-SHA
+  promotion and all-fail/no-winner requirements.
+- [x] Package integration: extend `MethodologyName` and optional lifecycle state
+  fields in `src/types.ts`; add CLI factories, package exports/typesVersions and
+  tsup entries; generate both config schemas and lifecycle state schemas via
+  `scripts/gen-schema.mjs`; extend the API snapshot additively. Test CLI init,
+  save/load and ceremony dispatch for both new names, and keep old fixtures valid.
+- [x] Documentation and final verification: add runnable end-to-end SDK examples
+  and host boundaries to README, record additions in CHANGELOG; run `pnpm run ci`;
+  inspect schema/API/size diffs, review spec compliance then code quality. Final
+  verification: 372 tests and both executable examples pass. Independent SDD
+  review findings closed. Optional planner `reservedTokens` preserves existing
+  dispatch behavior when omitted and accounts for in-flight experiment estimates. New
+  entry budgets must be measured; existing entry budgets must not be loosened
+  without explaining a measured additive cost.
+
+### Out of scope
+
+Cross-methodology composition or integration, automatic git/worktree/process
+execution, sandbox provisioning, LLM calls, automatic merge/publish, and claims
+that illustrative research pilots establish measured effectiveness.
+

@@ -38,7 +38,7 @@ npm install ex-workflow      # or: pnpm add ex-workflow
 npx exwf                     # prints the CLI usage
 ```
 
-This source tree targets version 1.1.0. Pre-releases, when any, are published under the `stage` dist-tag.
+`latest` is the supported line (1.1.0). Pre-releases, when any, are published under the `stage` dist-tag.
 
 ## Pick a methodology
 
@@ -136,6 +136,8 @@ Phases open one at a time (`kickoff`) and close through a gate (`gateReview`), h
 
 ## Standalone investigation and experimentation
 
+**Investigation** runs an evidence-driven inquiry: one bounded question, competing falsifiable hypotheses, preregistered experiments, recorded observations, belief updates and an independent review before a conclusion is resolved. **Experimentation** compares isolated candidates against a frozen baseline and harness: independent validation at the exact submitted SHA, deterministic selection, and fresh validation of the integration SHA. Each runs in its own `.workflow/` state; neither nests inside, migrates into or coordinates Scrum, Kanban, Waterfall or the other. The host executes procedures, provisions workspaces, runs benchmarks and performs Git operations; the engine records and validates the resulting artifacts (see [Known limitations](#known-limitations)).
+
 Run the complete synthetic SDK examples from this repository:
 
 ```sh
@@ -145,7 +147,7 @@ pnpm exec tsx scripts/example-experimentation.ts
 
 [Investigation example](scripts/example-investigation.ts) exercises execution, observation, rejected review, independent replay and a resolved conclusion. [Experimentation example](scripts/example-experimentation.ts) compares two candidates (one nonreproducible), records exact-SHA integration, validates it afresh and cleans up. Both use explicitly synthetic in-memory host outputs and assert their final outcomes; they do not execute procedures, benchmarks, Git or filesystem operations.
 
-These methodologies run in their own workflow state. They do not nest inside, migrate into, or coordinate Scrum, Kanban, Waterfall or each other. The host executes procedures, creates isolated workspaces, runs benchmarks and performs Git operations; the engine records and validates the resulting artifacts.
+### Investigation
 
 ```ts
 import { init } from "ex-workflow";
@@ -163,7 +165,9 @@ state = m.ceremonies["hypotheses"]!(state, { by: "investigator", hypotheses: [
 ] }).state;
 ```
 
-Investigation requires a question, positive `maxRounds` and a finite positive `budget` (`tokens`, `turns`, `wallclockMs`). Its ceremonies are `intake { item }`, `hypotheses { hypotheses: [{ id, claim, falsifiedBy }], singleHypothesisRationale? }`, `preregister { experiment: { id, procedureRef, predictions: [{ hypothesis, prediction }], replayOf? } }`, `observe { experiment, result: { id, valid, summary, provenanceRefs } }`, `update-belief { result, assessments: [{ hypothesis, assessment, reason }], next: "round" | "conclusion" }`, `conclude { outcome, summary, evidenceRefs, supportedHypothesis? }`, `review-conclusion { approve, reason, replayRefs?, next?: "round" | "conclusion" }` and `stop { reason }`. Assessments are `supported`, `refuted` or `uncertain`; outcomes are `resolved` or `inconclusive`. Execute each preregistered run with `next()` and `complete()` before observing it, producing `experiment-output` evidence. A resolved conclusion needs supporting valid evidence, a valid replay and an independent `conclusion-reviewer`; `investigator` handles the other ceremonies. Invalid runs remain recorded.
+Roles: `investigator` (intake, hypotheses, preregistration, observation, belief update, conclusion), `replay-worker` (executes a replay when the investigator ran the original), `conclusion-reviewer` (approves or rejects a conclusion; may not have executed any run). Stages: `intake` → `execute` → `observed`. Each preregistered experiment is an item: `next()` briefs the executor and `complete()` records `experiment-output` evidence before `observe`. A `resolved` conclusion needs a supported hypothesis, valid supporting evidence, a valid replay and an independent review; `inconclusive` and `stopped` are first-class outcomes. Config keys: [Configuration](#investigation-investigationconfig). Ceremonies and their inputs: [Ceremonies](#ceremonies).
+
+### Experimentation
 
 ```ts
 import { init, addItem } from "ex-workflow";
@@ -182,11 +186,11 @@ state = m.ceremonies["freeze"]!(state, { by: "coordinator", baseSha: "a".repeat(
 state = m.ceremonies["provision"]!(state, { by: "coordinator", candidate: "a", workspace: "/worktrees/a", baseSha: "a".repeat(40), isolated: true }).state;
 ```
 
-Experimentation requires `objective`; `direction` defaults to `minimize` (`maximize` also supported), `tieBreak` to `candidate-id`, `concurrencyCap` to 2, `maxCandidates` to 4, and positive `candidateBudget` / `totalBudget` to 10 / 40 turns. Freeze the full baseline SHA, harness identity and candidate authors before work. The host must provision distinct isolated workspaces at that baseline and enforce their ownership; workspace strings are recorded identities, not filesystem operations.
+Roles: `coordinator` (freeze, provision, compare, terminate, stop, cleanup), `builder` (start, submit), `validator` (validate, validate-integration), `integrator` (integrate). Stages: `candidate` → `building` → `validation` (gate `experiment-validation`) → `done`. Every candidate is an item dispatched to its author at `building`; `next()` admits at most `concurrencyCap` running candidates and reserves the tokens of in-flight work. Comparison ranks eligible validated candidates by score, then candidate id; when none is eligible the run stops without a winner. Config keys: [Configuration](#experimentation-experimentationconfig). Ceremonies and their inputs: [Ceremonies](#ceremonies).
 
-Ceremonies continue with `start { candidate }` and `submit { candidate, sha, score, baseSha, workspace, harness, command, log, spent: { tokens, turns, wallclockMs } }` by the builder; `validate { candidate, sha, harness, passed, reproducible, evidence, spent }` by an independent validator; `compare` by the coordinator; `integrate { selectedSha, targetSha, integrationSha, spent }` by the integrator; and `validate-integration { sha, targetSha, harness, passed, evidence, spent }` by a validator independent of the author and integrator. SHAs are full lowercase commit hashes. Comparison ranks eligible validated candidates by score then candidate id. Promotion records the exact selected SHA; fresh validation checks the integration SHA against the current target and frozen harness. The coordinator may `terminate { candidate, status: "failed" | "timed-out" | "cancelled", reason, spent, log }`, `stop { reason, spent }`, then `cleanup { workspaces }` after closure. Terminate every dispatched, running or submitted candidate with final cumulative usage and logs before stopping; stop only automatically cancels candidates that never started. Cleanup records host-confirmed release; the host removes workspaces itself.
+### CLI
 
-The CLI supports `exwf init investigation --config investigation.json` and `exwf init experimentation --config experimentation.json`, followed by the same `ceremony`, `next`, `complete`, `status`, `metrics` and persistence commands. Ceremony input files contain the objects above; pass the role with `--by`.
+`exwf init investigation --config investigation.json` or `exwf init experimentation --config experimentation.json`, then the same `ceremony`, `next`, `complete`, `status`, `metrics` and persistence commands. A ceremony input file holds the object documented under [Ceremonies](#ceremonies); pass the role with `--by`.
 
 ## Persisting state
 
@@ -270,6 +274,28 @@ Run from the directory that holds `.workflow/`. Every command prints JSON on std
 | `traceability` | `{ from, to[] }` phase ids: every item of `from` must trace to an item of each `to` phase before that gate |
 | `fallbackTokensPerWeight` | as in Scrum |
 
+### Investigation (`InvestigationConfig`)
+
+| Key | Meaning |
+|---|---|
+| `question` | the question the investigation answers; it heads every brief's invariants |
+| `maxRounds` | positive integer; a round is one preregistered experiment |
+| `budget` | `{ tokens?, turns?, wallclockMs? }`, at least one, every value finite and positive; when it is spent no further run is dispatched and the investigation closes `stopped` |
+
+All three keys are locked after `init` (`config set` refuses them).
+
+### Experimentation (`ExperimentationConfig`)
+
+| Key | Meaning |
+|---|---|
+| `objective` | what the score measures |
+| `direction` (`minimize` default, or `maximize`) | how scores rank |
+| `tieBreak` (`candidate-id`, the only value) | equal scores rank by candidate id |
+| `concurrencyCap` (default 2), `maxCandidates` (default 4) | candidates running at once, candidates per run; the cap cannot exceed the maximum |
+| `candidateBudget` (default `{ turns: 10 }`), `totalBudget` (default `{ turns: 40 }`) | `{ tokens?, turns?, wallclockMs? }` of positive integers, per candidate and for the whole run including control, validation and integration overhead |
+
+Every key is locked after `init`; an unknown key is refused.
+
 Every config is validated at `init` (`config-invalid` names the key and an example value).
 
 ## Ceremonies
@@ -296,6 +322,29 @@ Every config is validated at `init` (`config-invalid` names the key and an examp
 - `gateReview { phase }` checks deliverables and traceability, then raises a pending gate decision; `decide … approve` baselines the phase.
 - `changeControlBoard { change, decision, note? }` approves or rejects a change-request; an approval reopens the phases its impact analysis names.
 - `phaseRetrospective { lessons?, adopt?, dismiss?, retire? }`; `adopt` entries are `[{ id }]`. Only `agreement` suggestions apply (baselines and config are locked); others are stored for the host.
+
+**Investigation** (`investigator` unless noted; every input also takes `by`)
+- `intake { item }` names the question item and opens the investigation.
+- `hypotheses { hypotheses: [{ id, claim, falsifiedBy }], singleHypothesisRationale? }` registers unique, falsifiable, competing hypotheses; a single hypothesis needs the rationale.
+- `preregister { experiment: { id, procedureRef, predictions: [{ hypothesis, prediction }], replayOf? } }` creates the run item; `replayOf` names an earlier valid experiment with the same procedure and predictions, and is executed by a role that did not run it.
+- `observe { experiment, result: { id, valid, summary, provenanceRefs } }` records the outcome once the run item is `done` with `experiment-output` evidence; an invalid run stays recorded.
+- `update-belief { result, assessments: [{ hypothesis, assessment, reason }], next }` with `assessment` `supported` | `refuted` | `uncertain` and `next` `round` | `conclusion`.
+- `conclude { outcome, summary, evidenceRefs, supportedHypothesis? }` with `outcome` `resolved` | `inconclusive`; `resolved` needs a supported hypothesis, valid supporting evidence and a valid replay.
+- `review-conclusion { approve, reason, replayRefs?, next? }` by `conclusion-reviewer`, who may not have contributed a run; a rejection returns to `round` or `conclusion`.
+- `stop { reason }` closes the investigation `stopped`.
+
+**Experimentation** (SHAs are full lowercase 40- or 64-character hex; `spent` is `{ tokens?, turns?, wallclockMs? }`, cumulative for the candidate)
+- `freeze { baseSha, harness, candidates: [{ id, item, author }] }` by `coordinator` freezes the baseline and harness and registers each candidate (an existing item and its builder role); nothing runs before the freeze.
+- `provision { candidate, workspace, baseSha, isolated: true }` by `coordinator` records the host-created isolated workspace at the frozen base; the candidate becomes `ready`.
+- `start { candidate }` by the builder marks the dispatched candidate `running`.
+- `submit { candidate, sha, score, baseSha, workspace, harness, command, log, spent }` by the builder records the exact commit, the benchmark result and the usage.
+- `validate { candidate, sha, harness, passed, reproducible, evidence, spent }` by a `validator` other than the author, at the submitted SHA and frozen harness; a failed or nonreproducible candidate is ineligible.
+- `compare` by `coordinator` ranks the eligible validated candidates by score, then candidate id, and selects the winner; with none eligible the run stops without a winner.
+- `integrate { selectedSha, targetSha, integrationSha, spent }` by `integrator` records the exact selected SHA merged into the current target.
+- `validate-integration { sha, targetSha, harness, passed, evidence, spent }` by a validator independent of the author and the integrator; a pass closes the run `integrated`, a fail stops it.
+- `terminate { candidate, status, reason, spent, log }` with `status` `failed` | `timed-out` | `cancelled` records a terminal attempt with its final usage; required for every dispatched, running or submitted candidate before `stop`.
+- `stop { reason, spent }` by `coordinator` closes the run; candidates that never started are cancelled automatically.
+- `cleanup { workspaces }` by `coordinator`, after closure, records the host-confirmed release of workspaces.
 
 ## Items, briefs, handoffs, accounting
 
@@ -358,18 +407,18 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/scrum` | `scrum()`, `scrumMetrics`, `dailyReport`, `closeSprint`, presets |
 | `ex-workflow/kanban` | `kanban()`, `board`, `kanbanMetrics`, `opsReport`, `riskReport`, `cadencesDue`, `DEFAULT_COLUMNS`, presets |
 | `ex-workflow/waterfall` | `waterfall()`, `phaseReport`, `traceabilityMatrix`, `waterfallMetrics`, `baselinePhase`, `reopenPhases`, presets |
-| `ex-workflow/investigation` | `investigation()`, config validation and artifact types |
-| `ex-workflow/experimentation` | `experimentation()`, config validation and artifact types |
+| `ex-workflow/investigation` | `investigation()`, `validateInvestigationConfig`; types `InvestigationConfig`, `InvestigationState`, `InvestigationRound`, `InvestigationConclusion`, `Hypothesis`, `Experiment`, `Observation`, `BeliefUpdate` |
+| `ex-workflow/experimentation` | `experimentation()`, `validateExperimentationConfig`, `experimentationCeremonies`, `experimentationMetrics`, `experimentationReport`, `experimentationRoles`, `experimentationRules`, `experimentationStages`; types `ExperimentationConfig`, `ExperimentationState`, `ExperimentCandidate` |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
 | `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
 | `ex-workflow/types` | every public type |
 
-Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 60–68 kB minified.
+Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 51–68 kB minified.
 
 ## Compatibility and versioning
 
-- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the event kinds) is frozen by test: a removal is a major version, an addition a minor one.
+- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
 
@@ -389,6 +438,9 @@ Deliberate, documented, and stable within 1.x.
 - **Accounting outside a sprint** (a line whose `endedAt` lies in no sprint window) is kept but charged to no sprint.
 - **Reworked items need fresh evidence**: policies and gates count only evidence recorded after the last rework.
 - **CLI flags** take `--flag value` only; `--estimate` is the sole boolean flag.
+- **Investigation and Experimentation run alone.** Neither nests inside, migrates into or coordinates Scrum, Kanban, Waterfall or the other; one `.workflow/` per run.
+- **The host executes.** Core never runs a procedure, benchmark or Git command and never creates or removes a workspace; `provision`, `submit`, `integrate` and `cleanup` record what the host did. A `procedureRef`, `provenanceRefs` entry, `evidence` or `log` is a recorded reference: the engine checks its shape and linkage, not the contents behind it.
+- **Independence is by role id.** Replay, conclusion review and validation must come from a role that did not do the work, judged by the recorded role id; authenticating who runs which role is the host's job.
 
 ## Contributing
 
@@ -398,7 +450,7 @@ pnpm test        # unit, e2e scenarios per methodology, compatibility fixtures, 
 pnpm run ci      # format, lint, typecheck, schema drift, tests, minified build, dist checks, size ratchet
 ```
 
-The design, including every decision log since the first release, lives in [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md). The end-to-end scenarios (`test/sprint.e2e.test.ts`, `test/kanban.e2e.test.ts`, `test/waterfall.e2e.test.ts`) are the best long-form examples: rework, blockers, escalations, retros, change-requests and metrics in one run each. Issues and pull requests: [github.com/Ink01101011/ex-workflow](https://github.com/Ink01101011/ex-workflow).
+Conventions for branches, commits, tests, the frozen public surface, size budgets, docs and releases are in [CONTRIBUTING.md](CONTRIBUTING.md). The design, including every decision log since the first release, lives in [docs/superpowers/specs/2026-10-19-ex-workflow-design.md](docs/superpowers/specs/2026-10-19-ex-workflow-design.md). The end-to-end scenarios (`test/sprint.e2e.test.ts`, `test/kanban.e2e.test.ts`, `test/waterfall.e2e.test.ts`) are the best long-form examples: rework, blockers, escalations, retros, change-requests and metrics in one run each. Issues and pull requests: [github.com/Ink01101011/ex-workflow](https://github.com/Ink01101011/ex-workflow).
 
 ## License
 
