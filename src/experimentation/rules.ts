@@ -1,5 +1,4 @@
 import type { Rule } from "../types.ts";
-import { exhausted } from "./ceremonies.ts";
 export function experimentationRules(): Rule[] {
   return [
     {
@@ -29,10 +28,6 @@ export function experimentationRules(): Rule[] {
           )
             errors.push("handoff must retain the exact submitted candidate SHA");
         }
-        if (action.type === "item.dispatch" && e?.status !== "running")
-          errors.push("only a running experiment may dispatch candidate work");
-        if (action.type === "item.dispatch" && exhausted(state))
-          errors.push("total experiment budget exhausted");
         return errors.map((message) => ({
           rule: "experimentation-lifecycle",
           severity: "error" as const,

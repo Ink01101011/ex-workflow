@@ -83,11 +83,12 @@ export function synchronizeBudget(s: WorkflowState, now?: string): WorkflowState
             spent: usage,
             ...(closed
               ? {
-                  endedAt: nowOf(now),
+                  endedAt: it.endedAt ?? nowOf(now),
                   outcome:
-                    s.experimentation!.status === "integrated"
+                    it.outcome ??
+                    (s.experimentation!.status === "integrated"
                       ? ("completed" as const)
-                      : ("cancelled" as const),
+                      : ("cancelled" as const)),
                 }
               : {}),
           }
@@ -133,9 +134,9 @@ export function assignedAuthor(s: WorkflowState, c: ExperimentCandidate): boolea
 }
 export function candidateExhausted(s: WorkflowState, c: ExperimentCandidate): boolean {
   const cfg = validateExperimentationConfig(s.config);
+  const used = effectiveSpent(s, c);
   return dimensions.some(
-    (k) =>
-      cfg.candidateBudget[k] !== undefined && effectiveSpent(s, c)[k] >= cfg.candidateBudget[k]!,
+    (k) => cfg.candidateBudget[k] !== undefined && used[k] >= cfg.candidateBudget[k]!,
   );
 }
 export function exhausted(s: WorkflowState): boolean {
@@ -195,7 +196,10 @@ function jsonSafe(value: unknown, seen = new Set<object>()): boolean {
   if (typeof value !== "object" || seen.has(value)) return false;
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return false;
   seen.add(value);
-  const valid = Object.values(value).every((v) => jsonSafe(v, seen));
+  // JSON.stringify drops an undefined property, so it is safe in an object but not in an array.
+  const valid = Array.isArray(value)
+    ? value.every((v) => jsonSafe(v, seen))
+    : Object.values(value).every((v) => v === undefined || jsonSafe(v, seen));
   seen.delete(value);
   return valid;
 }
@@ -349,14 +353,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         ],
         "start candidate execution",
       );
-      if (
-        dimensions.some(
-          (k) =>
-            cfg.candidateBudget[k] !== undefined &&
-            effectiveSpent(s, c)[k] >= cfg.candidateBudget[k]!,
-        )
-      )
-        invalid("candidate budget exhausted");
+      if (candidateExhausted(s, c)) invalid("candidate budget exhausted");
       let next = moveItem(s, c.item, { stage: "building", status: "in_progress" }, i.by, i.now);
       next = patchItem(next, c.item, (w) => ({ ...w, role: i.by }));
       return { ...next, experimentation: put(e, { ...c, status: "running" }) };
@@ -443,6 +440,21 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const c = candidate(e, i);
       if (c.status !== "submitted") invalid("validate an unvalidated submitted candidate");
       if (i.by === c.author) invalid("candidate author cannot independently validate");
+      // A candidate the planner dispatched is completed by its builder (handoff and accounting)
+      // before validation; one the host started by ceremony has no completion to wait for.
+      const started = s.events.some(
+        (event) =>
+          event.type === "experimentation.started" &&
+          object(event.payload) &&
+          event.payload.candidate === c.id,
+      );
+      if (!started && getItem(s, c.item).status === "in_progress")
+        fail(
+          "invalid-input",
+          `candidate "${c.id}" item "${c.item}" is still in progress under the planner`,
+          `complete item "${c.item}" with the builder's handoff (candidate-sha ${c.sha}) and accounting before validating`,
+          { items: [c.item] },
+        );
       const commit = sha(i.sha);
       const harness = text(i.harness, "harness");
       if (commit !== c.sha || harness !== e.harness)
@@ -478,29 +490,27 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
           "comparison requires all candidates terminal and submissions independently validated",
         );
       const cfg = validateExperimentationConfig(s.config);
+      const usage = totalSpent(s, e);
       if (
-        exhausted(s) &&
-        dimensions.some(
-          (k) => cfg.totalBudget[k] !== undefined && totalSpent(s)[k] > cfg.totalBudget[k]!,
-        )
+        dimensions.some((k) => cfg.totalBudget[k] !== undefined && usage[k] > cfg.totalBudget[k]!)
       )
         return {
           ...s,
           experimentation: { ...e, status: "stopped", reason: "total budget exceeded" },
         };
-      const eligible = all.filter(
-        (c) =>
+      const eligible = all.filter((c) => {
+        const used = effectiveSpent(s, c);
+        return (
           c.status === "validated" &&
           c.validation?.passed &&
           c.validation.reproducible &&
           c.validation.sha === c.sha &&
           c.validation.harness === e.harness &&
           !dimensions.some(
-            (k) =>
-              cfg.candidateBudget[k] !== undefined &&
-              effectiveSpent(s, c)[k] > cfg.candidateBudget[k]!,
-          ),
-      );
+            (k) => cfg.candidateBudget[k] !== undefined && used[k] > cfg.candidateBudget[k]!,
+          )
+        );
+      });
       eligible.sort((a, b) => {
         const delta = (a.score! - b.score!) * (cfg.direction === "minimize" ? 1 : -1);
         return delta || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -556,8 +566,9 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const evidence = text(i.evidence, "evidence");
       const charged = charge(e, i);
       const cfg = validateExperimentationConfig(s.config);
+      const usage = totalSpent(s, charged);
       const over = dimensions.some(
-        (k) => cfg.totalBudget[k] !== undefined && totalSpent(s, charged)[k] > cfg.totalBudget[k]!,
+        (k) => cfg.totalBudget[k] !== undefined && usage[k] > cfg.totalBudget[k]!,
       );
       return {
         ...s,

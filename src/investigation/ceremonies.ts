@@ -26,6 +26,13 @@ const sameHypothesis = (a: Hypothesis | undefined, b: Hypothesis | undefined) =>
 const text = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 const refs = (v: unknown): v is string[] =>
   Array.isArray(v) && v.length > 0 && v.every(text) && new Set(v).size === v.length;
+/** First key of a caller record outside its contract; stored records are closed objects (state schema). */
+const extraKey = (v: unknown, keys: readonly string[]): string | undefined =>
+  v && typeof v === "object" && !Array.isArray(v)
+    ? Object.keys(v).find((k) => !keys.includes(k))
+    : undefined;
+const extraKeyIn = (list: unknown, keys: readonly string[]): string | undefined =>
+  Array.isArray(list) ? list.map((v) => extraKey(v, keys)).find(Boolean) : undefined;
 function authorize(s: WorkflowState, by: string, cap: Capability) {
   if (!roleOf(s, by)?.capabilities.includes(cap))
     fail(
@@ -81,6 +88,8 @@ export function closeInvestigation(
 export function investigationCeremonies(
   factory: () => Methodology<InvestigationConfig>,
 ): Record<string, Ceremony> {
+  let built: Methodology<InvestigationConfig> | undefined;
+  const methodology = () => (built ??= factory());
   const make =
     (
       name: string,
@@ -105,7 +114,7 @@ export function investigationCeremonies(
           `expected ${phase}, got ${x.phase}`,
           `finish phase ${x.phase} before calling ${name}; ${name} requires phase ${phase}`,
         );
-      return applyAction(s, factory(), { type: `ceremony.${name}`, by: i.by, payload: i }, () =>
+      return applyAction(s, methodology(), { type: `ceremony.${name}`, by: i.by, payload: i }, () =>
         fn(s, x, i, (message, fix) => reject(s, name, message, fix)),
       );
     };
@@ -113,6 +122,11 @@ export function investigationCeremonies(
     intake(s, i) {
       authorize(s, i.by, "facilitate");
       const bad = (message: string, fix: string) => reject(s, "intake", message, fix);
+      if (s.methodology !== "investigation")
+        bad(
+          `workflow methodology is ${s.methodology}, not investigation`,
+          "init a workflow with the investigation methodology before intake",
+        );
       if (s.investigation)
         bad(
           "investigation already started",
@@ -121,50 +135,60 @@ export function investigationCeremonies(
       if (!text(i.item))
         bad("item is required", "set intake.item to a unique investigation item ID");
       const c = validateInvestigationConfig(s.config);
-      let n = addItem(
+      return applyAction(
         s,
-        {
-          id: i.item as string,
-          title: c.question,
-          acceptance: ["Independent evidence-based conclusion"],
-          stage: "intake",
+        methodology(),
+        { type: "ceremony.intake", by: i.by, payload: i },
+        () => {
+          let n = addItem(
+            s,
+            {
+              id: i.item as string,
+              title: c.question,
+              acceptance: ["Independent evidence-based conclusion"],
+              stage: "intake",
+            },
+            i.by,
+            i.now,
+          );
+          n = {
+            ...n,
+            iterations: [
+              ...n.iterations,
+              {
+                id: "investigation",
+                goal: c.question,
+                budget: { ...c.budget },
+                spent: { tokens: 0, turns: 0, wallclockMs: 0 },
+                startedAt: nowOf(i.now),
+                committed: [],
+                carryover: [],
+              },
+            ],
+          };
+          return save(
+            n,
+            {
+              item: i.item as string,
+              phase: "hypotheses",
+              hypotheses: [],
+              rounds: [],
+              contributors: [i.by],
+            },
+            i,
+            "intake",
+          );
         },
-        i.by,
-        i.now,
       );
-      n = {
-        ...n,
-        iterations: [
-          ...n.iterations,
-          {
-            id: "investigation",
-            goal: c.question,
-            budget: { ...c.budget },
-            spent: { tokens: 0, turns: 0, wallclockMs: 0 },
-            startedAt: nowOf(i.now),
-            committed: [],
-            carryover: [],
-          },
-        ],
-      };
-      return {
-        state: save(
-          n,
-          {
-            item: i.item as string,
-            phase: "hypotheses",
-            hypotheses: [],
-            rounds: [],
-            contributors: [i.by],
-          },
-          i,
-          "intake",
-        ),
-        warnings: [],
-      };
     },
     hypotheses: make("hypotheses", "define-acceptance", "hypotheses", (s, x, i, bad) => {
       const h = i.hypotheses as Hypothesis[];
+      const extra = extraKeyIn(h, ["id", "claim", "falsifiedBy"]);
+      if (extra)
+        bad(
+          `unknown key "${extra}" in a hypotheses entry`,
+          "use only id, claim and falsifiedBy in each hypotheses entry",
+        );
       if (
         !Array.isArray(h) ||
         !h.length ||
@@ -180,7 +204,7 @@ export function investigationCeremonies(
         s,
         {
           ...x,
-          hypotheses: structuredClone(h),
+          hypotheses: h.map((v) => ({ id: v.id, claim: v.claim, falsifiedBy: v.falsifiedBy })),
           ...(text(i.singleHypothesisRationale)
             ? { singleHypothesisRationale: i.singleHypothesisRationale }
             : {}),
@@ -195,8 +219,19 @@ export function investigationCeremonies(
       const c = validateInvestigationConfig(s.config),
         it = s.iterations.find((v) => v.id === "investigation");
       if (x.rounds.length >= c.maxRounds || !it || isExhausted(c.budget, it.spent))
-        return closeInvestigation(s, x, i, "stopped", "budget or round limit exhausted");
+        bad(
+          `round limit or budget exhausted (${x.rounds.length} of ${c.maxRounds} rounds used)`,
+          "call stop {reason} to close this investigation, or start a new one with a larger maxRounds or budget",
+        );
       const e = i.experiment as Experiment;
+      const extraExperiment =
+        extraKey(e, ["id", "procedureRef", "predictions", "replayOf"]) ??
+        extraKeyIn(e?.predictions, ["hypothesis", "prediction"]);
+      if (extraExperiment)
+        bad(
+          `unknown key "${extraExperiment}" in experiment`,
+          "use only id, procedureRef, predictions [{hypothesis, prediction}] and replayOf in experiment",
+        );
       if (
         !e ||
         !text(e.id) ||
@@ -268,8 +303,16 @@ export function investigationCeremonies(
           rounds: [
             ...x.rounds,
             {
-              experiment: structuredClone(e),
-              hypotheses: structuredClone(x.hypotheses),
+              experiment: {
+                id: e.id,
+                procedureRef: e.procedureRef,
+                predictions: e.predictions.map((p) => ({
+                  hypothesis: p.hypothesis,
+                  prediction: p.prediction,
+                })),
+                ...(e.replayOf ? { replayOf: e.replayOf } : {}),
+              },
+              hypotheses: x.hypotheses.map((v) => ({ ...v })),
               item: id,
               by: i.by,
             },
@@ -283,6 +326,12 @@ export function investigationCeremonies(
     observe: make("observe", "verify", "observe", (s, x, i, bad) => {
       const r = x.rounds.at(-1)!,
         o = i.result as Observation;
+      const extra = extraKey(o, ["id", "valid", "summary", "provenanceRefs"]);
+      if (extra)
+        bad(
+          `unknown key "${extra}" in result`,
+          "use only id, valid, summary and provenanceRefs in result",
+        );
       if (
         i.experiment !== r.experiment.id ||
         !o ||
@@ -311,7 +360,19 @@ export function investigationCeremonies(
         {
           ...x,
           phase: "update-belief",
-          rounds: x.rounds.map((v) => (v === r ? { ...v, result: structuredClone(o) } : v)),
+          rounds: x.rounds.map((v) =>
+            v === r
+              ? {
+                  ...v,
+                  result: {
+                    id: o.id,
+                    valid: o.valid,
+                    summary: o.summary,
+                    provenanceRefs: [...o.provenanceRefs],
+                  },
+                }
+              : v,
+          ),
           contributors: [...new Set([...x.contributors, i.by, ...executionActors(s, r.item)])],
         },
         i,
@@ -321,6 +382,12 @@ export function investigationCeremonies(
     "update-belief": make("update-belief", "define-acceptance", "update-belief", (s, x, i, bad) => {
       const r = x.rounds.at(-1)!,
         a = i.assessments as BeliefUpdate["assessments"];
+      const extra = extraKeyIn(a, ["hypothesis", "assessment", "reason"]);
+      if (extra)
+        bad(
+          `unknown key "${extra}" in an assessments entry`,
+          "use only hypothesis, assessment and reason in each assessments entry",
+        );
       if (
         i.result !== r.result?.id ||
         !Array.isArray(a) ||
@@ -352,7 +419,17 @@ export function investigationCeremonies(
           phase: i.next === "round" ? "preregister" : "conclusion",
           rounds: x.rounds.map((v) =>
             v === r
-              ? { ...v, update: { result: i.result as string, assessments: structuredClone(a) } }
+              ? {
+                  ...v,
+                  update: {
+                    result: i.result as string,
+                    assessments: a.map((entry) => ({
+                      hypothesis: entry.hypothesis,
+                      assessment: entry.assessment,
+                      reason: entry.reason,
+                    })),
+                  },
+                }
               : v,
           ),
           contributors: [...new Set([...x.contributors, i.by])],

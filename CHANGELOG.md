@@ -1,8 +1,34 @@
 # Changelog
 
+## 1.1.1 (2026-10-30)
+
+Fix wave for the ten findings of the 1.1.0 code review (Investigation and Experimentation); the decisions are in the design spec, section 25. No new ceremony, key, export, event kind or schema document.
+
+- Investigation records are closed objects (R1): a `hypotheses` entry, the `experiment` and its `predictions` entries, the `result` and an `assessments` entry with an unknown key are refused `invalid-input` naming the key. 1.1.0 copied them into `state.json`, which `saveState` then rejected with an error pointing at the state file. Stored records are copied field by field.
+- `preregister` after the round limit or the budget is spent is refused `invalid-input` with the fix naming `stop` (R6); 1.1.0 discarded the experiment, closed the investigation `stopped` and answered `ok: true`.
+- `intake` refuses a workflow of another methodology and runs through the rules like every other ceremony (R7); 1.1.0 could graft an investigation record and iteration onto a Scrum, Kanban or Waterfall state.
+- Experimentation ceremonies accept an input property whose value is `undefined` (R2), as `JSON.stringify` drops it; a host forwarding `{ by, now: options.now, ...input }` was refused `ceremony input must be JSON-safe`.
+- `validate` of a candidate the planner dispatched (`next`) is refused `invalid-input` while its item is still `in_progress`, with the fix naming `complete` (R3): validating first moved the item to `done`, so the builder's `complete` failed and its accounting was never recorded. A candidate the host started by ceremony (`start`) is validated as before.
+- A closed experiment keeps the `endedAt` and `outcome` of its iteration (R5); in 1.1.0 every later ceremony (`cleanup`) re-stamped them.
+- The two `item.dispatch` checks of the `experimentation-lifecycle` rule are removed (R4): no action of that type exists, so they never ran; `candidates()`, `provision` and `start` already refuse dispatch on a stopped or exhausted experiment.
+- Internal: the investigation ceremonies build their methodology once per factory (R9); experimentation spent totals and config are computed once per ceremony instead of once per budget dimension (R8).
+- Finding 10 (the investigation `roleFor` throws `missing-capability` from `next` when no independent deliver role exists) is kept: core `assignRole` throws the same code in the same situation for every methodology, and the error names the item and the fix.
+
+Compatibility: no `state.json`, schema document, event kind, export or CLI change; `VERSION` is `"1.1.1"`. Behaviour changes, all for inputs 1.1.0 accepted and then lost or mis-recorded: an unknown key in an investigation record is refused; `preregister` when exhausted is refused instead of closing the investigation; `intake` on a foreign workflow is refused; `validate` of a planner-dispatched candidate waits for the builder's completion; `now: undefined` is accepted; `endedAt` no longer drifts after closure. Size budgets re-recorded at measured size.
+
 ## 1.1.0 (2026-10-28)
 
-- Add standalone Investigation (#37) and Experimentation (#38) methodologies, public subpath entries, CLI initialization, persisted lifecycle artifacts, configuration schemas and integration coverage. Investigation records falsifiable hypotheses, preregistered runs, observations, belief updates, replay and independent conclusion review. Experimentation records frozen baselines and harnesses, isolated candidate identities, bounded execution, exact-SHA validation, deterministic selection and freshly validated integration. Hosts own execution, Git and workspace lifecycle; cross-methodology workflows are unsupported.
+Two standalone methodologies, Investigation (#37) and Experimentation (#38); the decisions are in the design spec, section 24. The research reports in `docs/research/` were the input; the standalone decision supersedes their composition recommendation.
+
+- Investigation (`ex-workflow/investigation`, #37): `investigation()` with config `{ question, maxRounds, budget }`, roles `investigator`, `replay-worker`, `conclusion-reviewer`, stages `intake`, `execute`, `observed`, and the ceremonies `intake`, `hypotheses`, `preregister`, `observe`, `update-belief`, `conclude`, `review-conclusion`, `stop`. Competing falsifiable hypotheses, preregistered runs executed as items through `next` and `complete`, recorded observations (invalid runs included), belief updates, independent replay and an independent conclusion review before a conclusion is `resolved`; `inconclusive` and `stopped` are first-class outcomes; rounds and budget are bounded.
+- Experimentation (`ex-workflow/experimentation`, #38): `experimentation()` with config `{ objective, direction, tieBreak, concurrencyCap, maxCandidates, candidateBudget, totalBudget }`, roles `coordinator`, `builder`, `validator`, `integrator`, stages `candidate`, `building`, `validation` (gate `experiment-validation`), `done`, and the ceremonies `freeze`, `provision`, `start`, `submit`, `validate`, `compare`, `integrate`, `validate-integration`, `terminate`, `stop`, `cleanup`. Frozen baseline SHA and harness, isolated workspaces recorded by identity, bounded per-candidate and total budgets, independent validation at the exact submitted SHA, deterministic ranking (score, then candidate id), exact-SHA promotion and fresh validation of the integration SHA; all-fail produces no winner.
+- CLI: `exwf init investigation` and `exwf init experimentation`; `ceremony`, `next`, `complete`, `status`, `metrics` and the persistence commands work unchanged.
+- Schema: `investigationConfigSchema` and `experimentationConfigSchema` in `ex-workflow/schema`; `workflowStateSchema` covers the new optional lifecycle records, so `loadState` validates them.
+- Planner: `PlannerOptions.reservedTokens` (optional) deducts tokens reserved for in-flight work from the iteration remainder; Experimentation sets it for running candidates; omitted, dispatch is unchanged.
+- Examples: `scripts/example-investigation.ts` and `scripts/example-experimentation.ts`, synthetic and asserted, run with `pnpm exec tsx`.
+- API-surface test: event kinds are now collected from the TypeScript AST instead of a regex; the 1.0.0 list carried one false positive (`needs-review`, a verdict string, never an event), so the real count moves from 51 to 69.
+
+Compatibility: additive. `MethodologyName` gains `investigation` and `experimentation`; `WorkflowState` gains the optional `investigation` and `experimentation` records, written only by those methodologies; the schema documents go from eight to ten; 18 event kinds are added (`investigation.*` 7, `experimentation.*` 11); `PlannerOptions` gains `reservedTokens`. A `.workflow/state.json` written by 1.0.x loads unchanged. Scrum, Kanban and Waterfall behaviour, payloads and messages are unchanged; their minified single-entry bundles grow by 59 B each for the planner hook (budgets at measured). `VERSION` is `"1.1.0"`.
 
 ## 1.0.1 (2026-10-24)
 

@@ -1,69 +1,5 @@
 # ex-workflow — design spec
 
-## 2026-10-28 — #37 and #38 standalone methodologies
-
-User-approved direction: ship two new methodologies, `investigation` (#37) and
-`experimentation` (#38), rather than extensions to Scrum, Kanban or Waterfall.
-The research reports in `docs/research/` are historical proposals; the user's
-standalone-methodology decision supersedes their composition recommendation.
-
-### Scope and architecture
-
-Each methodology owns its factory, validated config, default roles and stages,
-rules, ceremonies, serializable lifecycle record, report and metrics. Both use
-the existing item/brief/handoff/accounting/planner contracts. Pure functions only:
-the host executes commands, provisions isolation, captures immutable artifacts
-and authenticates reviewers. Engine validation checks structured records and
-provenance linkage; a ref alone cannot prove external artifact contents.
-
-Investigation bounds an intake, registers falsifiable competing hypotheses,
-preregisters discriminating experiments, records observations and belief updates,
-and requires independent review before resolving a conclusion. Inconclusive and
-stopped outcomes are first-class; rounds and accounting are bounded.
-
-Experimentation freezes a shared base and harness, tracks separate candidate
-attempts and workspace identities, records terminal failures/timeouts, requires
-independent validation at the submitted SHA, compares eligible candidates under
-preregistered ranking, and guards integration with fresh validation at the
-integration SHA. All-fail produces no winner. Host resource cleanup is reported,
-never performed implicitly by core.
-
-### Implementation plan and verification
-
-Execution shape: independent methodology modules, then sequential shared package
-integration and final review. Each task is test → implement → spec review →
-code-quality review. No unrelated cleanup or new runtime dependencies.
-
-- [x] Investigation: write failing colocated lifecycle/invalid-transition tests;
-  implement `src/investigation/{config,state,roles,stages,ceremonies,index}.ts`
-  (split rules/metrics if needed); run the focused tests; review against #37 and
-  existing pure-state, capability-based authorization and actionable-error patterns.
-- [x] Experimentation: write failing colocated lifecycle/provenance/timeout tests;
-  implement `src/experimentation/{config,state,roles,stages,ceremonies,index}.ts`
-  (split rules/metrics if needed); run focused tests; review against #38, exact-SHA
-  promotion and all-fail/no-winner requirements.
-- [x] Package integration: extend `MethodologyName` and optional lifecycle state
-  fields in `src/types.ts`; add CLI factories, package exports/typesVersions and
-  tsup entries; generate both config schemas and lifecycle state schemas via
-  `scripts/gen-schema.mjs`; extend the API snapshot additively. Test CLI init,
-  save/load and ceremony dispatch for both new names, and keep old fixtures valid.
-- [x] Documentation and final verification: add runnable end-to-end SDK examples
-  and host boundaries to README, record additions in CHANGELOG; run `pnpm run ci`;
-  inspect schema/API/size diffs, review spec compliance then code quality. Final
-  verification: 372 tests and both executable examples pass. Independent SDD
-  review findings closed. Optional planner `reservedTokens` preserves existing
-  dispatch behavior when omitted and accounts for in-flight experiment estimates. New
-  entry budgets must be measured; existing entry budgets must not be loosened
-  without explaining a measured additive cost.
-
-### Out of scope
-
-Cross-methodology composition or integration, automatic git/worktree/process
-execution, sandbox provisioning, LLM calls, automatic merge/publish, and claims
-that illustrative research pilots establish measured effectiveness.
-
----
-
 Date: 2026-10-19
 Status: approved in brainstorm, awaiting written review
 Owner: Supakit (Ink01101011)
@@ -972,3 +908,86 @@ The owner's instruction of 2026-10-24: fix every open issue (#23–#27, label `e
 | 1.0-c | Version and tags | `1.0.0` in `package.json` and `VERSION`; `npm publish` without a tag moves `latest` to 1.0.0; the `stage` tag stays on 0.6.0-stage. README: Install resolves to 1.0.0, the Publishing section drops the `stage` instruction, Status names 1.0.0. CHANGELOG `## 1.0.0 (2026-10-24)` with a Migration paragraph (from any 0.N.0-stage: states load unchanged; behaviour changes of 0.5.0 and 0.6.0 apply; the new Waterfall add-time refusals (#23, #24) and the `coverage` recount (#25) are the only new observable changes). Size budgets re-recorded at measured size. |
 
 Out of Phase 7: Kanban `backlog` lesson changes creating cards (the host adds them through `replenishment`); a Scrum-style `dod` in Kanban (Kanban has no Definition of Done; exit policies are edited by the same review).
+
+## 24. Phase 8 implementation addenda (1.1.0: Investigation #37 and Experimentation #38)
+
+Date: 2026-10-28. Released as 1.1.0 (tag `v1.1.0`, npm `latest`).
+
+User-approved direction: ship two new methodologies, `investigation` (#37) and
+`experimentation` (#38), rather than extensions to Scrum, Kanban or Waterfall.
+The research reports in `docs/research/` are the input; the owner's
+standalone-methodology decision supersedes their composition recommendation.
+
+### Scope and architecture
+
+Each methodology owns its factory, validated config, default roles and stages,
+rules, ceremonies, serializable lifecycle record, report and metrics. Both use
+the existing item/brief/handoff/accounting/planner contracts. Pure functions only:
+the host executes commands, provisions isolation, captures immutable artifacts
+and authenticates reviewers. Engine validation checks structured records and
+provenance linkage; a ref alone cannot prove external artifact contents.
+
+Investigation bounds an intake, registers falsifiable competing hypotheses,
+preregisters discriminating experiments, records observations and belief updates,
+and requires independent review before resolving a conclusion. Inconclusive and
+stopped outcomes are first-class; rounds and accounting are bounded.
+
+Experimentation freezes a shared base and harness, tracks separate candidate
+attempts and workspace identities, records terminal failures/timeouts, requires
+independent validation at the submitted SHA, compares eligible candidates under
+preregistered ranking, and guards integration with fresh validation at the
+integration SHA. All-fail produces no winner. Host resource cleanup is reported,
+never performed implicitly by core.
+
+### Implementation plan and verification
+
+Execution shape: independent methodology modules, then sequential shared package
+integration and final review. Each task is test → implement → spec review →
+code-quality review. No unrelated cleanup or new runtime dependencies.
+
+- [x] Investigation: write failing colocated lifecycle/invalid-transition tests;
+  implement `src/investigation/{config,state,roles,stages,ceremonies,index}.ts`
+  (split rules/metrics if needed); run the focused tests; review against #37 and
+  existing pure-state, capability-based authorization and actionable-error patterns.
+- [x] Experimentation: write failing colocated lifecycle/provenance/timeout tests;
+  implement `src/experimentation/{config,state,roles,stages,ceremonies,index}.ts`
+  (split rules/metrics if needed); run focused tests; review against #38, exact-SHA
+  promotion and all-fail/no-winner requirements.
+- [x] Package integration: extend `MethodologyName` and optional lifecycle state
+  fields in `src/types.ts`; add CLI factories, package exports/typesVersions and
+  tsup entries; generate both config schemas and lifecycle state schemas via
+  `scripts/gen-schema.mjs`; extend the API snapshot additively. Test CLI init,
+  save/load and ceremony dispatch for both new names, and keep old fixtures valid.
+- [x] Documentation and final verification: add runnable end-to-end SDK examples
+  and host boundaries to README, record additions in CHANGELOG; run `pnpm run ci`;
+  inspect schema/API/size diffs, review spec compliance then code quality. Final
+  verification: 372 tests and both executable examples pass. Independent SDD
+  review findings closed. Optional planner `reservedTokens` preserves existing
+  dispatch behavior when omitted and accounts for in-flight experiment estimates. New
+  entry budgets must be measured; existing entry budgets must not be loosened
+  without explaining a measured additive cost.
+
+### Out of scope
+
+Cross-methodology composition or integration, automatic git/worktree/process
+execution, sandbox provisioning, LLM calls, automatic merge/publish, and claims
+that illustrative research pilots establish measured effectiveness.
+
+## 25. 1.1.1 fix wave (code review of v1.0.1..v1.1.0, 2026-10-30)
+
+A medium-effort code review of the 1.1.0 diff raised ten findings (two confirmed by an executed probe); the owner's instruction of 2026-10-30 was to fix all ten. Shipped as 1.1.1: a patch, because no public surface changes. Each fix landed with a regression test that failed on 1.1.0 (`R1`–`R7` in the two colocated test files).
+
+| Finding | Topic | Decision |
+|---|---|---|
+| 1 | Investigation ceremonies cloned caller records with extra keys into `state.investigation`; `workflowStateSchema` is closed, so `saveState` failed after the ceremony succeeded | FIX: `extraKey` / `extraKeyIn` helpers refuse an unknown key in a `hypotheses` entry, the `experiment`, a `predictions` entry, the `result` or an `assessments` entry with `invalid-input` naming the key (the 0.4.0 closed-object posture); stored records are built field by field, never `structuredClone`d. |
+| 2 | `jsonSafe` rejected an `undefined` property value, so `{ by, now: options.now, ...input }` could never run an experimentation ceremony | FIX: an `undefined` property of an object is JSON-safe (`JSON.stringify` drops it); an `undefined` array element stays unsafe (it would serialise as `null`). |
+| 3 | `validate` accepted a `submitted` candidate whose item was still `in_progress` and moved it to `done`; the builder's `complete` then failed and its accounting was never recorded | FIX, narrowed: the engine distinguishes the two dispatch paths by the `experimentation.started` event. A candidate the planner dispatched (`next`) has a completion to wait for, so `validate` refuses it while the item is `in_progress`, fix naming `complete` and the submitted SHA. A candidate the host started by ceremony (`start`) has no completion and validates as before; that path is the CLI round trip and the shipped example. No new state field. |
+| 4 | `experimentation-lifecycle` guarded `item.dispatch`, an action type nothing emits (`plan()` does not go through `applyAction`) | FIX: the two dead branches and the `exhausted` import removed; `candidates()`, `provision` and `start` are the real guards. |
+| 5 | `synchronizeBudget` re-stamped `endedAt` and `outcome` on every ceremony after closure, so `cleanup` moved the recorded end time | FIX: `it.endedAt ?? nowOf(now)` and `it.outcome ?? …`; the first close wins. |
+| 6 | `preregister` with `maxRounds` or the budget spent discarded the experiment, closed the investigation `stopped` and answered `ok: true` | FIX: refused `invalid-input` (`round limit or budget exhausted (n of m rounds used)`), fix naming `stop`. The silent auto-stop in `update-belief` and `review-conclusion` (next `round` with nothing left) stays: there the caller has asked for a round the budget cannot hold, and the tests of 1.1.0 pin it. Reachable through `exwf account` corrections between `update-belief` and `preregister`. |
+| 7 | `intake` bypassed `applyAction` and never checked `s.methodology`, so it could graft an investigation onto a Scrum state | FIX: `intake` refuses a workflow whose methodology is not `investigation` and runs through `applyAction` like every other ceremony. |
+| 8 | `effectiveSpent` / `totalSpent` / `validateExperimentationConfig` recomputed inside `dimensions.some` loops and twice in `candidates()` | FIX: hoisted; `candidateExhausted` is reused by `start` and `candidates()`; `compare` computes `totalSpent` once and drops the redundant `exhausted()` call (`some(>)` implies it); no behaviour change. |
+| 9 | Every investigation ceremony call rebuilt the whole methodology through `factory()` | FIX: memoised inside `investigationCeremonies`; the experimentation `reduce` wrapper is left as is (one small object per call, no circular construction). |
+| 10 | Investigation `roleFor` throws `missing-capability` from `plan()` instead of reporting the item as skipped | NO CHANGE: core `assignRole` (`src/planner.ts`) throws the same code from `plan()` for every methodology when no role has the capability, and the investigation error names the item and the fix (`index.test.ts` "missing independent deliver role fails before replay dispatch" pins it). A skipped-reason path would be a core change, not a methodology fix. |
+
+Out of 1.1.1: a `skipped` reason for an unassignable role (core planner change); the `experimentation-lifecycle` rule's `validated` branch on `item.complete`, unreachable now that validation follows completion on the planner path, is left in place.
