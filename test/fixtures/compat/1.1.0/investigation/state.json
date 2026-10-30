@@ -1,0 +1,311 @@
+{
+  "version": 1,
+  "methodology": "investigation",
+  "config": {
+    "question": "cache miss: key mismatch or expiry?",
+    "maxRounds": 3,
+    "budget": {
+      "tokens": 100000,
+      "turns": 10
+    }
+  },
+  "items": {
+    "CACHE": {
+      "type": "task",
+      "acceptance": ["Independent evidence-based conclusion"],
+      "dependsOn": [],
+      "id": "CACHE",
+      "title": "cache miss: key mismatch or expiry?",
+      "stage": "intake",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    },
+    "CACHE-run-1": {
+      "type": "task",
+      "acceptance": ["synthetic:compare-cache-keys"],
+      "dependsOn": [],
+      "id": "CACHE-run-1",
+      "title": "Experiment run-1",
+      "iteration": "investigation",
+      "stage": "execute",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    }
+  },
+  "stages": [
+    {
+      "id": "intake",
+      "name": "Intake",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "acceptance-written"
+        }
+      ]
+    },
+    {
+      "id": "execute",
+      "name": "Execute preregistered experiment",
+      "entryPolicy": [
+        {
+          "kind": "acceptance-written"
+        },
+        {
+          "kind": "no-open-blockers"
+        }
+      ],
+      "exitPolicy": [
+        {
+          "kind": "evidence",
+          "evidenceKind": "experiment-output"
+        }
+      ]
+    },
+    {
+      "id": "observed",
+      "name": "Execution recorded",
+      "entryPolicy": [],
+      "exitPolicy": []
+    }
+  ],
+  "roles": {
+    "replay-worker": {
+      "id": "replay-worker",
+      "name": "Independent replay worker",
+      "modelTier": "small",
+      "capabilities": ["deliver", "verify"],
+      "canApprove": [],
+      "inputs": ["preregistered-experiment"],
+      "outputs": ["experiment-output"],
+      "do_not": ["Do not change the replay procedure"]
+    },
+    "investigator": {
+      "id": "investigator",
+      "name": "Investigator",
+      "modelTier": "large",
+      "capabilities": ["facilitate", "define-acceptance", "deliver", "verify"],
+      "canApprove": [],
+      "inputs": ["question", "prior-results"],
+      "outputs": ["hypotheses", "preregistered-experiment", "belief-update"],
+      "do_not": ["Do not revise predictions after execution", "Do not approve your own conclusions"]
+    },
+    "conclusion-reviewer": {
+      "id": "conclusion-reviewer",
+      "name": "Independent conclusion reviewer",
+      "modelTier": "large",
+      "capabilities": ["review"],
+      "canApprove": ["investigation-conclusion"],
+      "inputs": ["evidence", "replay", "conclusion"],
+      "outputs": ["conclusion-review"],
+      "do_not": ["Do not approve unsupported conclusions"]
+    }
+  },
+  "iterations": [
+    {
+      "id": "investigation",
+      "goal": "cache miss: key mismatch or expiry?",
+      "budget": {
+        "tokens": 100000,
+        "turns": 10
+      },
+      "spent": {
+        "tokens": 0,
+        "turns": 0,
+        "wallclockMs": 0
+      },
+      "startedAt": "2026-10-30T04:04:25.413Z",
+      "committed": ["CACHE-run-1"],
+      "carryover": []
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-30T04:04:25.383Z",
+      "type": "state.created",
+      "by": "system",
+      "payload": {
+        "methodology": "investigation"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-30T04:04:25.413Z",
+      "type": "item.added",
+      "by": "investigator",
+      "payload": {
+        "id": "CACHE",
+        "type": "task",
+        "stage": "intake",
+        "weight": null,
+        "priority": null,
+        "phase": null,
+        "parent": null
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-30T04:04:25.413Z",
+      "type": "investigation.intake",
+      "by": "investigator",
+      "payload": {
+        "item": "CACHE",
+        "phase": "hypotheses",
+        "hypotheses": [],
+        "rounds": [],
+        "contributors": ["investigator"]
+      }
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-30T04:04:25.443Z",
+      "type": "investigation.hypotheses",
+      "by": "investigator",
+      "payload": {
+        "item": "CACHE",
+        "phase": "preregister",
+        "hypotheses": [
+          {
+            "id": "key",
+            "claim": "keys differ",
+            "falsifiedBy": "identical keys"
+          },
+          {
+            "id": "expiry",
+            "claim": "entries expire",
+            "falsifiedBy": "live entry"
+          }
+        ],
+        "rounds": [],
+        "contributors": ["investigator"]
+      }
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-30T04:04:25.473Z",
+      "type": "item.added",
+      "by": "investigator",
+      "payload": {
+        "id": "CACHE-run-1",
+        "type": "task",
+        "stage": "execute",
+        "weight": null,
+        "priority": null,
+        "phase": null,
+        "parent": null
+      }
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-30T04:04:25.473Z",
+      "type": "investigation.preregister",
+      "by": "investigator",
+      "payload": {
+        "item": "CACHE",
+        "phase": "observe",
+        "hypotheses": [
+          {
+            "id": "key",
+            "claim": "keys differ",
+            "falsifiedBy": "identical keys"
+          },
+          {
+            "id": "expiry",
+            "claim": "entries expire",
+            "falsifiedBy": "live entry"
+          }
+        ],
+        "rounds": [
+          {
+            "experiment": {
+              "id": "run-1",
+              "procedureRef": "synthetic:compare-cache-keys",
+              "predictions": [
+                {
+                  "hypothesis": "key",
+                  "prediction": "different keys, live entry"
+                },
+                {
+                  "hypothesis": "expiry",
+                  "prediction": "identical keys, expired entry"
+                }
+              ]
+            },
+            "hypotheses": [
+              {
+                "id": "key",
+                "claim": "keys differ",
+                "falsifiedBy": "identical keys"
+              },
+              {
+                "id": "expiry",
+                "claim": "entries expire",
+                "falsifiedBy": "live entry"
+              }
+            ],
+            "item": "CACHE-run-1",
+            "by": "investigator"
+          }
+        ],
+        "contributors": ["investigator"]
+      }
+    }
+  ],
+  "accounting": [],
+  "pending": [],
+  "lessons": [],
+  "agreements": [],
+  "investigation": {
+    "item": "CACHE",
+    "phase": "observe",
+    "hypotheses": [
+      {
+        "id": "key",
+        "claim": "keys differ",
+        "falsifiedBy": "identical keys"
+      },
+      {
+        "id": "expiry",
+        "claim": "entries expire",
+        "falsifiedBy": "live entry"
+      }
+    ],
+    "rounds": [
+      {
+        "experiment": {
+          "id": "run-1",
+          "procedureRef": "synthetic:compare-cache-keys",
+          "predictions": [
+            {
+              "hypothesis": "key",
+              "prediction": "different keys, live entry"
+            },
+            {
+              "hypothesis": "expiry",
+              "prediction": "identical keys, expired entry"
+            }
+          ]
+        },
+        "hypotheses": [
+          {
+            "id": "key",
+            "claim": "keys differ",
+            "falsifiedBy": "identical keys"
+          },
+          {
+            "id": "expiry",
+            "claim": "entries expire",
+            "falsifiedBy": "live entry"
+          }
+        ],
+        "item": "CACHE-run-1",
+        "by": "investigator"
+      }
+    ],
+    "contributors": ["investigator"]
+  }
+}

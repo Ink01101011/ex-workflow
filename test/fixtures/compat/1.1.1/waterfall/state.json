@@ -1,0 +1,321 @@
+{
+  "version": 1,
+  "methodology": "waterfall",
+  "config": {
+    "phases": [
+      {
+        "id": "requirements",
+        "name": "Requirements",
+        "deliverables": ["srs"],
+        "gate": {
+          "id": "requirements-gate",
+          "requires": [
+            "human",
+            {
+              "capability": "approve-gate"
+            }
+          ],
+          "evidence": [],
+          "onFail": {
+            "action": "block"
+          }
+        },
+        "deliverBy": "business-analyst"
+      },
+      {
+        "id": "design",
+        "name": "Design",
+        "deliverables": ["design-doc", "interface-spec"],
+        "gate": {
+          "id": "design-gate",
+          "requires": [
+            "human",
+            {
+              "capability": "approve-gate"
+            }
+          ],
+          "evidence": [],
+          "onFail": {
+            "action": "block"
+          }
+        },
+        "deliverBy": "architect"
+      },
+      {
+        "id": "implementation",
+        "name": "Implementation",
+        "deliverables": ["code-baseline"],
+        "gate": {
+          "id": "implementation-gate",
+          "requires": [
+            "human",
+            {
+              "capability": "approve-gate"
+            }
+          ],
+          "evidence": [],
+          "onFail": {
+            "action": "block"
+          }
+        },
+        "budget": {
+          "tokens": 5000
+        }
+      },
+      {
+        "id": "verification",
+        "name": "Verification",
+        "deliverables": ["test-report", "traceability-matrix"],
+        "gate": {
+          "id": "verification-gate",
+          "requires": [
+            "human",
+            {
+              "capability": "approve-gate"
+            }
+          ],
+          "evidence": [],
+          "onFail": {
+            "action": "block"
+          }
+        }
+      },
+      {
+        "id": "deployment",
+        "name": "Deployment",
+        "deliverables": ["release-notes", "deployment-record"],
+        "gate": {
+          "id": "deployment-gate",
+          "requires": [
+            "human",
+            {
+              "capability": "approve-gate"
+            }
+          ],
+          "evidence": [],
+          "onFail": {
+            "action": "block"
+          }
+        },
+        "deliverBy": "release-manager"
+      },
+      {
+        "id": "maintenance",
+        "name": "Maintenance",
+        "deliverables": ["change-log"],
+        "gate": {
+          "id": "maintenance-gate",
+          "requires": [
+            "human",
+            {
+              "capability": "approve-gate"
+            }
+          ],
+          "evidence": [],
+          "onFail": {
+            "action": "block"
+          }
+        }
+      }
+    ],
+    "changeControl": {
+      "requiresImpactAnalysis": true,
+      "approvers": [
+        "human",
+        {
+          "capability": "control-change"
+        }
+      ]
+    },
+    "traceability": {
+      "from": "requirements",
+      "to": ["design", "verification"]
+    },
+    "humanGates": "all"
+  },
+  "items": {
+    "A1": {
+      "type": "task",
+      "acceptance": ["it works"],
+      "dependsOn": [],
+      "id": "A1",
+      "title": "first item",
+      "weight": 3,
+      "priority": 5,
+      "phase": "requirements",
+      "stage": "work",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    },
+    "A2": {
+      "type": "task",
+      "acceptance": ["it is documented"],
+      "dependsOn": [],
+      "id": "A2",
+      "title": "second item",
+      "priority": 1,
+      "phase": "requirements",
+      "stage": "work",
+      "status": "todo",
+      "evidence": [],
+      "blockers": [],
+      "transitions": []
+    }
+  },
+  "stages": [
+    {
+      "id": "work",
+      "name": "Work",
+      "entryPolicy": [
+        {
+          "kind": "dependencies-done"
+        }
+      ],
+      "exitPolicy": []
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "entryPolicy": [],
+      "exitPolicy": [
+        {
+          "kind": "no-open-blockers"
+        }
+      ],
+      "review": true
+    },
+    {
+      "id": "done",
+      "name": "Done",
+      "entryPolicy": [],
+      "exitPolicy": []
+    }
+  ],
+  "roles": {
+    "project-manager": {
+      "id": "project-manager",
+      "name": "Project Manager",
+      "modelTier": "large",
+      "capabilities": ["facilitate", "control-change", "approve-gate", "escalate"],
+      "canApprove": [
+        "requirements-gate",
+        "design-gate",
+        "implementation-gate",
+        "verification-gate",
+        "deployment-gate",
+        "maintenance-gate",
+        "change-control"
+      ],
+      "inputs": ["phase-plan", "deliverables", "change-requests"],
+      "outputs": ["gate-decisions", "baselines", "change-decisions"],
+      "do_not": [
+        "do not implement items yourself",
+        "do not reopen a phase without an approved change-request"
+      ]
+    },
+    "developer": {
+      "id": "developer",
+      "name": "Developer",
+      "modelTier": "small",
+      "capabilities": ["deliver"],
+      "canApprove": [],
+      "inputs": ["design-doc", "interface-spec", "brief"],
+      "outputs": ["code", "code-baseline", "test-output"],
+      "do_not": [
+        "do not change requirements or designs; raise a change-request",
+        "do not approve your own work"
+      ]
+    },
+    "business-analyst": {
+      "id": "business-analyst",
+      "name": "Business Analyst",
+      "modelTier": "medium",
+      "capabilities": ["define-acceptance", "deliver"],
+      "canApprove": [],
+      "inputs": ["stakeholder-needs"],
+      "outputs": ["srs", "acceptance-criteria"],
+      "do_not": [
+        "do not design or implement",
+        "do not edit a baselined requirement; raise a change-request"
+      ]
+    },
+    "architect": {
+      "id": "architect",
+      "name": "Architect",
+      "modelTier": "medium",
+      "capabilities": ["deliver"],
+      "canApprove": [],
+      "inputs": ["srs"],
+      "outputs": ["design-doc", "interface-spec"],
+      "do_not": ["do not change requirements; raise a change-request", "do not implement"]
+    },
+    "qa": {
+      "id": "qa",
+      "name": "QA",
+      "modelTier": "small",
+      "capabilities": ["verify", "review"],
+      "canApprove": [],
+      "inputs": ["srs", "design-doc", "code-baseline"],
+      "outputs": ["test-report", "review-notes"],
+      "do_not": ["do not fix defects yourself; raise bugs", "do not approve phase gates"]
+    },
+    "release-manager": {
+      "id": "release-manager",
+      "name": "Release Manager",
+      "modelTier": "small",
+      "capabilities": ["deliver"],
+      "canApprove": [],
+      "inputs": ["code-baseline", "test-report"],
+      "outputs": ["release-notes", "deployment-record"],
+      "do_not": ["do not deploy an unbaselined verification phase"]
+    }
+  },
+  "iterations": [],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-30T04:04:26.126Z",
+      "type": "state.created",
+      "by": "system",
+      "payload": {
+        "methodology": "waterfall"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-30T04:04:26.158Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A1",
+        "type": "task",
+        "stage": "work",
+        "weight": 3,
+        "priority": 5,
+        "phase": "requirements",
+        "parent": null
+      }
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-30T04:04:26.188Z",
+      "type": "item.added",
+      "by": "human",
+      "payload": {
+        "id": "A2",
+        "type": "task",
+        "stage": "work",
+        "weight": null,
+        "priority": 1,
+        "phase": "requirements",
+        "parent": null
+      }
+    }
+  ],
+  "accounting": [],
+  "pending": [],
+  "lessons": [],
+  "agreements": []
+}

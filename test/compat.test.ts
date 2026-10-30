@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadState, saveState, statePath, WORKFLOW_DIR } from "../src/adapters/file.ts";
 import { next } from "../src/index.ts";
+import { experimentation } from "../src/experimentation/index.ts";
+import { investigation } from "../src/investigation/index.ts";
 import { kanban } from "../src/kanban/index.ts";
 import { scrum } from "../src/scrum/index.ts";
 import { waterfall } from "../src/waterfall/index.ts";
@@ -16,6 +18,8 @@ const METHODOLOGIES: Record<string, () => Methodology> = {
   scrum: scrum as () => Methodology,
   kanban: kanban as () => Methodology,
   waterfall: waterfall as () => Methodology,
+  investigation: investigation as () => Methodology,
+  experimentation: experimentation as () => Methodology,
 };
 
 // no Array#toSorted: it needs Node 20 and the tests run on Node 18
