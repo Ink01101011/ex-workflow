@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { init } from "../methodology.ts";
 import { addItem } from "../items.ts";
 import { experimentation } from "./index.ts";
-import type { WorkflowState } from "../types.ts";
+import type { CeremonyInput, WorkflowState } from "../types.ts";
 const m = experimentation();
 const sha = (n: number) => String(n).repeat(40);
 const config = {
@@ -823,4 +823,92 @@ test("token budgeting skips resource-capped work before admitting other authors"
     next(s, m).briefs.map((b) => b.item.id),
     ["c"],
   );
+});
+
+// 1.1.1 review wave (findings 2, 3, 5 of the 2026-10-30 review).
+import { validate as validateSchema, workflowStateSchema } from "../schema/index.ts";
+test("R2 an undefined input property is JSON-safe", () => {
+  let s = init({ methodology: m, config }).state;
+  s = addItem(s, { id: "a", title: "a", acceptance: ["benchmark"] }, "coordinator");
+  // A JS host forwarding `{ by, now: opts.now, ...input }` sends the key with an undefined value.
+  s = m.ceremonies["freeze"]!(s, {
+    by: "coordinator",
+    now: undefined,
+    baseSha: sha(1),
+    harness: "harness-v1",
+    candidates: [{ id: "a", item: "a", author: "builder" }],
+  } as unknown as CeremonyInput).state;
+  assert.equal(s.experimentation?.status, "running");
+  assert.deepEqual(validateSchema(workflowStateSchema, JSON.parse(JSON.stringify(s))), []);
+});
+test("R3 a planner-dispatched candidate is validated only after the builder's completion", () => {
+  let s = frozen();
+  s = call(s, "provision", { candidate: "a", workspace: "wa" });
+  s = call(s, "provision", { candidate: "b", workspace: "wb" });
+  s = next(s, m).state;
+  s = call(
+    s,
+    "submit",
+    { candidate: "a", sha: sha(2), score: 1, spent: { tokens: 4, turns: 1, wallclockMs: 1 } },
+    "builder",
+  );
+  const input = {
+    candidate: "a",
+    sha: sha(2),
+    harness: "harness-v1",
+    passed: true,
+    reproducible: true,
+    evidence: "independent-log",
+  };
+  const before = JSON.stringify(s);
+  assert.throws(
+    () => call(s, "validate", input, "validator"),
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "invalid-input" &&
+      /complete/.test(e.fix) &&
+      e.items?.includes("a") === true,
+  );
+  assert.equal(JSON.stringify(s), before);
+  s = complete(
+    s,
+    m,
+    {
+      ...handoff,
+      produced: [
+        { kind: "candidate-sha", ref: sha(2) },
+        { kind: "benchmark-result", ref: "benchmark-log" },
+      ],
+    },
+    accounting,
+  ).state;
+  s = call(s, "validate", input, "validator");
+  assert.equal(s.items.a?.status, "done");
+  assert.equal(s.experimentation?.candidates.a?.status, "validated");
+  assert.equal((m.metrics(s).spent as Record<string, number>).tokens, 4);
+  // The ceremony-only path (start) still validates without a completion.
+  let t = running();
+  t = submitA(t);
+  t = call(t, "validate", input, "validator");
+  assert.equal(t.items.a?.status, "done");
+});
+test("R5 a closed experiment keeps its iteration end time across later ceremonies", () => {
+  let s = frozen();
+  s = call(s, "provision", { candidate: "a", workspace: "workspace-a" });
+  s = m.ceremonies["stop"]!(s, {
+    by: "coordinator",
+    now: "2026-10-28T01:00:00Z",
+    reason: "halt",
+    spent: zero,
+  }).state;
+  const closed = s.iterations.find((it) => it.id === "experiment")!;
+  assert.ok(closed.endedAt);
+  s = m.ceremonies["cleanup"]!(s, {
+    by: "coordinator",
+    now: "2026-10-28T02:00:00Z",
+    workspaces: ["workspace-a"],
+  }).state;
+  const later = s.iterations.find((it) => it.id === "experiment")!;
+  assert.equal(later.endedAt, closed.endedAt);
+  assert.equal(later.outcome, closed.outcome);
 });

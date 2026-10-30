@@ -1,14 +1,14 @@
 import type { Methodology } from "../types.ts";
 import {
   experimentationCeremonies,
-  effectiveSpent,
+  candidateExhausted,
   exhausted,
   runningCount,
   assignedAuthor,
   synchronizeBudget,
   reservedTokens,
 } from "./ceremonies.ts";
-import { dimensions, validateExperimentationConfig, type ExperimentationConfig } from "./config.ts";
+import { validateExperimentationConfig, type ExperimentationConfig } from "./config.ts";
 import { experimentationMetrics, experimentationReport } from "./metrics.ts";
 import { experimentationRoles } from "./roles.ts";
 import { experimentationRules } from "./rules.ts";
@@ -58,25 +58,16 @@ export function experimentation(): Methodology<ExperimentationConfig> {
     },
     candidates(s) {
       const e = s.experimentation;
-      if (
-        !e ||
-        e.status !== "running" ||
-        exhausted(s) ||
-        runningCount(s) >= validateExperimentationConfig(s.config).concurrencyCap
-      )
-        return [];
+      if (!e || e.status !== "running") return [];
       const cfg = validateExperimentationConfig(s.config);
+      if (exhausted(s) || runningCount(s) >= cfg.concurrencyCap) return [];
       return Object.values(e.candidates)
         .filter(
           (c) =>
             c.status === "ready" &&
             assignedAuthor(s, c) &&
             s.items[c.item]?.status === "todo" &&
-            !dimensions.some(
-              (k) =>
-                cfg.candidateBudget[k] !== undefined &&
-                effectiveSpent(s, c)[k] >= cfg.candidateBudget[k]!,
-            ),
+            !candidateExhausted(s, c),
         )
         .map((c) => s.items[c.item]!);
     },
