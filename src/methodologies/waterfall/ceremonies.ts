@@ -96,7 +96,7 @@ export function waterfallCeremonies(methodology: () => Methodology): Record<stri
             id: `${phase.id}#${version}`,
             goal: phase.name,
             budget,
-            spent: ZERO_SPENT,
+            spent: { ...ZERO_SPENT },
             startedAt: now,
             committed: items,
             carryover: [],

@@ -39,7 +39,7 @@ export {
   enteredStageAt,
 } from "./columns.ts";
 
-export const KANBAN_VOCABULARY: Record<CoreTerm, string> = {
+export const KANBAN_VOCABULARY: Record<CoreTerm, string> = /* @__PURE__ */ Object.freeze({
   backlog: "Options",
   item: "Work Item",
   stage: "Column",
@@ -47,7 +47,7 @@ export const KANBAN_VOCABULARY: Record<CoreTerm, string> = {
   increment: "Delivery",
   ceremony: "Cadence",
   gate: "Policy",
-};
+});
 
 export { configOf } from "./config.ts";
 export { board, cardAge, addedAt, cadencesDue, CADENCE_EVENT } from "./board.ts";

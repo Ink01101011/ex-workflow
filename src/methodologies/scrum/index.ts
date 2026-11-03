@@ -23,7 +23,7 @@ export type { ScrumConfig };
 export { scrumCeremonies, dailyReport, canDo } from "./ceremonies.ts";
 export type { DailyReport } from "./ceremonies.ts";
 
-export const SCRUM_VOCABULARY: Record<CoreTerm, string> = {
+export const SCRUM_VOCABULARY: Record<CoreTerm, string> = /* @__PURE__ */ Object.freeze({
   backlog: "Product Backlog",
   item: "Product Backlog Item",
   stage: "Column",
@@ -31,7 +31,7 @@ export const SCRUM_VOCABULARY: Record<CoreTerm, string> = {
   increment: "Increment",
   ceremony: "Scrum Event",
   gate: "Sprint Review",
-};
+});
 
 /** Advanced; used by ceremonies. */
 export function configOf(state: WorkflowState): ScrumConfig {

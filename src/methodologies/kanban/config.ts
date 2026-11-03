@@ -1,4 +1,5 @@
 import { assertId, fail } from "../../core/errors.ts";
+import { deepFreeze } from "../../common/deep-freeze.ts";
 import type { ClassOfService, Policy, WorkflowState } from "../../core/types.ts";
 
 export type KanbanCadence =
@@ -8,20 +9,20 @@ export type KanbanCadence =
   | "operations-review"
   | "risk-review"
   | "strategy-review";
-export const KANBAN_CADENCES: readonly KanbanCadence[] = [
+export const KANBAN_CADENCES: readonly KanbanCadence[] = /* @__PURE__ */ deepFreeze([
   "replenishment",
   "delivery-planning",
   "service-delivery-review",
   "operations-review",
   "risk-review",
   "strategy-review",
-];
-export const CLASSES: readonly ClassOfService[] = [
+]);
+export const CLASSES: readonly ClassOfService[] = /* @__PURE__ */ deepFreeze([
   "expedite",
   "fixed-date",
   "standard",
   "intangible",
-];
+]);
 export const DAY_MS = 86_400_000;
 
 export interface KanbanColumn {
@@ -56,7 +57,8 @@ export function configOf(state: WorkflowState): KanbanConfig {
   return state.config as KanbanConfig;
 }
 
-export const DEFAULT_COLUMNS: KanbanColumn[] = [
+/** Deeply frozen: `validateKanbanConfig` gives each config its own copy. */
+export const DEFAULT_COLUMNS: KanbanColumn[] = /* @__PURE__ */ deepFreeze([
   { id: "options", name: "Options", policies: [{ kind: "acceptance-written" }] },
   {
     id: "ready",
@@ -79,7 +81,7 @@ export const DEFAULT_COLUMNS: KanbanColumn[] = [
     policies: [{ kind: "no-open-blockers" }],
   },
   { id: "done", name: "Done", deliveryPoint: true, policies: [] },
-];
+]);
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
@@ -178,7 +180,7 @@ export function validateKanbanConfig(raw: unknown): KanbanConfig {
     );
   const columns =
     c["columns"] === undefined
-      ? DEFAULT_COLUMNS.map((x) => ({ ...x }))
+      ? structuredClone(DEFAULT_COLUMNS)
       : (c["columns"] as unknown[]).map(column);
   const seen = new Set<string>();
   for (const col of columns) {

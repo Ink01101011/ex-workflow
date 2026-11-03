@@ -1,4 +1,5 @@
 import { assertId, fail } from "../../core/errors.ts";
+import { deepFreeze } from "../../common/deep-freeze.ts";
 import type { Budget, Gate, GateRequirement, WorkflowState } from "../../core/types.ts";
 
 export interface WaterfallPhaseConfig {
@@ -20,27 +21,27 @@ export interface WaterfallConfig {
   fallbackTokensPerWeight?: number;
 }
 
-export const DEFAULT_PHASE_IDS: readonly string[] = [
+export const DEFAULT_PHASE_IDS: readonly string[] = /* @__PURE__ */ deepFreeze([
   "requirements",
   "design",
   "implementation",
   "verification",
   "deployment",
   "maintenance",
-];
-export const DEFAULT_DELIVERABLES: Record<string, string[]> = {
+]);
+export const DEFAULT_DELIVERABLES: Record<string, string[]> = /* @__PURE__ */ deepFreeze({
   requirements: ["srs"],
   design: ["design-doc", "interface-spec"],
   implementation: ["code-baseline"],
   verification: ["test-report", "traceability-matrix"],
   deployment: ["release-notes", "deployment-record"],
   maintenance: ["change-log"],
-};
-export const DEFAULT_DELIVER_BY: Record<string, string> = {
+});
+export const DEFAULT_DELIVER_BY: Record<string, string> = /* @__PURE__ */ deepFreeze({
   requirements: "business-analyst",
   design: "architect",
   deployment: "release-manager",
-};
+});
 export const GATE_ID = (id: string): string => `${id}-gate`;
 export const CHANGE_GATE = "change-control";
 export const CAPABILITIES: readonly string[] = [

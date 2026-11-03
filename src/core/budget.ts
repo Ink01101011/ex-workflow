@@ -1,6 +1,11 @@
 import type { Accounting, Budget, WorkflowState } from "./types.ts";
 
-export const ZERO_SPENT: Required<Budget> = { tokens: 0, turns: 0, wallclockMs: 0 };
+/** Frozen: shared by every caller; copy it (`{ ...ZERO_SPENT }`) to get a mutable record. */
+export const ZERO_SPENT: Required<Budget> = /* @__PURE__ */ Object.freeze({
+  tokens: 0,
+  turns: 0,
+  wallclockMs: 0,
+});
 
 export function addSpent(spent: Required<Budget>, acc: Accounting): Required<Budget> {
   return {

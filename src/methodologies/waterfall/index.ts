@@ -72,7 +72,7 @@ export type { TraceabilityMatrix, TraceRow } from "./traceability.ts";
 export { baselinePhase, reopenPhases } from "./baseline.ts";
 export type { ReopenResult } from "./baseline.ts";
 
-export const WATERFALL_VOCABULARY: Record<CoreTerm, string> = {
+export const WATERFALL_VOCABULARY: Record<CoreTerm, string> = /* @__PURE__ */ Object.freeze({
   backlog: "Requirements Baseline",
   item: "Work Package",
   stage: "Step",
@@ -80,7 +80,7 @@ export const WATERFALL_VOCABULARY: Record<CoreTerm, string> = {
   increment: "Deliverable",
   ceremony: "Review",
   gate: "Phase Gate",
-};
+});
 
 /** The role that delivers the item's phase (config deliverBy); undefined = the planner's default deliverer. */
 export function deliverRoleFor(state: WorkflowState, item: WorkItem): string | undefined {
