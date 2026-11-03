@@ -457,7 +457,7 @@ Deliberate, documented, and stable within 1.x.
 - **A custom methodology's state cannot go through the file adapter or the CLI.** The state schema accepts only the five built-in names in `methodology`, so `saveState`, `loadState` and every `exwf` command refuse it. Keep such a state through the SDK and persist it yourself.
 - **No downgrade for Investigation and Experimentation.** 1.1.x cannot load a state that 1.2 wrote for those two methodologies: the 1.1 state schema rejects the `ext` field, and the legacy mirrors do not change that. Keep a run on 1.2 once 1.2 has saved it.
 
-- **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), delete it by hand.
+- **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), the command gives up after its retries with `invalid-input` naming the lock file; delete it by hand.
 - **Item ids that differ only in letter case cannot both get a brief file.** On macOS and Windows `briefs/A.json` and `briefs/a.json` are one file, so `exwf next` (and `saveBrief`) refuses the second id with `invalid-input`; give ids that differ by more than case.
 - **Blockers are owned by a human.** Finishing a follow-up does not clear its blocker; `unblock` does.
 - **Direct primitives bypass the baseline.** `addItem` and `editItem` called directly do not check `baseline-immutable`; `applyAction` and the CLI do.
