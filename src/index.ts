@@ -30,3 +30,5 @@ export { applyAction, validateAction, init, changeConfig } from "./core/methodol
 export type { InitInput } from "./core/methodology.ts";
 export { readExt, writeExt } from "./interface/ext.ts";
 export type { LegacyExtRecords } from "./interface/ext.ts";
+export { independenceConflicts } from "./common/independence.ts";
+export { frozenChanges } from "./common/frozen.ts";
