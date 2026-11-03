@@ -1,7 +1,7 @@
 /** Synthetic, in-memory SDK demo. No worktree, Git operation or benchmark is actually run. */
 import assert from "node:assert/strict";
 import { init, addItem } from "../src/index.ts";
-import { experimentation } from "../src/experimentation/index.ts";
+import { experimentation } from "../src/methodologies/experimentation/index.ts";
 
 const method = experimentation();
 const baseSha = "a".repeat(40);

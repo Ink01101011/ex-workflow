@@ -1,4 +1,4 @@
-import { fail } from "../errors.ts";
+import { fail } from "../core/errors.ts";
 import type { JsonSchema, SchemaError } from "./types.ts";
 
 const DEFS = "#/definitions/";

@@ -14,10 +14,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createState } from "../state.ts";
-import { WorkflowError } from "../errors.ts";
+import { createState } from "../core/state.ts";
+import { WorkflowError } from "../core/errors.ts";
 import { loadState, saveBrief, saveHandoff, saveState, statePath, withStateLock } from "./file.ts";
-import type { Role, WorkflowState } from "../types.ts";
+import type { Role, WorkflowState } from "../core/types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const dev: Role = {

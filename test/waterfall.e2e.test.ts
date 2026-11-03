@@ -16,7 +16,7 @@ import {
   traceabilityMatrix,
   waterfall,
   waterfallMetrics,
-} from "../src/waterfall/index.ts";
+} from "../src/methodologies/waterfall/index.ts";
 import type {
   Accounting,
   Brief,

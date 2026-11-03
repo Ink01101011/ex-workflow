@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WorkflowError } from "../errors.ts";
+import { WorkflowError } from "../core/errors.ts";
 import type { JsonSchema } from "./types.ts";
 import { CORE_DEFINITIONS, WATERFALL_DEFINITIONS } from "./generated.ts";
 import { assertValid, validate } from "./validate.ts";

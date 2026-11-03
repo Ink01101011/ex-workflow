@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
 import { addItem, clearBlocker, complete, getItem, init, next } from "../src/index.ts";
-import { board, cadencesDue, kanban, kanbanMetrics } from "../src/kanban/index.ts";
+import { board, cadencesDue, kanban, kanbanMetrics } from "../src/methodologies/kanban/index.ts";
 import type { Accounting, Brief, Handoff, WorkflowError, WorkflowState } from "../src/index.ts";
 
 const m = kanban();

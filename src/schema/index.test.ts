@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../index.ts";
-import { scrum } from "../scrum/index.ts";
-import { kanban } from "../kanban/index.ts";
-import { waterfall } from "../waterfall/index.ts";
-import { WorkflowError } from "../errors.ts";
-import type { Methodology } from "../types.ts";
+import { scrum } from "../methodologies/scrum/index.ts";
+import { kanban } from "../methodologies/kanban/index.ts";
+import { waterfall } from "../methodologies/waterfall/index.ts";
+import { WorkflowError } from "../core/errors.ts";
+import type { Methodology } from "../core/types.ts";
 import {
   assertValid,
   handoffSchema,

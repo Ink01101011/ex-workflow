@@ -1,2 +1,2 @@
 export * from "../src/index.ts";
-export * from "../src/experimentation/index.ts";
+export * from "../src/methodologies/experimentation/index.ts";

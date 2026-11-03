@@ -1,9 +1,9 @@
 import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { fail } from "../errors.ts";
+import { fail } from "../core/errors.ts";
 import { assertValid, roleSchema, workflowStateSchema } from "../schema/index.ts";
-import type { Brief, Handoff, Role, WorkflowState } from "../types.ts";
+import type { Brief, Handoff, Role, WorkflowState } from "../core/types.ts";
 
 export const WORKFLOW_DIR = ".workflow";
 

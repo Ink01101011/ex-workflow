@@ -8,15 +8,15 @@ import {
   statePath,
   withStateLock,
 } from "../adapters/file.ts";
-import { next as planNext, openQuestions } from "../brief.ts";
-import { complete } from "../complete.ts";
-import { correctAccounting, type AccountingPatch } from "../accounting.ts";
-import { WorkflowError, fail } from "../errors.ts";
-import { decide } from "../gates.ts";
-import { addItem, clearBlocker, editItem, getItem, type ItemPatch } from "../items.ts";
-import { applyAction, changeConfig, init, validateAction } from "../methodology.ts";
-import { openIteration, type PlanOptions } from "../planner.ts";
-import { registerRole } from "../roles.ts";
+import { next as planNext, openQuestions } from "../core/brief.ts";
+import { complete } from "../core/complete.ts";
+import { correctAccounting, type AccountingPatch } from "../core/accounting.ts";
+import { WorkflowError, fail } from "../core/errors.ts";
+import { decide } from "../core/gates.ts";
+import { addItem, clearBlocker, editItem, getItem, type ItemPatch } from "../core/items.ts";
+import { applyAction, changeConfig, init, validateAction } from "../core/methodology.ts";
+import { openIteration, type PlanOptions } from "../core/planner.ts";
+import { registerRole } from "../core/roles.ts";
 import {
   assertValid,
   handoffSchema,
@@ -24,12 +24,12 @@ import {
   newItemSchema,
   roleSchema,
 } from "../schema/index.ts";
-import { lastEvent } from "../state.ts";
-import { scrum } from "../scrum/index.ts";
-import { kanban } from "../kanban/index.ts";
-import { waterfall } from "../waterfall/index.ts";
-import { investigation } from "../investigation/index.ts";
-import { experimentation } from "../experimentation/index.ts";
+import { lastEvent } from "../core/state.ts";
+import { scrum } from "../methodologies/scrum/index.ts";
+import { kanban } from "../methodologies/kanban/index.ts";
+import { waterfall } from "../methodologies/waterfall/index.ts";
+import { investigation } from "../methodologies/investigation/index.ts";
+import { experimentation } from "../methodologies/experimentation/index.ts";
 import type {
   Accounting,
   Action,
@@ -39,7 +39,7 @@ import type {
   NewItem,
   Role,
   WorkflowState,
-} from "../types.ts";
+} from "../core/types.ts";
 
 const METHODOLOGIES: Record<string, () => Methodology> = {
   scrum: scrum as () => Methodology,
