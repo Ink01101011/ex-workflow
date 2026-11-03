@@ -189,7 +189,8 @@ export async function loadState(root: string): Promise<WorkflowState> {
       );
     }
     assertValid(roleSchema, role, `role manifest ${manifestPath}`);
-    if (!roles[role.id]) roles[role.id] = role;
+    assertId(role.id, `role manifest ${manifestPath}: role id`);
+    if (!Object.hasOwn(roles, role.id)) roles[role.id] = role;
   }
   return withLegacyMirrors({ ...state, roles });
 }

@@ -422,3 +422,18 @@ test("saveBrief refuses an id that differs from an existing brief's only in case
   );
   assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["Cart-1.json"]);
 });
+
+test("loadState checks role manifest ids and merges by own property (U11 O8)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveState(root, fresh());
+  const dir = path.join(root, ".workflow", "roles");
+  await mkdir(dir, { recursive: true });
+  for (const id of ["toString", "constructor", "CON"]) {
+    await writeFile(path.join(dir, "x.json"), JSON.stringify({ ...dev, id }));
+    await assert.rejects(
+      loadState(root),
+      (e: unknown) => invalid(e) && /x\.json/.test((e as Error).message),
+      id,
+    );
+  }
+});
