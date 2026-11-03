@@ -285,3 +285,19 @@ test("writeAtomic failure removes the temp file and throws invalid-input (B15)",
   }
   assert.deepEqual(await readdir(path.join(root, ".workflow")), []);
 });
+
+test("loadState refuses a malformed ext.investigation or ext.experimentation record (U9 P1)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveState(root, fresh());
+  for (const ext of [
+    { investigation: { phase: "observe", rounds: null } },
+    { experimentation: { candidates: null } },
+  ]) {
+    await writeFile(statePath(root), JSON.stringify({ ...fresh(), ext }));
+    await assert.rejects(
+      loadState(root),
+      (e: unknown) =>
+        e instanceof WorkflowError && e.code === "invalid-input" && /\/ext\//.test(e.message),
+    );
+  }
+});

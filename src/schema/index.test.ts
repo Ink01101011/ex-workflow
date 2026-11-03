@@ -143,3 +143,12 @@ test("negative fixtures fail at the right path", () => {
       /\/version expected 1/.test(e.message),
   );
 });
+
+test("ext.investigation and ext.experimentation are validated as their records; other ext keys stay open", () => {
+  const state = roundTrip(init({ methodology: scrum(), config: SCRUM_CONFIG, now: T0 }).state);
+  const bad = (ext: unknown) => at({ ...state, ext }).length > 0;
+  assert.equal(bad({ investigation: { phase: "observe", rounds: null } }), true);
+  assert.equal(bad({ experimentation: { candidates: null } }), true);
+  assert.equal(bad({ investigation: null }), true);
+  assert.deepEqual(at({ ...state, ext: { triage: { anything: [1, null] }, x: 3 } }), []);
+});

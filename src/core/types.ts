@@ -268,6 +268,16 @@ export type MethodologyName =
   | "investigation"
   | "experimentation";
 /**
+ * `state.ext`: extension records keyed by their owner. The two built-in records are typed, so the
+ * state schema validates them; any other key holds any JSON value (design spec section 26).
+ */
+export interface WorkflowExt {
+  investigation?: InvestigationState;
+  experimentation?: ExperimentationState;
+  [key: string]: unknown;
+}
+
+/**
  * Workflow state. `N` is the methodology name: the default `MethodologyName` (the five
  * built-ins) keeps every 1.1 consumer's type check unchanged; a custom methodology types its
  * state as `WorkflowState<"its-name">` (design spec section 26).
@@ -298,7 +308,7 @@ export interface WorkflowState<N extends string = MethodologyName> {
    * Extension records keyed by their owner (a methodology name or a common piece id). Read and
    * write it only through `readExt` / `writeExt`. Absent in states written before 1.2.
    */
-  ext?: Record<string, unknown>;
+  ext?: WorkflowExt;
   items: Record<string, WorkItem>;
   stages: Stage[];
   roles: Record<string, Role>;

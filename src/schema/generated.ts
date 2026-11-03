@@ -1482,6 +1482,18 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
     ],
     additionalProperties: false,
   },
+  WorkflowExt: {
+    type: "object",
+    properties: {
+      investigation: {
+        $ref: "#/definitions/InvestigationState",
+      },
+      experimentation: {
+        $ref: "#/definitions/ExperimentationState",
+      },
+    },
+    additionalProperties: {},
+  },
   WorkflowState: {
     type: "object",
     properties: {
@@ -1502,8 +1514,7 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
         deprecated: true,
       },
       ext: {
-        type: "object",
-        additionalProperties: {},
+        $ref: "#/definitions/WorkflowExt",
       },
       items: {
         type: "object",
