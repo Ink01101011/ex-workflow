@@ -67,7 +67,7 @@ export function dailyReport(state: WorkflowState): DailyReport {
   const blockers: DailyReport["blockers"] = [];
   let remainingWeight = 0;
   for (const id of it?.committed ?? []) {
-    const item = state.items[id];
+    const item = Object.hasOwn(state.items, id) ? state.items[id] : undefined;
     if (!item) continue;
     byStatus[item.status] += 1;
     if (item.status !== "done") remainingWeight += item.weight ?? 0;

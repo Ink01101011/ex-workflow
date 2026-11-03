@@ -129,7 +129,10 @@ function phase(raw: unknown, i: number, human: (id: string) => boolean): Waterfa
   if (!isObj(raw)) fail("config-invalid", `${where} must be an object`, 'e.g. { "id": "design" }');
   assertId(raw["id"], `${where}.id`);
   const id = raw["id"] as string;
-  const deliverables = raw["deliverables"] ?? DEFAULT_DELIVERABLES[id] ?? [];
+  const deliverables =
+    raw["deliverables"] ??
+    (Object.hasOwn(DEFAULT_DELIVERABLES, id) ? DEFAULT_DELIVERABLES[id] : undefined) ??
+    [];
   if (!strings(deliverables))
     fail(
       "config-invalid",
@@ -178,7 +181,9 @@ function phase(raw: unknown, i: number, human: (id: string) => boolean): Waterfa
   };
   const b = budget(raw["budget"], where);
   if (b !== undefined) out.budget = b;
-  const by = raw["deliverBy"] ?? DEFAULT_DELIVER_BY[id];
+  const by =
+    raw["deliverBy"] ??
+    (Object.hasOwn(DEFAULT_DELIVER_BY, id) ? DEFAULT_DELIVER_BY[id] : undefined);
   if (by !== undefined) {
     if (typeof by !== "string" || by.trim() === "")
       fail(

@@ -19,6 +19,9 @@ export interface OpsReport {
   active: Record<string, number>;
 }
 
+/** `r[k]` if it is an own property, else `d`: a column id may name an Object.prototype member. */
+const own = <T>(r: Record<string, T>, k: string, d: T): T => (Object.hasOwn(r, k) ? r[k]! : d);
+
 export function opsReport(state: WorkflowState, now: string): OpsReport {
   const t = Date.parse(now);
   const stays = columnStays(state);
@@ -36,11 +39,11 @@ export function opsReport(state: WorkflowState, now: string): OpsReport {
           reason: b.reason,
           ageMs: t - Date.parse(b.raisedAt),
         });
-    if (ACTIVE.has(it.status)) active[it.stage] = (active[it.stage] ?? 0) + 1;
+    if (ACTIVE.has(it.status)) active[it.stage] = own(active, it.stage, 0) + 1;
     else if (it.status === "todo" || it.status === "review")
-      queued[it.stage] = (queued[it.stage] ?? 0) + 1;
+      queued[it.stage] = own(queued, it.stage, 0) + 1;
     if (OPEN.has(it.status) && onBoard(state, it)) {
-      const history = stays[it.stage] ?? [];
+      const history = own(stays, it.stage, []);
       const p85Ms = history.length ? percentile(history, 85) : null;
       const ageMs = cardAge(state, it, now);
       aging.push({

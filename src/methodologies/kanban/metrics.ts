@@ -45,7 +45,11 @@ function staysOf(r: Replay): Record<string, number[]> {
   const out: Record<string, number[]> = {};
   for (const it of r.items.values())
     for (const st of it.stays)
-      if (st.leftAt !== undefined) (out[st.stage] ??= []).push(ms(st.enteredAt, st.leftAt));
+      if (st.leftAt !== undefined)
+        // own keys only: a column id may name an Object.prototype member in an older state
+        (Object.hasOwn(out, st.stage) ? out[st.stage]! : (out[st.stage] = [])).push(
+          ms(st.enteredAt, st.leftAt),
+        );
   return out;
 }
 

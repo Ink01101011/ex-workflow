@@ -41,7 +41,7 @@ export function waterfallMetrics(state: WorkflowState): WaterfallMetrics {
   const counted = (id: string) => {
     const t = typeOf.get(id);
     const p = phaseOf.get(id);
-    return t !== "question" && t !== "change-request" && p !== undefined && p in total;
+    return t !== "question" && t !== "change-request" && p !== undefined && Object.hasOwn(total, p);
   };
   for (const ev of state.events) {
     const p = (ev.payload ?? {}) as Record<string, unknown>;
@@ -75,12 +75,13 @@ export function waterfallMetrics(state: WorkflowState): WaterfallMetrics {
       }
       case "item.completed": {
         const phase = phaseOf.get(p["id"] as string);
-        if (phase !== undefined && phase in spent) spent[phase]! += (p["tokens"] as number) ?? 0;
+        if (phase !== undefined && Object.hasOwn(spent, phase))
+          spent[phase]! += (p["tokens"] as number) ?? 0;
         break;
       }
       case "phase.opened": {
         const phase = p["phase"] as string;
-        if (phase in planned)
+        if (Object.hasOwn(planned, phase))
           planned[phase] = ((p["budget"] as { tokens?: number }) ?? {}).tokens ?? 0;
         break;
       }

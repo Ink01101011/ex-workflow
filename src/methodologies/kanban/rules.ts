@@ -181,7 +181,7 @@ export function kanbanRules(): Rule[] {
           ),
         );
       for (const id of itemsOf(a)) {
-        const it = s.items[id];
+        const it = Object.hasOwn(s.items, id) ? s.items[id] : undefined;
         if (!it) continue;
         if (it.stage !== options.id || it.status !== "todo")
           out.push(
