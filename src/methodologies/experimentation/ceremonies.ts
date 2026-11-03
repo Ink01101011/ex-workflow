@@ -163,6 +163,17 @@ function candidate(e: ExperimentationState, i: CeremonyInput): ExperimentCandida
   if (!Object.hasOwn(e.candidates, id)) invalid(`unknown candidate ${id}`);
   return e.candidates[id]!;
 }
+/** The candidate `e.selected` names; a loaded state may name none (own keys only). */
+function selectedCandidate(e: ExperimentationState): ExperimentCandidate {
+  const id = e.selected;
+  if (id === undefined || !Object.hasOwn(e.candidates, id))
+    fail(
+      "invalid-input",
+      `the experiment's selected candidate ${JSON.stringify(id)} is not one of its candidates`,
+      "restore .workflow/state.json from git, or run compare again",
+    );
+  return e.candidates[id]!;
+}
 function bool(i: CeremonyInput, k: string): boolean {
   if (typeof i[k] !== "boolean") invalid(`${k} must be boolean`);
   return i[k] as boolean;
@@ -544,7 +555,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       if (!["selected", "integrating"].includes(e.status) || !e.selected)
         invalid("compare and select before integration");
       if (exhausted(s)) invalid("total budget exhausted before integration");
-      const c = e.candidates[e.selected]!;
+      const c = selectedCandidate(e);
       const selectedSha = sha(i.selectedSha, "selectedSha");
       if (selectedSha !== c.sha || c.validation?.sha !== selectedSha)
         invalid("integration must promote the exact selected and validated SHA");
@@ -563,7 +574,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       if (e.status !== "integrating" || !e.integration || !e.selected)
         invalid("record integration before fresh validation");
       const integration = e.integration;
-      const c = e.candidates[e.selected]!;
+      const c = selectedCandidate(e);
       if (independenceConflicts(i.by, [integration.by, c.author]).length)
         invalid("integration validation must be independent of candidate author and integrator");
       const commit = sha(i.sha);

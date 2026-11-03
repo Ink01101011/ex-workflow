@@ -911,3 +911,32 @@ test("R5 a closed experiment keeps its iteration end time across later ceremonie
   assert.equal(later.endedAt, closed.endedAt);
   assert.equal(later.outcome, closed.outcome);
 });
+
+// U11 O4: a loaded state whose `selected` names no candidate
+import { readExperimentation, writeExperimentation } from "./record.ts";
+test("integrate and validate-integration refuse a selected id that names no candidate (U11 O4)", () => {
+  const broken = (e: unknown) =>
+    e instanceof WorkflowError && e.code === "invalid-input" && /selected/.test(e.message);
+  const select = (s: WorkflowState, selected: string) =>
+    writeExperimentation(s, { ...readExperimentation(s)!, selected });
+  const compared = call(submitted(), "compare");
+  const integrate = { selectedSha: sha(2), targetSha: sha(4), integrationSha: sha(5) };
+  for (const ghost of ["ghost", "toString"])
+    assert.throws(
+      () => call(select(compared, ghost), "integrate", integrate, "integrator"),
+      broken,
+    );
+  const integrated = call(compared, "integrate", integrate, "integrator");
+  const fresh = {
+    sha: sha(5),
+    targetSha: sha(4),
+    harness: "harness-v1",
+    passed: true,
+    evidence: "fresh",
+  };
+  for (const ghost of ["ghost", "toString"])
+    assert.throws(
+      () => call(select(integrated, ghost), "validate-integration", fresh, "validator"),
+      broken,
+    );
+});
