@@ -206,10 +206,19 @@ function inWorkflowDir(root: string, file: string): string {
 
 export async function saveBrief(root: string, brief: Brief): Promise<string> {
   assertId(brief.item.id, "brief item id");
-  const file = inWorkflowDir(
-    root,
-    path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`),
+  const name = `${brief.item.id}.json`;
+  const dir = path.join(root, WORKFLOW_DIR, "briefs");
+  // on a case-insensitive file system A.json and a.json are one file: refuse the second item
+  const clash = (await readdir(dir).catch(() => [] as string[])).find(
+    (f) => f !== name && f.toLowerCase() === name.toLowerCase(),
   );
+  if (clash)
+    fail(
+      "invalid-input",
+      `brief item id "${brief.item.id}" differs only in case from the brief ${clash} of another item`,
+      "give ids that differ by more than letter case (briefs/<id>.json would overwrite each other on macOS and Windows)",
+    );
+  const file = inWorkflowDir(root, path.join(dir, name));
   await writeAtomic(file, JSON.stringify(brief, null, 2) + "\n");
   return file;
 }

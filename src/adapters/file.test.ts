@@ -411,3 +411,14 @@ test("saveBrief and saveHandoff check the id and the seq; loadState checks each 
     (e: unknown) => invalid(e) && /items\/A/.test((e as Error).message),
   );
 });
+
+test("saveBrief refuses an id that differs from an existing brief's only in case (U9 P6)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveBrief(root, { item: { id: "Cart-1" } } as never);
+  await saveBrief(root, { item: { id: "Cart-1" } } as never); // the same item again is fine
+  await assert.rejects(
+    saveBrief(root, { item: { id: "cart-1" } } as never),
+    (e: unknown) => invalid(e) && /Cart-1/.test((e as Error).message),
+  );
+  assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["Cart-1.json"]);
+});
