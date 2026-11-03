@@ -95,3 +95,95 @@ test("an overloaded function counts as one runtime export", () => {
   assert.equal(r.code, 0, r.err);
   assert.doesNotMatch(r.err, /over\.ts/);
 });
+
+test("a dynamic import() to a higher layer fails", () => {
+  const r = run({
+    "src/core/a.ts": 'export const a = () => import("../methodologies/m.ts");\n',
+    "src/methodologies/m.ts": "export const m = 1;\n",
+  });
+  assert.equal(r.code, 1);
+  assert.match(
+    r.err,
+    /src\/core\/a\.ts imports src\/methodologies\/m\.ts \(core -> methodologies\)/,
+  );
+});
+
+test("require(), import x = require() and import() types to a higher layer fail", () => {
+  const r = run({
+    "src/core/a.ts":
+      'declare const require: (s: string) => unknown;\nexport const a = require("../methodologies/r.ts");\n',
+    "src/core/b.ts": 'import m = require("../methodologies/q.ts");\nexport const b = m;\n',
+    "src/core/c.ts": 'export type C = typeof import("../methodologies/t.ts");\n',
+    "src/methodologies/r.ts": "export const r = 1;\n",
+    "src/methodologies/q.ts": "export const q = 1;\n",
+    "src/methodologies/t.ts": "export const t = 1;\n",
+  });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /src\/core\/a\.ts imports src\/methodologies\/r\.ts/);
+  assert.match(r.err, /src\/core\/b\.ts imports src\/methodologies\/q\.ts/);
+  assert.match(r.err, /src\/core\/c\.ts imports src\/methodologies\/t\.ts/);
+});
+
+test("comment markers inside strings do not hide a real import", () => {
+  const r = run({
+    "src/core/a.ts":
+      'export const s = "a/*";\nimport { m } from "../methodologies/m.ts";\nexport const t = "*/b";\nexport const a = m;\n',
+    "src/core/b.ts":
+      "export const u = 'a//b'; import { m } from \"../methodologies/m.ts\";\nexport const b = m;\n",
+    "src/methodologies/m.ts": "export const m = 1;\n",
+  });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /src\/core\/a\.ts imports src\/methodologies\/m\.ts/);
+  assert.match(r.err, /src\/core\/b\.ts imports src\/methodologies\/m\.ts/);
+});
+
+test("imports inside comments and strings are not imports", () => {
+  const r = run({
+    "src/core/a.ts":
+      '// import { m } from "../methodologies/m.ts";\n/* import("../methodologies/m.ts") */\nexport const s = \'import { m } from "../methodologies/m.ts"\';\n',
+    "src/methodologies/m.ts": "export const m = 1;\n",
+  });
+  assert.equal(r.code, 0, r.err);
+});
+
+test("an extensionless specifier is reported as the file it resolves to", () => {
+  const r = run({
+    "src/core/a.ts": 'import { m } from "../methodologies/m";\nexport const a = m;\n',
+    "src/core/b.ts": 'import { x } from "../methodologies/x";\nexport const b = x;\n',
+    "src/core/c.ts": 'import { m } from "../methodologies/m.js";\nexport const c = m;\n',
+    "src/methodologies/m.ts": "export const m = 1;\n",
+    "src/methodologies/x/index.ts": "export const x = 1;\n",
+  });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /src\/core\/a\.ts imports src\/methodologies\/m\.ts \(/);
+  assert.match(r.err, /src\/core\/b\.ts imports src\/methodologies\/x\/index\.ts \(/);
+  assert.match(r.err, /src\/core\/c\.ts imports src\/methodologies\/m\.ts \(/);
+  assert.doesNotMatch(r.err, /m\/index\.ts/);
+});
+
+test("inner layers may import only relative paths, ex-flow and exsorted", () => {
+  const bad = run({
+    "src/core/a.ts": 'import { readFileSync } from "node:fs";\nexport const a = readFileSync;\n',
+    "src/common/b.ts": 'import type { X } from "lodash";\nexport type B = X;\n',
+    "src/interface/c.ts": 'export const c = () => import("node:crypto");\n',
+    "src/methodologies/x/d.ts": 'import path from "path";\nexport const d = path;\n',
+  });
+  assert.equal(bad.code, 1);
+  assert.match(
+    bad.err,
+    /src\/core\/a\.ts imports bare specifier "node:fs" \(core may import only relative paths, ex-flow and exsorted\)/,
+  );
+  assert.match(bad.err, /src\/common\/b\.ts imports bare specifier "lodash"/);
+  assert.match(bad.err, /src\/interface\/c\.ts imports bare specifier "node:crypto"/);
+  assert.match(bad.err, /src\/methodologies\/x\/d\.ts imports bare specifier "path"/);
+
+  const ok = run({
+    "src/core/a.ts":
+      'import { flow } from "ex-flow";\nimport { sort } from "exsorted";\nexport const a = [flow, sort];\n',
+    "src/adapters/f.ts":
+      'import { readFileSync } from "node:fs";\nexport const f = readFileSync;\n',
+    "src/cli/g.ts": 'import { argv } from "node:process";\nexport const g = argv;\n',
+    "src/core/a.test.ts": 'import { test } from "node:test";\nexport const t = test;\n',
+  });
+  assert.equal(ok.code, 0, ok.err);
+});
