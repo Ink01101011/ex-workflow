@@ -241,7 +241,7 @@ const queue = readExt<string[]>(state, "triage") ?? [];
 state = writeExt(state, "triage", [...queue, "T-1"]); // returns a new state; undefined removes the key
 ```
 
-Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and mirror it to the deprecated top-level `state.investigation` / `state.experimentation`, so SDK code that reads those fields keeps working. The mirrors are read-only: once `ext.<name>` exists the engine reads only it, and a write to the legacy field is ignored; write through `writeExt`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
+Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and mirror it to the deprecated top-level `state.investigation` / `state.experimentation` in memory, so SDK code that reads those fields keeps working. On disk only `ext` is stored: `saveState` leaves the mirror out and `loadState` sets it back to the same record (if a hand-edited `state.json` carries both, `ext` wins). The mirrors are read-only: once `ext.<name>` exists the engine reads only it, and a write to the legacy field is ignored; write through `writeExt`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
 
 ## CLI reference (`exwf`)
 
@@ -447,7 +447,7 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 5
 
 - Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
-- **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still written, as read-only mirrors of `ext.investigation` / `ext.experimentation`, so SDK code reading `state.investigation` / `state.experimentation` sees the same record; once `ext.<name>` exists a write to the legacy field is ignored. Read with `readExt` and write with `writeExt` instead. The mirrors do not make a 1.2 state loadable by 1.1.x (see [Known limitations](#known-limitations)). 2.0 removes the mirrors.
+- **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still set in memory and for SDK readers, as read-only mirrors of `ext.investigation` / `ext.experimentation` (on disk only `ext` is written; `loadState` restores the mirror), so SDK code reading `state.investigation` / `state.experimentation` sees the same record; once `ext.<name>` exists a write to the legacy field is ignored. Read with `readExt` and write with `writeExt` instead. The mirrors do not make a 1.2 state loadable by 1.1.x (see [Known limitations](#known-limitations)). 2.0 removes the mirrors.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Known limitations

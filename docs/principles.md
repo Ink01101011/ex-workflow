@@ -97,10 +97,10 @@ The engine never calls an LLM, runs a procedure, benchmark or Git command, or cr
 
 ## 14. Extension state goes through the accessors
 
-A methodology's own record lives in `state.ext`, keyed by its name, and is read and written only through `readExt` / `writeExt`. For Investigation and Experimentation the accessor mirrors the record to the deprecated top-level field and reads that field on a state that has no `ext`.
+A methodology's own record lives in `state.ext`, keyed by its name, and is read and written only through `readExt` / `writeExt`. For Investigation and Experimentation the accessor mirrors the record to the deprecated top-level field in memory and reads that field on a state that has no `ext`; the file adapter stores only `ext` and restores the mirror on load (`ext` wins when a file carries both).
 
-- Enforced by: `src/interface/ext.ts`; `src/methodologies/investigation/record.ts` and `src/methodologies/experimentation/record.ts` (thin wrappers).
-- Test: `src/interface/ext.test.ts` "no source outside src/interface/ext.ts touches ext or the legacy fields directly" and "readExt reads ext first and falls back to the legacy field of a 1.1 state"; `test/compat.test.ts` "1.1.1/<name>: a ceremony after load writes ext.<name> and the equal legacy mirror".
+- Enforced by: `src/interface/ext.ts` (`withoutLegacyMirrors`, `withLegacyMirrors`, used by `src/adapters/file.ts`); `src/methodologies/investigation/record.ts` and `src/methodologies/experimentation/record.ts` (thin wrappers).
+- Test: `src/interface/ext.test.ts` "no source outside src/interface/ext.ts touches ext or the legacy fields directly" and "readExt reads ext first and falls back to the legacy field of a 1.1 state"; `test/compat.test.ts` "1.1.1/<name>: a ceremony after load writes ext.<name> and the equal legacy mirror" (also: no top-level legacy key on disk, and `ext` wins over a hand-edited one).
 
 ## 15. Earlier states load unchanged
 

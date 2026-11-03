@@ -2,6 +2,7 @@ import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from 
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fail } from "../core/errors.ts";
+import { withLegacyMirrors, withoutLegacyMirrors } from "../interface/ext.ts";
 import { assertValid, roleSchema, workflowStateSchema } from "../schema/index.ts";
 import type { Brief, Handoff, Role, WorkflowState } from "../core/types.ts";
 
@@ -77,7 +78,8 @@ export async function withStateLock<T>(
 }
 
 export async function saveState(root: string, state: WorkflowState): Promise<void> {
-  const json = JSON.stringify(state, null, 2) + "\n";
+  // on disk only ext.<key>; loadState rebuilds the legacy mirror (spec 26)
+  const json = JSON.stringify(withoutLegacyMirrors(state), null, 2) + "\n";
   assertValid(workflowStateSchema, JSON.parse(json), statePath(root));
   await writeAtomic(statePath(root), json);
 }
@@ -142,7 +144,7 @@ export async function loadState(root: string): Promise<WorkflowState> {
     assertValid(roleSchema, role, `role manifest ${manifestPath}`);
     if (!roles[role.id]) roles[role.id] = role;
   }
-  return { ...state, roles };
+  return withLegacyMirrors({ ...state, roles });
 }
 
 function inWorkflowDir(root: string, file: string): string {

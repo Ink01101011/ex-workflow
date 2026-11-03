@@ -5,13 +5,15 @@ import type { WorkflowState } from "../core/types.ts";
 
 /**
  * Extension records that 1.1 stored as top-level state fields. Writing one also writes its
- * deprecated legacy mirror (`state.investigation`, `state.experimentation`); 2.0 drops the mirror.
+ * deprecated legacy mirror (`state.investigation`, `state.experimentation`) in memory; on disk
+ * only `ext` is stored (spec 26). 2.0 drops the mirror.
  */
 export interface LegacyExtRecords {
   investigation: InvestigationState;
   experimentation: ExperimentationState;
 }
 type LegacyKey = keyof LegacyExtRecords;
+const LEGACY_KEYS: readonly LegacyKey[] = ["investigation", "experimentation"];
 const isLegacy = (key: string): key is LegacyKey =>
   key === "investigation" || key === "experimentation";
 
@@ -61,4 +63,30 @@ export function writeExt<N extends string>(
     else target[key] = value;
   }
   return out as unknown as WorkflowState<N>;
+}
+
+/**
+ * The state as the file adapter stores it: a legacy mirror whose `ext.<key>` exists is left out,
+ * so the record is written once (spec 26, U10 F1). A legacy field without `ext.<key>` (a state
+ * written before 1.2) is kept. Does not mutate `state`.
+ */
+export function withoutLegacyMirrors<S extends WorkflowState<string>>(state: S): S {
+  const ext = state.ext;
+  if (!ext) return state;
+  const out = { ...state } as Record<string, unknown>;
+  for (const key of LEGACY_KEYS) if (Object.hasOwn(ext, key)) delete out[key];
+  return out as S;
+}
+
+/**
+ * The reverse of `withoutLegacyMirrors` for a loaded state: each legacy field whose `ext.<key>`
+ * exists is set to that record by reference, replacing whatever the file held there (`ext` wins
+ * over a hand-edited legacy field). Does not mutate `state`.
+ */
+export function withLegacyMirrors<S extends WorkflowState<string>>(state: S): S {
+  const ext = state.ext;
+  if (!ext) return state;
+  const out = { ...state } as Record<string, unknown>;
+  for (const key of LEGACY_KEYS) if (Object.hasOwn(ext, key)) out[key] = ext[key];
+  return out as S;
 }

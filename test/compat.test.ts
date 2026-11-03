@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -117,6 +117,17 @@ for (const name of ["investigation", "experimentation"] as const) {
       assert.ok(saved.ext && Object.hasOwn(saved.ext, name), `saved state has ext.${name}`);
       assert.deepEqual(saved.ext[name], saved[name]);
       assert.notDeepEqual(saved[name], legacy, "the ceremony changed the record");
+
+      // on disk only ext.<name> (U10 F1): the legacy mirror is rebuilt on load, by reference
+      const onDisk = JSON.parse(await readFile(statePath(root), "utf8")) as Record<string, unknown>;
+      assert.equal(Object.hasOwn(onDisk, name), false, `state.json carries no top-level ${name}`);
+      assert.equal(saved[name], saved.ext[name], "the mirror is the ext record itself");
+
+      // a hand-edited file carrying both: ext wins
+      await writeFile(statePath(root), JSON.stringify({ ...onDisk, [name]: legacy }));
+      const both = await loadState(root);
+      assert.equal(both[name], both.ext?.[name]);
+      assert.notDeepEqual(both[name], legacy);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

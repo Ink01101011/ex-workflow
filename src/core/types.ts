@@ -289,7 +289,8 @@ export interface WorkflowState<N extends string = MethodologyName> {
   /**
    * Standalone investigation lifecycle, created by its intake ceremony.
    * Since 1.2 a read-only mirror of `ext.investigation`, kept for SDK code that reads this
-   * field: once `ext.investigation` exists, a write here is ignored. Read it with
+   * field (in memory only: the file adapter stores `ext.investigation` and restores this mirror on load):
+   * once `ext.investigation` exists, a write here is ignored. Read it with
    * `readExt(state, "investigation")` and write it with `writeExt`. It does not make a 1.2 state
    * loadable by 1.1.x, whose schema rejects `ext`. Removed in 2.0.
    * @deprecated
@@ -298,7 +299,8 @@ export interface WorkflowState<N extends string = MethodologyName> {
   /**
    * Standalone isolated candidate experiment, created by its freeze ceremony.
    * Since 1.2 a read-only mirror of `ext.experimentation`, kept for SDK code that reads this
-   * field: once `ext.experimentation` exists, a write here is ignored. Read it with
+   * field (in memory only: the file adapter stores `ext.experimentation` and restores this mirror on load):
+   * once `ext.experimentation` exists, a write here is ignored. Read it with
    * `readExt(state, "experimentation")` and write it with `writeExt`. It does not make a 1.2 state
    * loadable by 1.1.x, whose schema rejects `ext`. Removed in 2.0.
    * @deprecated
