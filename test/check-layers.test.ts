@@ -4,8 +4,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const script = join(import.meta.dirname, "..", "scripts", "check-layers.mjs");
+const script = join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "check-layers.mjs");
 
 function run(files: Record<string, string>) {
   const root = mkdtempSync(join(tmpdir(), "check-layers-"));
