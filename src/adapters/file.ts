@@ -55,10 +55,22 @@ export async function withStateLock<T>(
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
       const snap = await stat(lock).catch(() => undefined);
       if (snap && Date.now() - snap.mtimeMs > staleMs) {
+        // bounded like the wait below: a stale lock that unlink cannot remove must not loop forever
+        if (attempt > retries)
+          fail(
+            "invalid-input",
+            `cannot remove the stale lock ${lock}`,
+            `delete ${lock} by hand (check its permissions) once no exwf process is running`,
+          );
         // re-stat just before unlink: if another recoverer already replaced the lock, leave it alone
         const now = await stat(lock).catch(() => undefined);
-        if (now && now.ino === snap.ino && now.mtimeMs === snap.mtimeMs)
-          await unlink(lock).catch(() => undefined);
+        if (now && now.ino === snap.ino && now.mtimeMs === snap.mtimeMs) {
+          const removed = await unlink(lock).then(
+            () => true,
+            () => false,
+          );
+          if (!removed) await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
         continue;
       }
       if (attempt >= retries)

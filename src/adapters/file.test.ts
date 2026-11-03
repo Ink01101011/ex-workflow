@@ -301,3 +301,34 @@ test("loadState refuses a malformed ext.investigation or ext.experimentation rec
     );
   }
 });
+
+test("withStateLock gives up on a stale lock it cannot remove, naming the lock (U9 P2)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await mkdir(path.join(root, ".workflow"));
+  const lock = path.join(root, ".workflow", "state.lock");
+  await writeFile(lock, "123 old\n");
+  const realUnlink = fsp.unlink;
+  let calls = 0;
+  mock.method(fsp, "unlink", async (...args: Parameters<typeof realUnlink>) => {
+    if (String(args[0]) !== lock) return realUnlink(...args);
+    calls++;
+    throw Object.assign(new Error("EPERM simulated"), { code: "EPERM" });
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withStateLock(root, async () => "never", { retries: 3, intervalMs: 1, staleMs: -1 }),
+      (e: unknown) => {
+        assert.ok(e instanceof WorkflowError);
+        assert.equal(e.code, "invalid-input");
+        assert.ok(e.message.includes(lock), e.message);
+        assert.match(e.fix, /delete/);
+        return true;
+      },
+    );
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+  assert.ok(calls >= 1 && calls <= 4, `bounded unlink attempts, got ${calls}`);
+});
