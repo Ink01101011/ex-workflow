@@ -4,21 +4,56 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  addEvidence,
   addItem,
   appendEvent,
   applyAction,
+  applyAgreement,
+  changeConfig,
+  clearBlocker,
   complete,
+  coreRulesFor,
+  correctAccounting,
+  createState,
+  decide,
+  editItem,
   init,
+  moveItem,
   next,
+  plan,
+  raiseBlocker,
+  raisePending,
+  registerRole,
+  retireAgreement,
+  retireRole,
+  synthesizeBrief,
+  validateAction,
+  type Accounting,
+  type AccountingPatch,
+  type Action,
   type ApplyResult,
+  type Brief,
   type Ceremony,
+  type Evidence,
+  type Handoff,
+  type InitInput,
+  type ItemPatch,
+  type ItemStatus,
   type Methodology,
   type MethodologyName,
+  type NewItem,
+  type NextResult,
+  type PendingHuman,
+  type PlanOptions,
+  type PlanResult,
   type Role,
   type Rule,
   type Stage,
+  type Violation,
+  type WorkItem,
   type WorkflowState,
 } from "../src/index.ts";
+import type { CreateStateInput } from "../src/core/state.ts";
 import { scrum } from "../src/methodologies/scrum/index.ts";
 
 type Equal<A, B> =
@@ -38,6 +73,161 @@ expectType<
 >(true);
 // a built-in factory keeps its 1.1 type and its state keeps the built-in name
 expectType<Equal<ReturnType<typeof scrum>["name"], MethodologyName>>(true);
+
+// 1b. Parameters<typeof fn> / ReturnType<typeof fn> of every now-generic kernel function read the
+// 1.1 shape: each keeps the 1.1 signature as its last overload (spec 26, "Generic name mechanics").
+type S = WorkflowState;
+type M = Methodology;
+expectType<Equal<Parameters<typeof createState>, [input: CreateStateInput]>>(true);
+expectType<Equal<ReturnType<typeof createState>, S>>(true);
+expectType<Equal<Parameters<typeof init>, [input: InitInput<unknown>]>>(true);
+expectType<Equal<ReturnType<typeof init>, ApplyResult>>(true);
+expectType<
+  Equal<
+    Parameters<typeof applyAction>,
+    [state: S, methodology: M, action: Action, reduce: (s: S) => S]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof applyAction>, ApplyResult>>(true);
+expectType<Equal<Parameters<typeof validateAction>, [state: S, methodology: M, action: Action]>>(
+  true,
+);
+expectType<Equal<ReturnType<typeof validateAction>, Violation[]>>(true);
+expectType<
+  Equal<
+    Parameters<typeof changeConfig>,
+    [state: S, methodology: M, patch: Record<string, unknown>, by: string, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof changeConfig>, ApplyResult>>(true);
+expectType<
+  Equal<
+    Parameters<typeof complete>,
+    [state: S, methodology: M, handoff: Handoff, acc: Accounting, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof complete>, ApplyResult>>(true);
+expectType<Equal<Parameters<typeof next>, [state: S, methodology: M, opts?: PlanOptions]>>(true);
+expectType<Equal<ReturnType<typeof next>, NextResult>>(true);
+expectType<Equal<Parameters<typeof plan>, [state: S, methodology: M, opts?: PlanOptions]>>(true);
+expectType<Equal<ReturnType<typeof plan>, PlanResult>>(true);
+expectType<Equal<Parameters<typeof synthesizeBrief>, [state: S, methodology: M, item: WorkItem]>>(
+  true,
+);
+expectType<Equal<ReturnType<typeof synthesizeBrief>, Brief>>(true);
+expectType<
+  Equal<
+    Parameters<typeof decide>,
+    [
+      state: S,
+      pendingId: string,
+      decision: "approve" | "reject",
+      by: string,
+      note: string,
+      now?: string,
+      methodology?: M,
+    ]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof decide>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof raisePending>,
+    [state: S, pending: Omit<PendingHuman, "id" | "raisedAt">, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof raisePending>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof appendEvent>,
+    [state: S, type: string, by: string, payload: unknown, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof appendEvent>, S>>(true);
+expectType<Equal<Parameters<typeof addItem>, [state: S, input: NewItem, by: string, now?: string]>>(
+  true,
+);
+expectType<Equal<ReturnType<typeof addItem>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof editItem>,
+    [state: S, id: string, patch: ItemPatch, by: string, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof editItem>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof moveItem>,
+    [state: S, id: string, to: { stage?: string; status: ItemStatus }, by: string, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof moveItem>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof addEvidence>,
+    [state: S, id: string, evidence: Omit<Evidence, "at">, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof addEvidence>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof raiseBlocker>,
+    [state: S, id: string, reason: string, owner: string, by: string, now?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof raiseBlocker>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof clearBlocker>,
+    [state: S, id: string, blockerId: string, by: string, now?: string, note?: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof clearBlocker>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof applyAgreement>,
+    [state: S, change: { text: string; replaces?: string }, by: string, now: string]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof applyAgreement>, S>>(true);
+expectType<
+  Equal<Parameters<typeof retireAgreement>, [state: S, text: string, by: string, now: string]>
+>(true);
+expectType<Equal<ReturnType<typeof retireAgreement>, S>>(true);
+expectType<
+  Equal<
+    Parameters<typeof correctAccounting>,
+    [state: S, itemId: string, patch: AccountingPatch, by: string, now?: string, line?: number]
+  >
+>(true);
+expectType<Equal<ReturnType<typeof correctAccounting>, S>>(true);
+expectType<
+  Equal<Parameters<typeof registerRole>, [state: S, role: Role, by: string, now?: string]>
+>(true);
+expectType<Equal<ReturnType<typeof registerRole>, S>>(true);
+expectType<
+  Equal<Parameters<typeof retireRole>, [state: S, roleId: string, by: string, now?: string]>
+>(true);
+expectType<Equal<ReturnType<typeof retireRole>, S>>(true);
+expectType<Equal<Parameters<typeof coreRulesFor>, [methodology: Pick<M, "requiredCapabilities">]>>(
+  true,
+);
+expectType<Equal<ReturnType<typeof coreRulesFor>, Rule[]>>(true);
+
+// A wrapper typed through Parameters / ReturnType, as 1.1 consumers write it, still compiles.
+type InitArg = Parameters<typeof init>[0];
+function start(input: InitArg): WorkflowState {
+  return init(input).state;
+}
+type CreateArg = Parameters<typeof createState>[0];
+function make(input: CreateArg): WorkflowState {
+  return createState(input);
+}
+function finish(...args: Parameters<typeof complete>): WorkflowState {
+  return complete(...args).state;
+}
+const fromReturn: WorkflowState = null as unknown as ReturnType<typeof init>["state"];
+void [start, make, finish, fromReturn];
 
 // 2. An exhaustive switch over the five names with a never default still compiles.
 function label(state: WorkflowState): string {

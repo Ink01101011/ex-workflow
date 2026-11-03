@@ -11,6 +11,22 @@ export function raiseBlocker<N extends string>(
   owner: string,
   by: string,
   now?: string,
+): WorkflowState<N>;
+export function raiseBlocker(
+  state: WorkflowState,
+  id: string,
+  reason: string,
+  owner: string,
+  by: string,
+  now?: string,
+): WorkflowState;
+export function raiseBlocker<N extends string>(
+  state: WorkflowState<N>,
+  id: string,
+  reason: string,
+  owner: string,
+  by: string,
+  now?: string,
 ): WorkflowState<N> {
   const item = getItem(state, id);
   const at = nowOf(now);
@@ -48,6 +64,22 @@ function lastTransitionTo(item: WorkItem, status: ItemStatus): Transition | unde
   return undefined;
 }
 
+export function clearBlocker<N extends string>(
+  state: WorkflowState<N>,
+  id: string,
+  blockerId: string,
+  by: string,
+  now?: string,
+  note?: string,
+): WorkflowState<N>;
+export function clearBlocker(
+  state: WorkflowState,
+  id: string,
+  blockerId: string,
+  by: string,
+  now?: string,
+  note?: string,
+): WorkflowState;
 export function clearBlocker<N extends string>(
   state: WorkflowState<N>,
   id: string,

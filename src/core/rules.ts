@@ -5,6 +5,10 @@ import type { Action, Handoff, Methodology, MethodologyName, Rule, Violation } f
 
 export function coreRulesFor<N extends string = MethodologyName>(
   methodology: Pick<Methodology, "requiredCapabilities">,
+): Rule<N>[];
+export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilities">): Rule[];
+export function coreRulesFor<N extends string = MethodologyName>(
+  methodology: Pick<Methodology, "requiredCapabilities">,
 ): Rule<N>[] {
   const separation: Rule<N> = {
     id: "separation-lost",

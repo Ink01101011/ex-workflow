@@ -10,6 +10,18 @@ export function registerRole<N extends string>(
   role: Role,
   by: string,
   now?: string,
+): WorkflowState<N>;
+export function registerRole(
+  state: WorkflowState,
+  role: Role,
+  by: string,
+  now?: string,
+): WorkflowState;
+export function registerRole<N extends string>(
+  state: WorkflowState<N>,
+  role: Role,
+  by: string,
+  now?: string,
 ): WorkflowState<N> {
   assertId(role.id, "role id");
   if (roleOf(state, role.id))
@@ -28,6 +40,18 @@ export function registerRole<N extends string>(
   );
 }
 
+export function retireRole<N extends string>(
+  state: WorkflowState<N>,
+  roleId: string,
+  by: string,
+  now?: string,
+): WorkflowState<N>;
+export function retireRole(
+  state: WorkflowState,
+  roleId: string,
+  by: string,
+  now?: string,
+): WorkflowState;
 export function retireRole<N extends string>(
   state: WorkflowState<N>,
   roleId: string,

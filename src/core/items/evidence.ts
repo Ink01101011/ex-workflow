@@ -27,6 +27,18 @@ export function addEvidence<N extends string>(
   id: string,
   evidence: Omit<Evidence, "at">,
   now?: string,
+): WorkflowState<N>;
+export function addEvidence(
+  state: WorkflowState,
+  id: string,
+  evidence: Omit<Evidence, "at">,
+  now?: string,
+): WorkflowState;
+export function addEvidence<N extends string>(
+  state: WorkflowState<N>,
+  id: string,
+  evidence: Omit<Evidence, "at">,
+  now?: string,
 ): WorkflowState<N> {
   const item = getItem(state, id);
   const at = nowOf(now);

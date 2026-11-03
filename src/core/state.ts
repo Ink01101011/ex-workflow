@@ -14,9 +14,11 @@ export interface CreateStateInput<N extends string = MethodologyName> {
 }
 
 // The first overload is the 1.1 signature: a built-in name keeps the plain WorkflowState type
-// instead of narrowing to one literal; a custom name gets WorkflowState<"its-name">.
+// instead of narrowing to one literal; a custom name gets WorkflowState<"its-name">. The 1.1
+// signature is repeated last so Parameters<typeof createState> / ReturnType read the 1.1 shape.
 export function createState(input: CreateStateInput): WorkflowState;
 export function createState<N extends string>(input: CreateStateInput<N>): WorkflowState<N>;
+export function createState(input: CreateStateInput): WorkflowState;
 export function createState<N extends string>(input: CreateStateInput<N>): WorkflowState<N> {
   const seenStages = new Set<string>();
   for (const st of input.stages) {
@@ -56,6 +58,20 @@ export function createState<N extends string>(input: CreateStateInput<N>): Workf
   };
 }
 
+export function appendEvent<N extends string>(
+  state: WorkflowState<N>,
+  type: string,
+  by: string,
+  payload: unknown,
+  now?: string,
+): WorkflowState<N>;
+export function appendEvent(
+  state: WorkflowState,
+  type: string,
+  by: string,
+  payload: unknown,
+  now?: string,
+): WorkflowState;
 export function appendEvent<N extends string>(
   state: WorkflowState<N>,
   type: string,

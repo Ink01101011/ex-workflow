@@ -123,6 +123,20 @@ export function complete<N extends string>(
   handoff: Handoff,
   acc: Accounting,
   now?: string,
+): ApplyResult<N>;
+export function complete(
+  state: WorkflowState,
+  methodology: Methodology,
+  handoff: Handoff,
+  acc: Accounting,
+  now?: string,
+): ApplyResult;
+export function complete<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
+  handoff: Handoff,
+  acc: Accounting,
+  now?: string,
 ): ApplyResult<N> {
   validate(state, handoff, acc);
   // the methodology's rules see the completion (applyAction validates, appends nothing, then reduces)

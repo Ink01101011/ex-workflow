@@ -128,6 +128,16 @@ export interface PlanResult<N extends string = MethodologyName> {
 export function plan<N extends string>(
   state: WorkflowState<N>,
   methodology: Methodology<unknown, N>,
+  opts?: PlanOptions,
+): PlanResult<N>;
+export function plan(
+  state: WorkflowState,
+  methodology: Methodology,
+  opts?: PlanOptions,
+): PlanResult;
+export function plan<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   opts: PlanOptions = {},
 ): PlanResult<N> {
   const at = nowOf(opts.now);

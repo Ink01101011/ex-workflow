@@ -47,6 +47,16 @@ export function synthesizeBrief<N extends string>(
   state: WorkflowState<N>,
   methodology: Methodology<unknown, N>,
   item: WorkItem,
+): Brief;
+export function synthesizeBrief(
+  state: WorkflowState,
+  methodology: Methodology,
+  item: WorkItem,
+): Brief;
+export function synthesizeBrief<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
+  item: WorkItem,
 ): Brief {
   if (!item.role)
     fail(
@@ -151,6 +161,16 @@ export interface NextResult<N extends string = MethodologyName> {
   reason?: PlanReason;
 }
 
+export function next<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
+  opts?: PlanOptions,
+): NextResult<N>;
+export function next(
+  state: WorkflowState,
+  methodology: Methodology,
+  opts?: PlanOptions,
+): NextResult;
 export function next<N extends string>(
   state: WorkflowState<N>,
   methodology: Methodology<unknown, N>,

@@ -19,6 +19,18 @@ export function applyAgreement<N extends string>(
   change: { text: string; replaces?: string },
   by: string,
   now: string,
+): WorkflowState<N>;
+export function applyAgreement(
+  state: WorkflowState,
+  change: { text: string; replaces?: string },
+  by: string,
+  now: string,
+): WorkflowState;
+export function applyAgreement<N extends string>(
+  state: WorkflowState<N>,
+  change: { text: string; replaces?: string },
+  by: string,
+  now: string,
 ): WorkflowState<N> {
   if (change.replaces === change.text) return state;
   let s = state;
@@ -39,6 +51,18 @@ export function applyAgreement<N extends string>(
 }
 
 /** Removes an agreement and records why it left (replacedBy null). */
+export function retireAgreement<N extends string>(
+  state: WorkflowState<N>,
+  text: string,
+  by: string,
+  now: string,
+): WorkflowState<N>;
+export function retireAgreement(
+  state: WorkflowState,
+  text: string,
+  by: string,
+  now: string,
+): WorkflowState;
 export function retireAgreement<N extends string>(
   state: WorkflowState<N>,
   text: string,

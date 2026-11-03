@@ -49,6 +49,18 @@ export function addItem<N extends string>(
   input: NewItem,
   by: string,
   now?: string,
+): WorkflowState<N>;
+export function addItem(
+  state: WorkflowState,
+  input: NewItem,
+  by: string,
+  now?: string,
+): WorkflowState;
+export function addItem<N extends string>(
+  state: WorkflowState<N>,
+  input: NewItem,
+  by: string,
+  now?: string,
 ): WorkflowState<N> {
   assertId(input.id, "item id");
   if (Object.hasOwn(state.items, input.id))
@@ -106,6 +118,20 @@ export function addItem<N extends string>(
   );
 }
 
+export function editItem<N extends string>(
+  state: WorkflowState<N>,
+  id: string,
+  patch: ItemPatch,
+  by: string,
+  now?: string,
+): WorkflowState<N>;
+export function editItem(
+  state: WorkflowState,
+  id: string,
+  patch: ItemPatch,
+  by: string,
+  now?: string,
+): WorkflowState;
 export function editItem<N extends string>(
   state: WorkflowState<N>,
   id: string,

@@ -34,6 +34,22 @@ export function correctAccounting<N extends string>(
   by: string,
   now?: string,
   line?: number,
+): WorkflowState<N>;
+export function correctAccounting(
+  state: WorkflowState,
+  itemId: string,
+  patch: AccountingPatch,
+  by: string,
+  now?: string,
+  line?: number,
+): WorkflowState;
+export function correctAccounting<N extends string>(
+  state: WorkflowState<N>,
+  itemId: string,
+  patch: AccountingPatch,
+  by: string,
+  now?: string,
+  line?: number,
 ): WorkflowState<N> {
   getItem(state, itemId);
   const indexes: number[] = [];

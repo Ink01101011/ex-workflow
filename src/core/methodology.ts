@@ -18,6 +18,16 @@ export function validateAction<N extends string>(
   state: WorkflowState<N>,
   methodology: Methodology<unknown, N>,
   action: Action,
+): Violation[];
+export function validateAction(
+  state: WorkflowState,
+  methodology: Methodology,
+  action: Action,
+): Violation[];
+export function validateAction<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
+  action: Action,
 ): Violation[] {
   const out: Violation[] = [];
   for (const rule of [...coreRulesFor<N>(methodology), ...methodology.rules])
@@ -25,6 +35,18 @@ export function validateAction<N extends string>(
   return out;
 }
 
+export function applyAction<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
+  action: Action,
+  reduce: (s: WorkflowState<N>) => WorkflowState<N>,
+): ApplyResult<N>;
+export function applyAction(
+  state: WorkflowState,
+  methodology: Methodology,
+  action: Action,
+  reduce: (s: WorkflowState) => WorkflowState,
+): ApplyResult;
 export function applyAction<N extends string>(
   state: WorkflowState<N>,
   methodology: Methodology<unknown, N>,
@@ -53,9 +75,11 @@ export interface InitInput<C, N extends string = MethodologyName> {
   now?: string;
 }
 
-// The first overload is the 1.1 signature; a custom methodology name resolves to the second.
+// The first overload is the 1.1 signature; a custom methodology name resolves to the second. The
+// 1.1 signature is repeated last so Parameters<typeof init> / ReturnType read the 1.1 shape.
 export function init<C>(input: InitInput<C>): ApplyResult;
 export function init<C, N extends string>(input: InitInput<C, N>): ApplyResult<N>;
+export function init<C>(input: InitInput<C>): ApplyResult;
 export function init<C, N extends string>(input: InitInput<C, N>): ApplyResult<N> {
   const m = input.methodology;
   const config = m.validateConfig(input.config);
@@ -76,6 +100,20 @@ export function init<C, N extends string>(input: InitInput<C, N>): ApplyResult<N
 }
 
 /** Change the config between iterations: re-validated, recorded as config.changed, derived state kept in step by the methodology hook. */
+export function changeConfig<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
+  patch: Record<string, unknown>,
+  by: string,
+  now?: string,
+): ApplyResult<N>;
+export function changeConfig(
+  state: WorkflowState,
+  methodology: Methodology,
+  patch: Record<string, unknown>,
+  by: string,
+  now?: string,
+): ApplyResult;
 export function changeConfig<N extends string>(
   state: WorkflowState<N>,
   methodology: Methodology<unknown, N>,

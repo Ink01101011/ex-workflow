@@ -10,6 +10,20 @@ export function moveItem<N extends string>(
   to: { stage?: string; status: ItemStatus },
   by: string,
   now?: string,
+): WorkflowState<N>;
+export function moveItem(
+  state: WorkflowState,
+  id: string,
+  to: { stage?: string; status: ItemStatus },
+  by: string,
+  now?: string,
+): WorkflowState;
+export function moveItem<N extends string>(
+  state: WorkflowState<N>,
+  id: string,
+  to: { stage?: string; status: ItemStatus },
+  by: string,
+  now?: string,
 ): WorkflowState<N> {
   const item = getItem(state, id);
   const toStage = to.stage ?? item.stage;

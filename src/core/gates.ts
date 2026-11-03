@@ -105,6 +105,16 @@ export function raisePending<N extends string>(
   state: WorkflowState<N>,
   pending: Omit<PendingHuman, "id" | "raisedAt">,
   now?: string,
+): WorkflowState<N>;
+export function raisePending(
+  state: WorkflowState,
+  pending: Omit<PendingHuman, "id" | "raisedAt">,
+  now?: string,
+): WorkflowState;
+export function raisePending<N extends string>(
+  state: WorkflowState<N>,
+  pending: Omit<PendingHuman, "id" | "raisedAt">,
+  now?: string,
 ): WorkflowState<N> {
   const at = nowOf(now);
   const id = `p${state.events.filter((e) => e.type === "pending.raised").length + 1}`;
@@ -124,6 +134,24 @@ export function raisePending<N extends string>(
   );
 }
 
+export function decide<N extends string>(
+  state: WorkflowState<N>,
+  pendingId: string,
+  decision: "approve" | "reject",
+  by: string,
+  note: string,
+  now?: string,
+  methodology?: Methodology<unknown, N>,
+): WorkflowState<N>;
+export function decide(
+  state: WorkflowState,
+  pendingId: string,
+  decision: "approve" | "reject",
+  by: string,
+  note: string,
+  now?: string,
+  methodology?: Methodology,
+): WorkflowState;
 export function decide<N extends string>(
   state: WorkflowState<N>,
   pendingId: string,
