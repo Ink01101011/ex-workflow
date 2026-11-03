@@ -784,3 +784,96 @@ test("R7 intake refuses a workflow of another methodology", () => {
   assert.equal(foreign.investigation, undefined);
   assert.equal(foreign.iterations.length, 0);
 });
+
+// U11 O3: a loaded state can break invariants the ceremonies used to assert with `!`
+import { readInvestigation, writeInvestigation } from "./record.ts";
+test("loaded-state invariants fail invalid-input instead of a TypeError (U11 O3)", () => {
+  const invalidState = (e: unknown) =>
+    e instanceof WorkflowError && e.code === "invalid-input" && /inconsistent/.test(e.message);
+  const tamper = (h: ReturnType<typeof harness>, patch: Record<string, unknown>) =>
+    h.setState(writeInvestigation(h.state, { ...readInvestigation(h.state)!, ...patch }));
+  const noIteration = (h: ReturnType<typeof harness>) =>
+    h.setState({
+      ...h.state,
+      iterations: h.state.iterations.filter((it) => it.id !== "investigation"),
+    });
+
+  // observe and update-belief with no round (ceremonies.ts observe, update-belief)
+  let h = harness();
+  preregister(h);
+  tamper(h, { rounds: [] });
+  assert.throws(() => observe(h), invalidState);
+  tamper(h, { phase: "update-belief" });
+  assert.throws(() => update(h), invalidState);
+
+  // update-belief on a round with no result
+  h = harness();
+  preregister(h);
+  tamper(h, { phase: "update-belief" });
+  assert.throws(
+    () =>
+      h.call("update-belief", {
+        assessments: [
+          { hypothesis: "a", assessment: "uncertain", reason: "?" },
+          { hypothesis: "b", assessment: "uncertain", reason: "?" },
+        ],
+        next: "round",
+      }),
+    invalidState,
+  );
+
+  // update-belief next round, and next(), without the investigation iteration
+  h = harness();
+  preregister(h);
+  h.dispatch();
+  h.finish();
+  observe(h);
+  const observed = h.state;
+  noIteration(h);
+  assert.throws(() => update(h), invalidState);
+  h.setState(observed);
+  tamper(h, { phase: "observe" });
+  noIteration(h);
+  assert.throws(() => next(h.state, m()), invalidState);
+
+  // review-conclusion without a conclusion, without the iteration, with a dangling replayOf
+  h = harness();
+  h.run("e1");
+  conclude(h);
+  const review = h.state;
+  tamper(h, { conclusion: undefined });
+  assert.throws(
+    () =>
+      h.call(
+        "review-conclusion",
+        { approve: true, reason: "ok", replayRefs: ["r-e1"] },
+        "conclusion-reviewer",
+      ),
+    invalidState,
+  );
+  h.setState(review);
+  noIteration(h);
+  assert.throws(
+    () =>
+      h.call(
+        "review-conclusion",
+        { approve: false, reason: "more", next: "round" },
+        "conclusion-reviewer",
+      ),
+    invalidState,
+  );
+  h.setState(review);
+  const x = readInvestigation(h.state)!;
+  tamper(h, {
+    rounds: x.rounds.map((r) => ({ ...r, experiment: { ...r.experiment, replayOf: "ghost" } })),
+  });
+  assert.throws(
+    () =>
+      h.call(
+        "review-conclusion",
+        { approve: true, reason: "ok", replayRefs: ["r-e1"] },
+        "conclusion-reviewer",
+      ),
+    invalidState,
+  );
+});

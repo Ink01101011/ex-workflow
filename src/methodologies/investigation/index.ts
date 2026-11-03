@@ -3,6 +3,7 @@ import { fail } from "../../core/errors.ts";
 import { executionActors } from "./execution.ts";
 import { independenceConflicts } from "../../common/independence.ts";
 import { closeInvestigation, investigationCeremonies } from "./ceremonies.ts";
+import { investigationIteration } from "./invariants.ts";
 import { investigationRules } from "./rules.ts";
 import { investigationRoles } from "./roles.ts";
 import { investigationStages } from "./stages.ts";
@@ -71,10 +72,7 @@ export function investigation(): Methodology<InvestigationConfig> {
     }),
     candidates: (s) =>
       readInvestigation(s)?.phase === "observe" &&
-      !isExhausted(
-        (s.config as InvestigationConfig).budget,
-        s.iterations.find((it) => it.id === "investigation")!.spent,
-      )
+      !isExhausted((s.config as InvestigationConfig).budget, investigationIteration(s).spent)
         ? Object.values(s.items).filter(
             (i) =>
               i.id === readInvestigation(s)!.rounds.at(-1)?.item &&

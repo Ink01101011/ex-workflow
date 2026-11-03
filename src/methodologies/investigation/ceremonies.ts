@@ -3,6 +3,7 @@ import { executionActors, freshOutputRefs } from "./execution.ts";
 import { independenceConflicts } from "../../common/independence.ts";
 import { frozenChanges } from "../../common/frozen.ts";
 import { fail } from "../../core/errors.ts";
+import { brokenInvestigation, investigationIteration, lastRound } from "./invariants.ts";
 import { roleOf } from "../../core/roles/lookup.ts";
 import { addItem } from "../../core/items/record.ts";
 import { moveItem } from "../../core/items/move.ts";
@@ -334,7 +335,7 @@ export function investigationCeremonies(
       );
     }),
     observe: make("observe", "verify", "observe", (s, x, i, bad) => {
-      const r = x.rounds.at(-1)!,
+      const r = lastRound(x),
         o = i.result as Observation;
       const extra = extraKey(o, ["id", "valid", "summary", "provenanceRefs"]);
       if (extra)
@@ -390,7 +391,7 @@ export function investigationCeremonies(
       );
     }),
     "update-belief": make("update-belief", "define-acceptance", "update-belief", (s, x, i, bad) => {
-      const r = x.rounds.at(-1)!,
+      const r = lastRound(x),
         a = i.assessments as BeliefUpdate["assessments"];
       const extra = extraKeyIn(a, ["hypothesis", "assessment", "reason"]);
       if (extra)
@@ -417,7 +418,8 @@ export function investigationCeremonies(
           "belief update must assess every hypothesis against current result",
           "set result to the latest result ID, assessments to one {hypothesis, assessment, reason} per hypothesis, and next to round or conclusion",
         );
-      if (!r.result!.valid && a.some((v) => v.assessment !== "uncertain"))
+      const result = r.result ?? brokenInvestigation(`round ${r.experiment.id} has no result`);
+      if (!result.valid && a.some((v) => v.assessment !== "uncertain"))
         bad(
           "invalid experiments cannot support beliefs",
           "set every assessment to uncertain for an invalid experiment result",
@@ -447,7 +449,7 @@ export function investigationCeremonies(
         i,
         "belief-updated",
       );
-      const it = n.iterations.find((v) => v.id === "investigation")!;
+      const it = investigationIteration(n);
       if (
         i.next === "round" &&
         (x.rounds.length >= validateInvestigationConfig(s.config).maxRounds ||
@@ -510,6 +512,7 @@ export function investigationCeremonies(
       );
     }),
     "review-conclusion": make("review-conclusion", "review", "review", (s, x, i, bad) => {
+      const conclusion = x.conclusion ?? brokenInvestigation("phase review has no conclusion");
       if (independenceConflicts(i.by, x.contributors).length)
         bad(
           "conclusion reviewer must be independent of investigation contributors",
@@ -546,7 +549,7 @@ export function investigationCeremonies(
           i,
           "review-rejected",
         );
-        const iteration = s.iterations.find((it) => it.id === "investigation")!;
+        const iteration = investigationIteration(s);
         if (
           target === "round" &&
           (x.rounds.length >= validateInvestigationConfig(s.config).maxRounds ||
@@ -563,7 +566,7 @@ export function investigationCeremonies(
       }
       const replayRefs = Array.isArray(i.replayRefs) ? i.replayRefs : [];
       if (
-        x.conclusion!.outcome === "resolved" &&
+        conclusion.outcome === "resolved" &&
         (!refs(replayRefs) ||
           !x.rounds.some(
             (r) =>
@@ -572,19 +575,23 @@ export function investigationCeremonies(
                 executionActors(s, r.item),
                 executionActors(
                   s,
-                  x.rounds.find((p) => p.experiment.id === r.experiment.replayOf)!.item,
+                  (
+                    x.rounds.find((p) => p.experiment.id === r.experiment.replayOf) ??
+                    brokenInvestigation(
+                      `round ${r.experiment.id} replays the unknown experiment ${r.experiment.replayOf}`,
+                    )
+                  ).item,
                 ),
               ).length &&
               sameHypothesis(
-                r.hypotheses.find((h) => h.id === x.conclusion!.supportedHypothesis),
-                x.rounds.at(-1)!.hypotheses.find((h) => h.id === x.conclusion!.supportedHypothesis),
+                r.hypotheses.find((h) => h.id === conclusion.supportedHypothesis),
+                lastRound(x).hypotheses.find((h) => h.id === conclusion.supportedHypothesis),
               ) &&
               r.result?.valid &&
               replayRefs.includes(r.result.id) &&
               r.update?.assessments.some(
                 (a) =>
-                  a.hypothesis === x.conclusion!.supportedHypothesis &&
-                  a.assessment === "supported",
+                  a.hypothesis === conclusion.supportedHypothesis && a.assessment === "supported",
               ),
           ))
       )
@@ -608,7 +615,7 @@ export function investigationCeremonies(
           ],
         },
         i,
-        x.conclusion!.outcome,
+        conclusion.outcome,
       );
     }),
     stop: make("stop", "facilitate", undefined, (s, x, i, bad) => {
