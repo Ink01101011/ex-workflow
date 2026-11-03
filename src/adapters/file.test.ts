@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createState } from "../core/state.ts";
+import { addItem } from "../core/items/record.ts";
 import { WorkflowError } from "../core/errors.ts";
 import { loadState, saveBrief, saveHandoff, saveState, statePath, withStateLock } from "./file.ts";
 import type { Role, WorkflowState } from "../core/types.ts";
@@ -388,4 +389,25 @@ test("saveState and loadState refuse a deeply nested value with invalid-input, n
   // the validator does not descend into an open ext value, so the file loads; saving it back is refused
   const loaded = await loadState(root);
   await assert.rejects(saveState(root, loaded), tooDeep);
+});
+
+test("saveBrief and saveHandoff check the id and the seq; loadState checks each item's key (U9 P8)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
+  // ids inside .workflow but not valid ids: the path check alone let these through
+  await assert.rejects(saveBrief(root, { item: { id: "CON" } } as never), invalid);
+  await assert.rejects(saveBrief(root, { item: { id: "a/b" } } as never), invalid);
+  await assert.rejects(saveHandoff(root, { ...h, item: "toString" }, 1), invalid);
+  for (const seq of [-1, 1.5, Number.NaN, 2 ** 53])
+    await assert.rejects(saveHandoff(root, h, seq), invalid);
+  assert.deepEqual(await readdir(root), []);
+
+  await saveState(root, fresh());
+  const s = addItem(fresh(), { id: "B", title: "b" }, "dev", T0);
+  const item = s.items["B"];
+  await writeFile(statePath(root), JSON.stringify({ ...s, items: { A: item } }));
+  await assert.rejects(
+    loadState(root),
+    (e: unknown) => invalid(e) && /items\/A/.test((e as Error).message),
+  );
 });

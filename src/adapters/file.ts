@@ -1,7 +1,7 @@
 import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { fail } from "../core/errors.ts";
+import { assertId, fail } from "../core/errors.ts";
 import { withLegacyMirrors, withoutLegacyMirrors } from "../interface/ext.ts";
 import { assertValid, roleSchema, workflowStateSchema } from "../schema/index.ts";
 import type { Brief, Handoff, Role, WorkflowState } from "../core/types.ts";
@@ -161,6 +161,13 @@ export async function loadState(root: string): Promise<WorkflowState> {
       "upgrade ex-workflow, or run the migration this version documents in its changelog",
     );
   notTooDeep(file, () => assertValid(workflowStateSchema, parsed, file));
+  for (const [key, item] of Object.entries(state.items))
+    if (item.id !== key)
+      fail(
+        "invalid-input",
+        `${file}: /items/${key} holds item id ${JSON.stringify(item.id)}`,
+        `make the key and the id the same at /items/${key}, or restore the file from git`,
+      );
   const rolesDir = path.join(root, WORKFLOW_DIR, "roles");
   let manifests: string[] = [];
   try {
@@ -198,6 +205,7 @@ function inWorkflowDir(root: string, file: string): string {
 }
 
 export async function saveBrief(root: string, brief: Brief): Promise<string> {
+  assertId(brief.item.id, "brief item id");
   const file = inWorkflowDir(
     root,
     path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`),
@@ -207,6 +215,13 @@ export async function saveBrief(root: string, brief: Brief): Promise<string> {
 }
 
 export async function saveHandoff(root: string, handoff: Handoff, seq: number): Promise<string> {
+  assertId(handoff.item, "handoff item id");
+  if (!Number.isSafeInteger(seq) || seq < 0)
+    fail(
+      "invalid-input",
+      `handoff seq ${String(seq)} is not a non-negative integer`,
+      "pass the state's event count after complete (res.state.events.length)",
+    );
   const file = inWorkflowDir(
     root,
     path.join(root, WORKFLOW_DIR, "handoffs", `${handoff.item}-${seq}.json`),
