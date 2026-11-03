@@ -278,6 +278,14 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         );
       const role = flags["role"] ?? handoff.role;
       const durationMs = num(flags, "duration-ms");
+      const startedAt = Date.parse(now) - durationMs;
+      // a negative duration stays accounting-invalid (complete); only refuse what Date cannot hold
+      if (!Number.isSafeInteger(durationMs) || Number.isNaN(new Date(startedAt).getTime()))
+        fail(
+          "invalid-input",
+          `--duration-ms must be a whole number of milliseconds (got ${flags["duration-ms"]})`,
+          "pass the measured wall-clock time in ms, e.g. --duration-ms 42000",
+        );
       const acc: Accounting = {
         item: rest[0],
         role,
@@ -285,7 +293,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         tokensIn: num(flags, "tokens-in"),
         tokensOut: num(flags, "tokens-out"),
         durationMs,
-        startedAt: new Date(Date.parse(now) - durationMs).toISOString(),
+        startedAt: new Date(startedAt).toISOString(),
         endedAt: now,
       };
       if (flags["estimate"] === "true") acc.estimate = true;
@@ -470,6 +478,17 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const action = await readJson<Action>(path.resolve(cwd, rest[0]));
+      if (
+        typeof action !== "object" ||
+        action === null ||
+        Array.isArray(action) ||
+        typeof action.type !== "string"
+      )
+        fail(
+          "invalid-input",
+          `action file ${rest[0]} must hold an object with a string "type"`,
+          'write the action as { "type": "...", "by": "<role>", "payload": { ... } }',
+        );
       return {
         exit: 0,
         out: {

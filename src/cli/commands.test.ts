@@ -1034,3 +1034,50 @@ test("every command group prints usage and exits 2 when called without its argum
     assert.ok(Array.isArray(out<{ usage: string[] }>(r).usage), argv.join(" "));
   }
 });
+
+test("complete refuses a --duration-ms that is not a safe integer, and validate a non-object action, with invalid-input (U9 P5, U11 O7)", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
+  await runCommand(["next"], root);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  const code = (r: { exit: number; out: unknown }) =>
+    r.exit === 1 ? out<{ error: { code: string } }>(r).error.code : `exit ${r.exit}`;
+  for (const d of ["1e300", "1e17", "9007199254740991", "1.5"]) {
+    const r = await runCommand(
+      [
+        "complete",
+        "A",
+        h,
+        "--tokens-in",
+        "1",
+        "--tokens-out",
+        "1",
+        "--duration-ms",
+        d,
+        "--model",
+        "m",
+      ],
+      root,
+    );
+    assert.equal(code(r), "invalid-input", `--duration-ms ${d}`);
+  }
+  for (const action of [null, 3, [], { type: 7 }]) {
+    const f = await w("act.json", action);
+    assert.equal(
+      code(await runCommand(["validate", f], root)),
+      "invalid-input",
+      JSON.stringify(action),
+    );
+  }
+});
