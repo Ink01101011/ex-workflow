@@ -1,7 +1,8 @@
 import { executionActors, freshOutputRefs } from "./execution.ts";
 import { fail } from "../../core/errors.ts";
-import { roleOf } from "../../core/roles.ts";
-import { addItem, moveItem } from "../../core/items.ts";
+import { roleOf } from "../../core/roles/lookup.ts";
+import { addItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { applyAction } from "../../core/methodology.ts";
 import { appendEvent, nowOf } from "../../core/state.ts";
 import { isExhausted } from "../../core/budget.ts";

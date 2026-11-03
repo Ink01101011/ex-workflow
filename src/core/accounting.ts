@@ -1,5 +1,5 @@
 import { fail } from "./errors.ts";
-import { getItem } from "./items.ts";
+import { getItem } from "./items/record.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type { Accounting, Iteration, WorkflowState } from "./types.ts";
 

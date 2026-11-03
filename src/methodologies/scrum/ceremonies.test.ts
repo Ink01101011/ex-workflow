@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem, getItem, moveItem } from "../../core/items.ts";
+import { addItem, getItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { next } from "../../core/brief.ts";
 import { complete } from "../../core/complete.ts";
 import { authorOf, decide } from "../../core/gates.ts";

@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addEvidence, addItem, getItem, moveItem } from "../../core/items.ts";
+import { addEvidence } from "../../core/items/evidence.ts";
+import { addItem, getItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { decide } from "../../core/gates.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import type { Event, WorkflowState } from "../../core/types.ts";

@@ -1,5 +1,5 @@
 import { fail } from "./errors.ts";
-import { requireCapabilities } from "./roles.ts";
+import { requireCapabilities } from "./roles/guards.ts";
 import { coreRulesFor } from "./rules.ts";
 import { openIteration } from "./planner.ts";
 import { appendEvent, createState, nowOf } from "./state.ts";

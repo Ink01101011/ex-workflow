@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
-import { addItem, getItem, moveItem, raiseBlocker } from "./items.ts";
+import { addItem, getItem } from "./items/record.ts";
+import { moveItem } from "./items/move.ts";
+import { raiseBlocker } from "./items/blockers.ts";
 import { assignRole, openIteration, plan, resourceCapsFor, toExNodes } from "./planner.ts";
 import { WorkflowError } from "./errors.ts";
 import type { Methodology, PlannerOptions, Role, Stage, WorkflowState } from "./types.ts";

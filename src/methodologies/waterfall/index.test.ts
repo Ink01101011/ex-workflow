@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { changeConfig, init } from "../../core/methodology.ts";
-import { addEvidence, addItem, getItem, moveItem } from "../../core/items.ts";
+import { addEvidence } from "../../core/items/evidence.ts";
+import { addItem, getItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { next } from "../../core/brief.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import { DEFAULT_PHASE_IDS, GATE_ID, validateWaterfallConfig } from "./config.ts";

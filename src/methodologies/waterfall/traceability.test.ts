@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem, moveItem } from "../../core/items.ts";
+import { addItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { waterfall } from "./index.ts";
 import { missingTraces, traceabilityMatrix } from "./traceability.ts";
 

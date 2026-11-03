@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem, editItem } from "../../core/items.ts";
+import { addItem, editItem } from "../../core/items/record.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import { scrum } from "./index.ts";
 import { scrumRules } from "./rules.ts";

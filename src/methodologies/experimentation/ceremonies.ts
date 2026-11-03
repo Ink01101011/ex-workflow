@@ -1,8 +1,10 @@
 import { assertId, fail } from "../../core/errors.ts";
 import { estimateTokens } from "../../core/budget.ts";
 import { resourceCapsFor } from "../../core/planner.ts";
-import { roleOf } from "../../core/roles.ts";
-import { addEvidence, getItem, moveItem, patchItem } from "../../core/items.ts";
+import { roleOf } from "../../core/roles/lookup.ts";
+import { addEvidence } from "../../core/items/evidence.ts";
+import { getItem, patchItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { appendEvent, nowOf } from "../../core/state.ts";
 import { applyAction } from "../../core/methodology.ts";
 import { assertPolicies } from "../../core/policies.ts";

@@ -1,6 +1,6 @@
 import { applyLessonInput, parseLessonInput } from "../../core/lessons.ts";
 import { applyAction } from "../../core/methodology.ts";
-import { requireCap } from "../../core/roles.ts";
+import { requireCap } from "../../core/roles/guards.ts";
 import { appendEvent, nowOf } from "../../core/state.ts";
 import type { Ceremony, Methodology } from "../../core/types.ts";
 import { wantPhase } from "./ceremonies.ts";

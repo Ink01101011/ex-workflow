@@ -2,20 +2,15 @@ import { timSort } from "exsorted";
 import { estimateTokens, remaining } from "../../core/budget.ts";
 import { fail } from "../../core/errors.ts";
 import { applyLessonInput, parseLessonInput } from "../../core/lessons.ts";
-import {
-  addItem,
-  editItem,
-  getItem,
-  moveItem,
-  patchItem,
-  stageOf,
-  stripItemFields,
-  type ItemPatch,
-} from "../../core/items.ts";
+import { addItem, editItem, getItem, patchItem } from "../../core/items/record.ts";
+import { moveItem, stripItemFields } from "../../core/items/move.ts";
+import { stageOf } from "../../core/items/stage.ts";
+import type { ItemPatch } from "../../core/types.ts";
 import { applyAction } from "../../core/methodology.ts";
 import { assertPolicies, evaluatePolicies } from "../../core/policies.ts";
 import { openIteration } from "../../core/planner.ts";
-import { approverIds, canDo, requireCap } from "../../core/roles.ts";
+import { approverIds } from "../../core/roles/lookup.ts";
+import { canDo, requireCap } from "../../core/roles/guards.ts";
 export { canDo };
 import { appendEvent, nowOf } from "../../core/state.ts";
 import type {

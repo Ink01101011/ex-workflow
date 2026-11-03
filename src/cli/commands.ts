@@ -13,10 +13,12 @@ import { complete } from "../core/complete.ts";
 import { correctAccounting, type AccountingPatch } from "../core/accounting.ts";
 import { WorkflowError, fail } from "../core/errors.ts";
 import { decide } from "../core/gates.ts";
-import { addItem, clearBlocker, editItem, getItem, type ItemPatch } from "../core/items.ts";
+import { addItem, editItem, getItem } from "../core/items/record.ts";
+import { clearBlocker } from "../core/items/blockers.ts";
+import type { ItemPatch } from "../core/types.ts";
 import { applyAction, changeConfig, init, validateAction } from "../core/methodology.ts";
 import { openIteration, type PlanOptions } from "../core/planner.ts";
-import { registerRole } from "../core/roles.ts";
+import { registerRole } from "../core/roles/registry.ts";
 import {
   assertValid,
   handoffSchema,

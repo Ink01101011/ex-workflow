@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem } from "../../core/items.ts";
+import { addItem } from "../../core/items/record.ts";
 import { next } from "../../core/brief.ts";
 import { complete } from "../../core/complete.ts";
 import { lastEvent } from "../../core/state.ts";

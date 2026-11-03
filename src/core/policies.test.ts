@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appendEvent, createState } from "./state.ts";
-import { addEvidence, addItem, moveItem } from "./items.ts";
+import { addEvidence } from "./items/evidence.ts";
+import { addItem } from "./items/record.ts";
+import { moveItem } from "./items/move.ts";
 import { assertPolicies, evaluatePolicies } from "./policies.ts";
 import { WorkflowError } from "./errors.ts";
 import type { Policy, Stage } from "./types.ts";

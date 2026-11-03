@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem } from "../../core/items.ts";
+import { addItem } from "../../core/items/record.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import { ZERO_SPENT } from "../../core/budget.ts";
 import type { WorkflowState } from "../../core/types.ts";

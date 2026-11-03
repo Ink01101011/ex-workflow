@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
-import { addItem, clearBlocker, getItem } from "./items.ts";
+import { addItem, getItem } from "./items/record.ts";
+import { clearBlocker } from "./items/blockers.ts";
 import { next, openQuestions, synthesizeBrief } from "./brief.ts";
 import { complete } from "./complete.ts";
 import { authorOf, decide } from "./gates.ts";

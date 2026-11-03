@@ -8,7 +8,7 @@ import type {
   Violation,
   WorkflowState,
 } from "../../core/types.ts";
-import type { ItemPatch } from "../../core/items.ts";
+import type { ItemPatch } from "../../core/types.ts";
 import { canDo, closedSeq } from "./ceremonies.ts";
 import { configOf, resumeStageOf } from "./index.ts";
 

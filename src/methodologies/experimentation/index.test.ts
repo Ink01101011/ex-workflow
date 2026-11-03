@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem } from "../../core/items.ts";
+import { addItem, editItem } from "../../core/items/record.ts";
 import { experimentation } from "./index.ts";
 import type { CeremonyInput, WorkflowState } from "../../core/types.ts";
 const m = experimentation();
@@ -531,7 +531,6 @@ test("a submitted candidate can time out during independent validation", () => {
 // Review regressions exercise both public dispatch paths and the shared completion seam.
 import { next } from "../../core/brief.ts";
 import { complete } from "../../core/complete.ts";
-import { editItem } from "../../core/items.ts";
 import { WorkflowError } from "../../core/errors.ts";
 const zero = { tokens: 0, turns: 0, wallclockMs: 0 };
 const handoff = {

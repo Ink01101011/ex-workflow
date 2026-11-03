@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
-import { addItem, moveItem } from "./items.ts";
+import { addItem } from "./items/record.ts";
+import { moveItem } from "./items/move.ts";
 import { coreRulesFor } from "./rules.ts";
 import type { Action, Methodology, Role, Stage } from "./types.ts";
 

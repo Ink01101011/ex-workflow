@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addEvidence, addItem, moveItem } from "../../core/items.ts";
+import { addEvidence } from "../../core/items/evidence.ts";
+import { addItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import type { Action, Rule, WorkflowState } from "../../core/types.ts";
 import { waterfall } from "./index.ts";
 import { phasesOf, withPhases } from "./phases.ts";

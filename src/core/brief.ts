@@ -1,8 +1,8 @@
 import { remaining } from "./budget.ts";
 import { fail } from "./errors.ts";
-import { stageOf } from "./items.ts";
+import { stageOf } from "./items/stage.ts";
 import { openIteration, plan, type PlanOptions, type PlanReason, type Skipped } from "./planner.ts";
-import { roleOf } from "./roles.ts";
+import { roleOf } from "./roles/lookup.ts";
 import type { Brief, Handoff, Methodology, Verdict, WorkItem, WorkflowState } from "./types.ts";
 
 interface CompletedPayload {

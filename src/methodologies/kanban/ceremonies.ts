@@ -1,9 +1,11 @@
 import { fail } from "../../core/errors.ts";
 import { applyLessonInput, parseLessonInput } from "../../core/lessons.ts";
-import { getItem, moveItem, patchItem, stageOf } from "../../core/items.ts";
+import { getItem, patchItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
+import { stageOf } from "../../core/items/stage.ts";
 import { applyAction } from "../../core/methodology.ts";
 import { assertPolicies } from "../../core/policies.ts";
-import { requireCap } from "../../core/roles.ts";
+import { requireCap } from "../../core/roles/guards.ts";
 import { appendEvent, nowOf } from "../../core/state.ts";
 import type {
   Ceremony,

@@ -1,4 +1,5 @@
-import { getItem, moveItem } from "../../core/items.ts";
+import { getItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { appendEvent } from "../../core/state.ts";
 import type { WorkflowState } from "../../core/types.ts";
 import { reopenPhases } from "./baseline.ts";

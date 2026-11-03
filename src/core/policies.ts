@@ -1,5 +1,5 @@
 import { fail } from "./errors.ts";
-import { freshEvidence } from "./items.ts";
+import { freshEvidence } from "./items/evidence.ts";
 import type { Policy, Violation, WorkItem, WorkflowState } from "./types.ts";
 
 export function evaluatePolicies(

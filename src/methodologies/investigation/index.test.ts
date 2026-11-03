@@ -276,7 +276,7 @@ test("closing only touches investigation-owned items", () => {
   const stopped = m().ceremonies.stop!(state, { by: "investigator", reason: "stop" }).state;
   assert.equal(stopped.items.unrelated!.status, "todo");
 });
-import { addItem } from "../../core/items.ts";
+import { addItem } from "../../core/items/record.ts";
 test("hypotheses can be revised between rounds while prior registrations retain snapshots", () => {
   const h = harness();
   h.run("e1", true, undefined, "round");

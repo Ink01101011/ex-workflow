@@ -2,8 +2,9 @@ import { ZERO_SPENT } from "../../core/budget.ts";
 import { fail } from "../../core/errors.ts";
 import { raisePending } from "../../core/gates.ts";
 import { applyAction } from "../../core/methodology.ts";
-import { getItem } from "../../core/items.ts";
-import { approverIds, canDo, requireCap, rolesWith } from "../../core/roles.ts";
+import { getItem } from "../../core/items/record.ts";
+import { approverIds, rolesWith } from "../../core/roles/lookup.ts";
+import { canDo, requireCap } from "../../core/roles/guards.ts";
 import { appendEvent, nowOf } from "../../core/state.ts";
 import type {
   Capability,

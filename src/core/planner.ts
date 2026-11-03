@@ -2,9 +2,10 @@ import { ExFlow, ExFlowRuntimeError, type ExFlowOptions, type ExNode } from "ex-
 import { estimateTokens, remaining } from "./budget.ts";
 import { fail } from "./errors.ts";
 import { authorOf } from "./gates.ts";
-import { moveItem, stageOf } from "./items.ts";
+import { moveItem } from "./items/move.ts";
+import { stageOf } from "./items/stage.ts";
 import { evaluatePolicies } from "./policies.ts";
-import { roleOf, rolesWith } from "./roles.ts";
+import { roleOf, rolesWith } from "./roles/lookup.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type { ItemStatus, Iteration, Methodology, Role, WorkItem, WorkflowState } from "./types.ts";
 

@@ -1,6 +1,6 @@
 import { applyAgreement, retireAgreement } from "./agreements.ts";
 import { fail } from "./errors.ts";
-import { getItem } from "./items.ts";
+import { getItem } from "./items/record.ts";
 import type { Lesson, LessonChange, WorkflowState } from "./types.ts";
 
 const LESSON_SCOPES: readonly string[] = ["policy", "skill", "memory", "spec", "review"];

@@ -2,31 +2,16 @@ export const VERSION = "1.1.1";
 export * from "./core/types.ts";
 export { WorkflowError, fail } from "./core/errors.ts";
 export { createState, appendEvent, lastEvent, nowOf } from "./core/state.ts";
-export {
-  registerRole,
-  retireRole,
-  hasCapability,
-  rolesWith,
-  approversFor,
-  requireCapabilities,
-  separationLost,
-  canDo,
-  requireCap,
-} from "./core/roles.ts";
-export {
-  assertId,
-  stageOf,
-  nextStageOf,
-  isTerminalStage,
-  getItem,
-  addItem,
-  editItem,
-  moveItem,
-  addEvidence,
-  raiseBlocker,
-  clearBlocker,
-} from "./core/items.ts";
-export type { ItemPatch } from "./core/items.ts";
+export { registerRole, retireRole } from "./core/roles/registry.ts";
+export { hasCapability, rolesWith, approversFor } from "./core/roles/lookup.ts";
+export { requireCapabilities, separationLost, canDo, requireCap } from "./core/roles/guards.ts";
+export { assertId } from "./core/errors.ts";
+export { stageOf, nextStageOf, isTerminalStage } from "./core/items/stage.ts";
+export { getItem, addItem, editItem } from "./core/items/record.ts";
+export { moveItem } from "./core/items/move.ts";
+export { addEvidence } from "./core/items/evidence.ts";
+export { raiseBlocker, clearBlocker } from "./core/items/blockers.ts";
+export type { ItemPatch } from "./core/types.ts";
 export { applyAgreement, retireAgreement } from "./core/agreements.ts";
 export { evaluatePolicies, assertPolicies } from "./core/policies.ts";
 export { checkGate, authorOf, lastDispatchBefore, raisePending, decide } from "./core/gates.ts";

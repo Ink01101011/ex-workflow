@@ -1,5 +1,6 @@
 import { authorOf } from "./gates.ts";
-import { approverIds, separationLost } from "./roles.ts";
+import { approverIds } from "./roles/lookup.ts";
+import { separationLost } from "./roles/guards.ts";
 import type { Action, Handoff, Methodology, Rule, Violation } from "./types.ts";
 
 export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilities">): Rule[] {

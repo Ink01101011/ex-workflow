@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../../core/methodology.ts";
-import { addItem, moveItem, raiseBlocker } from "../../core/items.ts";
+import { addItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
+import { raiseBlocker } from "../../core/items/blockers.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import { kanban, kanbanStages, validateKanbanConfig } from "./index.ts";
 import { kanbanRules } from "./rules.ts";

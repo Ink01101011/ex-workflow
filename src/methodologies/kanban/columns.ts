@@ -1,5 +1,5 @@
 import { fail } from "../../core/errors.ts";
-import { stageOf } from "../../core/items.ts";
+import { stageOf } from "../../core/items/stage.ts";
 import type { ItemStatus, Stage, WorkItem, WorkflowState } from "../../core/types.ts";
 
 /** Statuses that hold a WIP slot. */

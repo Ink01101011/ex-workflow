@@ -1,21 +1,15 @@
 import { addSpent } from "./budget.ts";
 import { fail } from "./errors.ts";
 import { checkGate, lastDispatchBefore, raisePending } from "./gates.ts";
-import {
-  addEvidence,
-  addItem,
-  advanceItem,
-  clearRole,
-  getItem,
-  moveItem,
-  patchItem,
-  raiseBlocker,
-  stageOf,
-} from "./items.ts";
+import { addEvidence } from "./items/evidence.ts";
+import { addItem, getItem, patchItem } from "./items/record.ts";
+import { advanceItem, clearRole, moveItem } from "./items/move.ts";
+import { raiseBlocker } from "./items/blockers.ts";
+import { stageOf } from "./items/stage.ts";
 import { applyAction } from "./methodology.ts";
 import { assertPolicies } from "./policies.ts";
 import { openIteration } from "./planner.ts";
-import { rolesWith } from "./roles.ts";
+import { rolesWith } from "./roles/lookup.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Accounting,

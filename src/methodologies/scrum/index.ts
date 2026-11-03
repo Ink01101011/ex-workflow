@@ -1,5 +1,6 @@
 import { isExhausted, remaining } from "../../core/budget.ts";
-import { getItem, moveItem, patchItem, stripItemFields } from "../../core/items.ts";
+import { getItem, patchItem } from "../../core/items/record.ts";
+import { moveItem, stripItemFields } from "../../core/items/move.ts";
 import { openIteration } from "../../core/planner.ts";
 import { appendEvent } from "../../core/state.ts";
 import type {

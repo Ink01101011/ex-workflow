@@ -1,6 +1,9 @@
 import { fail } from "./errors.ts";
-import { advanceItem, freshEvidence, clearRole, getItem, moveItem, raiseBlocker } from "./items.ts";
-import { approverIds } from "./roles.ts";
+import { advanceItem, clearRole, moveItem } from "./items/move.ts";
+import { freshEvidence } from "./items/evidence.ts";
+import { getItem } from "./items/record.ts";
+import { raiseBlocker } from "./items/blockers.ts";
+import { approverIds } from "./roles/lookup.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Gate,

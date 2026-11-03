@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appendEvent, createState } from "./state.ts";
-import { addEvidence, addItem, getItem, moveItem } from "./items.ts";
+import { addEvidence } from "./items/evidence.ts";
+import { addItem, getItem } from "./items/record.ts";
+import { moveItem } from "./items/move.ts";
 import { authorOf, checkGate, decide, raisePending } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
 import type { Gate, Methodology, PendingHuman, Role, Stage, WorkflowState } from "./types.ts";
