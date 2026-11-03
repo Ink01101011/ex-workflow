@@ -18,17 +18,18 @@
 5. [Quick start: Waterfall](#quick-start-waterfall)
 6. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
 7. [Persisting state](#persisting-state)
-8. [CLI reference (`exwf`)](#cli-reference-exwf)
-9. [Configuration](#configuration)
-10. [Ceremonies](#ceremonies)
-11. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
-12. [Errors](#errors)
-13. [JSON Schema](#json-schema)
-14. [Package entry points](#package-entry-points)
-15. [Compatibility and versioning](#compatibility-and-versioning)
-16. [Known limitations](#known-limitations)
-17. [Contributing](#contributing)
-18. [License](#license)
+8. [Custom methodologies and extension state](#custom-methodologies-and-extension-state)
+9. [CLI reference (`exwf`)](#cli-reference-exwf)
+10. [Configuration](#configuration)
+11. [Ceremonies](#ceremonies)
+12. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
+13. [Errors](#errors)
+14. [JSON Schema](#json-schema)
+15. [Package entry points](#package-entry-points)
+16. [Compatibility and versioning](#compatibility-and-versioning)
+17. [Known limitations](#known-limitations)
+18. [Contributing](#contributing)
+19. [License](#license)
 
 ## Pick a methodology
 
@@ -206,6 +207,32 @@ Layout under the project root:
 ```
 
 The lock is created exclusively, retried for about two seconds and taken over when older than 60 s. Read-only commands do not lock. If a crashed process left a lock behind and a command reports that another `exwf` holds it, delete the file.
+
+## Custom methodologies and extension state
+
+`Methodology` and `WorkflowState` take the methodology name as an optional second type parameter. It defaults to the five built-in names, so code written for the built-ins type-checks unchanged; a custom methodology declares its own name and runs on the same core:
+
+```ts
+import { init, next, complete, type Methodology } from "ex-workflow";
+
+function triage(): Methodology<TriageConfig, "triage"> {
+  return { name: "triage", /* vocabulary, stages, roles, ceremonies, rules, metrics, ... */ };
+}
+let { state } = init({ methodology: triage(), config: { queue: "support" } }); // WorkflowState<"triage">
+```
+
+Custom methodologies are SDK-only in 1.2: the CLI resolves `exwf init <name>` through a registry holding the five built-ins and cannot load third-party modules, and the file adapter only accepts the five built-in names (see [Known limitations](#known-limitations)).
+
+A methodology keeps its own record in `state.ext`, keyed by its name, and reads and writes it only through the accessors:
+
+```ts
+import { readExt, writeExt } from "ex-workflow";
+
+const queue = readExt<string[]>(state, "triage") ?? [];
+state = writeExt(state, "triage", [...queue, "T-1"]); // returns a new state; undefined removes the key
+```
+
+Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and, for 1.x readers, mirror it to the deprecated top-level `state.investigation` / `state.experimentation`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
 
 ## CLI reference (`exwf`)
 
@@ -393,7 +420,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 
 | Import | Contents |
 |---|---|
-| `ex-workflow` | core: `init`, `addItem`, `editItem`, `next`, `complete`, `decide`, `applyAction`, `validateAction`, `changeConfig`, `correctAccounting`, `clearBlocker`, `raiseBlocker`, `registerRole`, `openQuestions`, `WorkflowError`, `VERSION`, … |
+| `ex-workflow` | core: `init`, `addItem`, `editItem`, `next`, `complete`, `decide`, `applyAction`, `validateAction`, `changeConfig`, `correctAccounting`, `clearBlocker`, `raiseBlocker`, `registerRole`, `openQuestions`, `readExt`, `writeExt`, `WorkflowError`, `VERSION`, … |
 | `ex-workflow/scrum` | `scrum()`, `scrumMetrics`, `dailyReport`, `closeSprint`, presets |
 | `ex-workflow/kanban` | `kanban()`, `board`, `kanbanMetrics`, `opsReport`, `riskReport`, `cadencesDue`, `DEFAULT_COLUMNS`, presets |
 | `ex-workflow/waterfall` | `waterfall()`, `phaseReport`, `traceabilityMatrix`, `waterfallMetrics`, `baselinePhase`, `reopenPhases`, presets |
@@ -410,11 +437,14 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 5
 
 - Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
+- **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still written, as mirrors of `ext.investigation` / `ext.experimentation`, so a 1.x reader of a saved state sees the same record; read them with `readExt` instead. 2.0 removes the mirrors.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Known limitations
 
 Deliberate, documented, and stable within 1.x.
+
+- **A custom methodology's state cannot go through the file adapter or the CLI.** The state schema accepts only the five built-in names in `methodology`, so `saveState`, `loadState` and every `exwf` command refuse it. Keep such a state through the SDK and persist it yourself.
 
 - **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), delete it by hand.
 - **Blockers are owned by a human.** Finishing a follow-up does not clear its blocker; `unblock` does.
