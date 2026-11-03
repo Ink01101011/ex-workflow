@@ -226,7 +226,7 @@ let { state } = init({ methodology: triage(), config: { queue: "support" } }); /
 import { methodologyFactory, registerMethodology, registeredMethodologies } from "ex-workflow/registry";
 
 const m = methodologyFactory(state.methodology)(); // unknown name: invalid-input, the fix lists the known names
-registerMethodology("triage", triage); // a taken name, a built-in included: invalid-input
+registerMethodology("triage", triage); // calls triage() once to check it; a taken name or a non-Methodology result: invalid-input
 registeredMethodologies(); // ["scrum", "kanban", "waterfall", "investigation", "experimentation", "triage"]
 ```
 

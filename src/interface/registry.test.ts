@@ -4,8 +4,25 @@ import { WorkflowError } from "../core/errors.ts";
 import type { Methodology } from "../core/types.ts";
 import { createMethodologyRegistry } from "./registry.ts";
 
+const fn = () => [];
 const fake = <N extends string>(name: N) =>
-  (() => ({ name }) as unknown as Methodology<unknown, N>) satisfies () => Methodology<unknown, N>;
+  (() =>
+    ({
+      name,
+      vocabulary: {},
+      validateConfig: fn,
+      defaultStages: fn,
+      defaultRoles: fn,
+      requiredCapabilities: [],
+      exclusiveCapabilities: [],
+      plannerOptions: fn,
+      candidates: fn,
+      invariants: fn,
+      ceremonies: {},
+      rules: [],
+      metrics: fn,
+      humanDefaults: { gates: "none" },
+    }) as unknown as Methodology<unknown, N>) satisfies () => Methodology<unknown, N>;
 const code = (e: unknown) => (e instanceof WorkflowError ? e.code : String(e));
 
 test("the initial table is pre-registered and listed in insertion order", () => {
@@ -62,4 +79,32 @@ test("registries are independent", () => {
   const b = createMethodologyRegistry({});
   a.registerMethodology("triage", fake("triage"));
   assert.deepEqual(b.registeredMethodologies(), []);
+});
+
+test("registerMethodology checks the factory's result and refuses prototype-named names (U9 P10)", () => {
+  const r = createMethodologyRegistry({});
+  const as = (v: unknown) => (() => v) as unknown as () => Methodology<unknown, "triage">;
+  const good = fake("triage")();
+  for (const result of [
+    null,
+    "triage",
+    { ...good, name: "other" },
+    { ...good, ceremonies: undefined },
+    { ...good, rules: {} },
+    { ...good, candidates: "all" },
+  ])
+    assert.throws(
+      () => r.registerMethodology("triage", as(result)),
+      (e: unknown) =>
+        code(e) === "invalid-input" && (e as WorkflowError).message.includes('"triage"'),
+      JSON.stringify(result),
+    );
+  assert.deepEqual(r.registeredMethodologies(), []);
+  assert.throws(
+    () => r.registerMethodology("toString", fake("toString")),
+    (e: unknown) => code(e) === "invalid-input",
+  );
+  assert.throws(() => r.methodologyFactory("toString"), WorkflowError);
+  r.registerMethodology("triage", fake("triage"));
+  assert.deepEqual(r.registeredMethodologies(), ["triage"]);
 });
