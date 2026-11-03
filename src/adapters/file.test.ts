@@ -366,3 +366,26 @@ test("withStateLock reports fs failures as WorkflowError, not a raw fs error (U9
     syncBuiltinESMExports();
   }
 });
+
+test("saveState and loadState refuse a deeply nested value with invalid-input, not RangeError (U9 P4)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  let deep: unknown = [];
+  for (let i = 0; i < 100_000; i++) deep = [deep];
+  const tooDeep = (e: unknown) => {
+    assert.ok(e instanceof WorkflowError, String(e));
+    assert.equal(e.code, "invalid-input");
+    assert.match(e.message, /nested too deeply/);
+    return true;
+  };
+  await assert.rejects(saveState(root, { ...fresh(), ext: { x: deep } }), tooDeep);
+  await mkdir(path.join(root, ".workflow"), { recursive: true });
+  const good = JSON.stringify(fresh());
+  const n = 100_000;
+  await writeFile(
+    statePath(root),
+    good.replace("{", `{"ext":{"x":${"[".repeat(n)}${"]".repeat(n)}},`),
+  );
+  // the validator does not descend into an open ext value, so the file loads; saving it back is refused
+  const loaded = await loadState(root);
+  await assert.rejects(saveState(root, loaded), tooDeep);
+});

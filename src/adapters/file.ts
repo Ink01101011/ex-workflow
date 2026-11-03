@@ -95,10 +95,28 @@ export async function withStateLock<T>(
   }
 }
 
+/** Runs `fn`, turning the stack overflow a pathologically deep value causes into a WorkflowError. */
+function notTooDeep<T>(what: string, fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof RangeError)
+      fail(
+        "invalid-input",
+        `${what} is nested too deeply to process (${e.message})`,
+        "flatten the deeply nested value (an array or object thousands of levels deep)",
+      );
+    throw e;
+  }
+}
+
 export async function saveState(root: string, state: WorkflowState): Promise<void> {
-  // on disk only ext.<key>; loadState rebuilds the legacy mirror (spec 26)
-  const json = JSON.stringify(withoutLegacyMirrors(state), null, 2) + "\n";
-  assertValid(workflowStateSchema, JSON.parse(json), statePath(root));
+  const json = notTooDeep(statePath(root), () => {
+    // on disk only ext.<key>; loadState rebuilds the legacy mirror (spec 26)
+    const out = JSON.stringify(withoutLegacyMirrors(state), null, 2) + "\n";
+    assertValid(workflowStateSchema, JSON.parse(out), statePath(root));
+    return out;
+  });
   await writeAtomic(statePath(root), json);
 }
 
@@ -118,6 +136,10 @@ export async function loadState(root: string): Promise<WorkflowState> {
   try {
     parsed = JSON.parse(raw);
   } catch (e) {
+    if (e instanceof RangeError)
+      notTooDeep(file, () => {
+        throw e;
+      });
     fail(
       "invalid-input",
       `${file} is not valid JSON: ${(e as Error).message}`,
@@ -138,7 +160,7 @@ export async function loadState(root: string): Promise<WorkflowState> {
       `${file} has schema version ${String(state.version)}; this ex-workflow reads version 1`,
       "upgrade ex-workflow, or run the migration this version documents in its changelog",
     );
-  assertValid(workflowStateSchema, parsed, file);
+  notTooDeep(file, () => assertValid(workflowStateSchema, parsed, file));
   const rolesDir = path.join(root, WORKFLOW_DIR, "roles");
   let manifests: string[] = [];
   try {
