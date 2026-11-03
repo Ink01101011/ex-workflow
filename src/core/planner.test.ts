@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createState } from "./state.ts";
-import { addItem, getItem } from "./items/record.ts";
+import { addItem, editItem, getItem } from "./items/record.ts";
 import { moveItem } from "./items/move.ts";
 import { raiseBlocker } from "./items/blockers.ts";
 import { assignRole, openIteration, plan, resourceCapsFor, toExNodes } from "./planner.ts";
 import { WorkflowError } from "./errors.ts";
+import { next } from "./brief.ts";
 import type { Methodology, PlannerOptions, Role, Stage, WorkflowState } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
@@ -285,6 +286,22 @@ test("plan wraps ex-flow errors", () => {
   s = { ...s, items: { ...s.items, A: { ...s.items["A"]!, dependsOn: ["B"] } } }; // A↔B cycle
   assert.throws(
     () => plan(s, fakeMethodology(), { now: T0 }),
+    (e: unknown) => e instanceof WorkflowError && e.code === "planner-error",
+  );
+});
+
+// ex-flow#2 (fixed in ex-flow 1.1.1): a long cycle overflowed the stack with a RangeError
+test("a 5,000-item dependency cycle closed through editItem makes next fail planner-error, not RangeError", () => {
+  const n = 5000;
+  let s = createState({ methodology: "kanban", config: {}, stages, roles: [dev], now: T0 });
+  s = addItem(s, { id: "C0", title: "t", weight: 1 }, "po", T0);
+  const first = s.items["C0"]!;
+  const items = { ...s.items };
+  // built directly: n addItem calls would copy the item table n times
+  for (let i = 1; i < n; i++) items[`C${i}`] = { ...first, id: `C${i}`, dependsOn: [`C${i - 1}`] };
+  s = editItem({ ...s, items }, "C0", { dependsOn: [`C${n - 1}`] }, "po", T0);
+  assert.throws(
+    () => next(s, fakeMethodology(), { now: T0 }),
     (e: unknown) => e instanceof WorkflowError && e.code === "planner-error",
   );
 });
