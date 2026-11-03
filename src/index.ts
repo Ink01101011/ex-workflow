@@ -28,3 +28,5 @@ export type { AccountingPatch } from "./core/accounting.ts";
 export { coreRulesFor } from "./core/rules.ts";
 export { applyAction, validateAction, init, changeConfig } from "./core/methodology.ts";
 export type { InitInput } from "./core/methodology.ts";
+export { readExt, writeExt } from "./interface/ext.ts";
+export type { LegacyExtRecords } from "./interface/ext.ts";

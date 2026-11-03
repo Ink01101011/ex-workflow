@@ -44,6 +44,7 @@
       "plan",
       "raiseBlocker",
       "raisePending",
+      "readExt",
       "registerRole",
       "remaining",
       "requireCap",
@@ -56,7 +57,8 @@
       "stageOf",
       "synthesizeBrief",
       "toExNodes",
-      "validateAction"
+      "validateAction",
+      "writeExt"
     ],
     "./scrum": [
       "SCRUM_VOCABULARY",

@@ -1495,9 +1495,15 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
       config: {},
       investigation: {
         $ref: "#/definitions/InvestigationState",
+        deprecated: true,
       },
       experimentation: {
         $ref: "#/definitions/ExperimentationState",
+        deprecated: true,
+      },
+      ext: {
+        type: "object",
+        additionalProperties: {},
       },
       items: {
         type: "object",

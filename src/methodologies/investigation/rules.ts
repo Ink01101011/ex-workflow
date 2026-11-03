@@ -1,3 +1,4 @@
+import { readInvestigation } from "./record.ts";
 import { executionActors } from "./execution.ts";
 import type { Rule } from "../../core/types.ts";
 export function investigationRules(): Rule[] {
@@ -7,10 +8,10 @@ export function investigationRules(): Rule[] {
       severity: "error",
       check(s, a) {
         if (a.type !== "item.complete") return [];
-        const round = s.investigation?.rounds.find(
+        const round = readInvestigation(s)?.rounds.find(
           (r) => r.item === (a.payload as { item?: string })?.item,
         );
-        const prior = s.investigation?.rounds.find(
+        const prior = readInvestigation(s)?.rounds.find(
           (r) => r.experiment.id === round?.experiment.replayOf,
         );
         return prior && executionActors(s, prior.item).includes(a.by)
@@ -32,7 +33,7 @@ export function investigationRules(): Rule[] {
       check(s, a) {
         if (a.type !== "item.complete") return [];
         const p = a.payload as { item: string };
-        const x = s.investigation;
+        const x = readInvestigation(s);
         return x?.phase === "observe" && x.rounds.at(-1)?.item === p.item
           ? []
           : [

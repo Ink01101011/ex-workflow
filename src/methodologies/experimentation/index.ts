@@ -1,3 +1,4 @@
+import { readExperimentation } from "./record.ts";
 import type { Methodology } from "../../core/types.ts";
 import {
   experimentationCeremonies,
@@ -50,14 +51,14 @@ export function experimentation(): Methodology<ExperimentationConfig> {
         fallbackTokensPerWeight: 1,
         reservedTokens: reservedTokens(s),
         roleFor(item) {
-          return Object.values(s.experimentation?.candidates ?? {}).find(
+          return Object.values(readExperimentation(s)?.candidates ?? {}).find(
             (candidate) => candidate.item === item.id,
           )?.author;
         },
       };
     },
     candidates(s) {
-      const e = s.experimentation;
+      const e = readExperimentation(s);
       if (!e || e.status !== "running") return [];
       const cfg = validateExperimentationConfig(s.config);
       if (exhausted(s) || runningCount(s) >= cfg.concurrencyCap) return [];
@@ -75,7 +76,7 @@ export function experimentation(): Methodology<ExperimentationConfig> {
       return synchronizeBudget(s, now);
     },
     invariants(s, item) {
-      const e = s.experimentation;
+      const e = readExperimentation(s);
       const c = Object.values(e?.candidates ?? {}).find((candidate) => candidate.item === item.id);
       return [
         `Frozen base SHA: ${e?.baseSha ?? "unfrozen"}; harness: ${e?.harness ?? "unfrozen"}`,

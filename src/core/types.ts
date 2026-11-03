@@ -276,10 +276,25 @@ export interface WorkflowState<N extends string = MethodologyName> {
   version: 1;
   methodology: N;
   config: unknown;
-  /** Standalone investigation lifecycle, created by its intake ceremony. */
+  /**
+   * Standalone investigation lifecycle, created by its intake ceremony.
+   * Since 1.2 a mirror of `ext.investigation`, kept for 1.x readers; read it with
+   * `readExt(state, "investigation")`. Removed in 2.0.
+   * @deprecated
+   */
   investigation?: InvestigationState;
-  /** Standalone isolated candidate experiment, created by its freeze ceremony. */
+  /**
+   * Standalone isolated candidate experiment, created by its freeze ceremony.
+   * Since 1.2 a mirror of `ext.experimentation`, kept for 1.x readers; read it with
+   * `readExt(state, "experimentation")`. Removed in 2.0.
+   * @deprecated
+   */
   experimentation?: ExperimentationState;
+  /**
+   * Extension records keyed by their owner (a methodology name or a common piece id). Read and
+   * write it only through `readExt` / `writeExt`. Absent in states written before 1.2.
+   */
+  ext?: Record<string, unknown>;
   items: Record<string, WorkItem>;
   stages: Stage[];
   roles: Record<string, Role>;

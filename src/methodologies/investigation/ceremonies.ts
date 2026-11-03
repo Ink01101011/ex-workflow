@@ -1,3 +1,4 @@
+import { readInvestigation, writeInvestigation } from "./record.ts";
 import { executionActors, freshOutputRefs } from "./execution.ts";
 import { fail } from "../../core/errors.ts";
 import { roleOf } from "../../core/roles/lookup.ts";
@@ -23,7 +24,7 @@ import type {
   Observation,
 } from "./state.ts";
 function reject(s: WorkflowState, name: string, message: string, fix: string): never {
-  const x = s.investigation;
+  const x = readInvestigation(s);
   return fail("invalid-input", `${name} (phase ${x?.phase ?? "intake"}): ${message}`, fix, {
     items: x ? [x.item, ...(x.rounds.at(-1) ? [x.rounds.at(-1)!.item] : [])] : [],
   });
@@ -50,7 +51,7 @@ function authorize(s: WorkflowState, by: string, cap: Capability) {
 }
 function save(s: WorkflowState, x: InvestigationState, i: CeremonyInput, name: string) {
   return appendEvent(
-    { ...s, investigation: x },
+    writeInvestigation(s, x),
     `investigation.${name}`,
     i.by,
     { ...x },
@@ -111,7 +112,7 @@ export function investigationCeremonies(
     ): Ceremony =>
     (s, i) => {
       authorize(s, i.by, cap);
-      const x = s.investigation;
+      const x = readInvestigation(s);
       if (!x || x.phase === "closed")
         reject(s, name, "no active investigation", "start a new investigation with intake {item}");
       if (phase && x.phase !== phase && !(name === "hypotheses" && x.phase === "preregister"))
@@ -134,7 +135,7 @@ export function investigationCeremonies(
           `workflow methodology is ${s.methodology}, not investigation`,
           "init a workflow with the investigation methodology before intake",
         );
-      if (s.investigation)
+      if (readInvestigation(s))
         bad(
           "investigation already started",
           "use the existing investigation or initialize a new workflow",
@@ -452,7 +453,7 @@ export function investigationCeremonies(
       )
         n = closeInvestigation(
           n,
-          n.investigation!,
+          readInvestigation(n)!,
           i,
           "stopped",
           "budget or round limit exhausted",
@@ -551,7 +552,7 @@ export function investigationCeremonies(
         )
           return closeInvestigation(
             n,
-            n.investigation!,
+            readInvestigation(n)!,
             i,
             "stopped",
             "budget or round limit exhausted after review requested another round",

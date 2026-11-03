@@ -1,3 +1,4 @@
+import { readInvestigation } from "./record.ts";
 import { fail } from "../../core/errors.ts";
 import { executionActors } from "./execution.ts";
 import { closeInvestigation, investigationCeremonies } from "./ceremonies.ts";
@@ -34,8 +35,8 @@ export function investigation(): Methodology<InvestigationConfig> {
       schedulerMode: "level",
       concurrencyCap: 1,
       roleFor: (item) => {
-        const r = state.investigation?.rounds.find((candidate) => candidate.item === item.id);
-        const prior = state.investigation?.rounds.find(
+        const r = readInvestigation(state)?.rounds.find((candidate) => candidate.item === item.id);
+        const prior = readInvestigation(state)?.rounds.find(
           (p) => p.experiment.id === r?.experiment.replayOf,
         );
         const excluded = prior ? executionActors(state, prior.item) : [];
@@ -66,20 +67,20 @@ export function investigation(): Methodology<InvestigationConfig> {
       fallbackTokensPerWeight: 1,
     }),
     candidates: (s) =>
-      s.investigation?.phase === "observe" &&
+      readInvestigation(s)?.phase === "observe" &&
       !isExhausted(
         (s.config as InvestigationConfig).budget,
         s.iterations.find((it) => it.id === "investigation")!.spent,
       )
         ? Object.values(s.items).filter(
             (i) =>
-              i.id === s.investigation!.rounds.at(-1)?.item &&
+              i.id === readInvestigation(s)!.rounds.at(-1)?.item &&
               i.stage === "execute" &&
               i.status === "todo",
           )
         : [],
     afterComplete: (state, item, now) => {
-      const x = state.investigation;
+      const x = readInvestigation(state);
       const iteration = state.iterations.find((it) => it.id === "investigation");
       if (
         x?.phase !== "observe" ||
@@ -103,16 +104,17 @@ export function investigation(): Methodology<InvestigationConfig> {
     ],
     rules: investigationRules(),
     metrics: (s) => ({
-      rounds: s.investigation?.rounds.length ?? 0,
-      validRuns: s.investigation?.rounds.filter((r) => r.result?.valid).length ?? 0,
-      invalidRuns: s.investigation?.rounds.filter((r) => r.result && !r.result.valid).length ?? 0,
+      rounds: readInvestigation(s)?.rounds.length ?? 0,
+      validRuns: readInvestigation(s)?.rounds.filter((r) => r.result?.valid).length ?? 0,
+      invalidRuns:
+        readInvestigation(s)?.rounds.filter((r) => r.result && !r.result.valid).length ?? 0,
     }),
     report: (s) => ({
-      phase: s.investigation?.phase ?? "intake",
-      outcome: s.investigation?.outcome ?? null,
-      rounds: s.investigation?.rounds.length ?? 0,
-      conclusion: s.investigation?.conclusion ?? null,
-      stopReason: s.investigation?.stopReason ?? null,
+      phase: readInvestigation(s)?.phase ?? "intake",
+      outcome: readInvestigation(s)?.outcome ?? null,
+      rounds: readInvestigation(s)?.rounds.length ?? 0,
+      conclusion: readInvestigation(s)?.conclusion ?? null,
+      stopReason: readInvestigation(s)?.stopReason ?? null,
     }),
   };
 }

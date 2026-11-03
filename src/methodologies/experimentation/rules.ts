@@ -1,3 +1,4 @@
+import { readExperimentation } from "./record.ts";
 import type { Rule } from "../../core/types.ts";
 export function experimentationRules(): Rule[] {
   return [
@@ -6,7 +7,7 @@ export function experimentationRules(): Rule[] {
       severity: "error",
       check(state, action) {
         const errors: string[] = [];
-        const e = state.experimentation;
+        const e = readExperimentation(state);
         const payload = action.payload as
           | {
               item?: string;

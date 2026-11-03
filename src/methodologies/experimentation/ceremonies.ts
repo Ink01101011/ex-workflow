@@ -1,3 +1,4 @@
+import { readExperimentation, writeExperimentation } from "./record.ts";
 import { assertId, fail } from "../../core/errors.ts";
 import { estimateTokens } from "../../core/budget.ts";
 import { resourceCapsFor } from "../../core/planner.ts";
@@ -19,9 +20,10 @@ import type {
 import { dimensions, invalid, object, sha, text, validateExperimentationConfig } from "./config.ts";
 import type { ExperimentCandidate, ExperimentationState } from "./state.ts";
 export function experimentOf(s: WorkflowState): ExperimentationState {
-  if (s.methodology !== "experimentation" || !s.experimentation)
+  const e = readExperimentation(s);
+  if (s.methodology !== "experimentation" || !e)
     invalid("freeze an experimentation workflow first");
-  return s.experimentation;
+  return e;
 }
 export function authorize(s: WorkflowState, by: string, capability: Capability): void {
   if (!roleOf(s, by)?.capabilities.includes(capability))
@@ -55,7 +57,7 @@ function completedUsage(s: WorkflowState, item?: string, author?: string): Spent
         return sum;
       if (
         item === undefined &&
-        Object.values(s.experimentation?.candidates ?? {}).some((c) => c.item === p.id)
+        Object.values(readExperimentation(s)?.candidates ?? {}).some((c) => c.item === p.id)
       )
         return sum;
       return {
@@ -78,9 +80,10 @@ export function effectiveSpent(s: WorkflowState, c: ExperimentCandidate): Spent 
   return maximum(c.spent, completedUsage(s, c.item, c.author));
 }
 export function synchronizeBudget(s: WorkflowState, now?: string): WorkflowState {
-  if (!s.experimentation) return s;
+  const e = readExperimentation(s);
+  if (!e) return s;
   const usage = totalSpent(s);
-  const closed = ["stopped", "integrated"].includes(s.experimentation.status);
+  const closed = ["stopped", "integrated"].includes(e.status);
   return {
     ...s,
     iterations: s.iterations.map((it) =>
@@ -94,9 +97,7 @@ export function synchronizeBudget(s: WorkflowState, now?: string): WorkflowState
                   endedAt: it.endedAt ?? nowOf(now),
                   outcome:
                     it.outcome ??
-                    (s.experimentation!.status === "integrated"
-                      ? ("completed" as const)
-                      : ("cancelled" as const)),
+                    (e.status === "integrated" ? ("completed" as const) : ("cancelled" as const)),
                 }
               : {}),
           }
@@ -116,13 +117,13 @@ export function totalSpent(s: WorkflowState, e = experimentOf(s)): Spent {
   }, overhead);
 }
 export function runningCount(s: WorkflowState): number {
-  return Object.values(s.experimentation?.candidates ?? {}).filter(
+  return Object.values(readExperimentation(s)?.candidates ?? {}).filter(
     (c) => c.status === "running" || s.items[c.item]?.status === "in_progress",
   ).length;
 }
 /** Remaining token capacity after reserving estimates for currently dispatched work. */
 export function reservedTokens(s: WorkflowState): number {
-  return Object.values(s.experimentation?.candidates ?? {}).reduce((sum, c) => {
+  return Object.values(readExperimentation(s)?.candidates ?? {}).reduce((sum, c) => {
     const item = s.items[c.item];
     return sum + (item?.status === "in_progress" ? estimateTokens(s, item.weight, 1) : 0);
   }, 0);
@@ -148,7 +149,7 @@ export function candidateExhausted(s: WorkflowState, c: ExperimentCandidate): bo
   );
 }
 export function exhausted(s: WorkflowState): boolean {
-  if (!s.experimentation) return false;
+  if (!readExperimentation(s)) return false;
   const cfg = validateExperimentationConfig(s.config);
   const usage = totalSpent(s);
   return dimensions.some(
@@ -240,7 +241,7 @@ function reduce(
 export function experimentationCeremonies(): Record<string, Ceremony> {
   return {
     freeze: reduce("frozen", "facilitate", (s, i) => {
-      if (s.methodology !== "experimentation" || s.experimentation)
+      if (s.methodology !== "experimentation" || readExperimentation(s))
         invalid("freeze may run only once in experimentation");
       const cfg = validateExperimentationConfig(s.config);
       const baseSha = sha(i.baseSha, "baseSha");
@@ -280,21 +281,23 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
           spent: { tokens: 0, turns: 0, wallclockMs: 0 },
         };
       }
-      return {
-        ...s,
-        iterations: [
-          ...s.iterations,
-          {
-            id: "experiment",
-            goal: cfg.objective,
-            budget: { ...cfg.totalBudget },
-            spent: { tokens: 0, turns: 0, wallclockMs: 0 },
-            startedAt: nowOf(i.now),
-            committed: [...items],
-            carryover: [],
-          },
-        ],
-        experimentation: {
+      return writeExperimentation(
+        {
+          ...s,
+          iterations: [
+            ...s.iterations,
+            {
+              id: "experiment",
+              goal: cfg.objective,
+              budget: { ...cfg.totalBudget },
+              spent: { tokens: 0, turns: 0, wallclockMs: 0 },
+              startedAt: nowOf(i.now),
+              committed: [...items],
+              carryover: [],
+            },
+          ],
+        },
+        {
           status: "running",
           baseSha,
           harness,
@@ -302,7 +305,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
           released: [],
           overhead: { tokens: 0, turns: 0, wallclockMs: 0 },
         },
-      };
+      );
     }),
     provision: reduce("provisioned", "manage-flow", (s, i) => {
       let e = experimentOf(s);
@@ -316,7 +319,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       if (Object.values(e.candidates).some((x) => x.workspace === workspace))
         invalid("candidate workspaces must be distinct");
       e = put(e, { ...c, workspace, status: "ready" });
-      return { ...s, experimentation: e };
+      return writeExperimentation(s, e);
     }),
     start: reduce("started", "deliver", (s, i) => {
       const e = experimentOf(s);
@@ -364,7 +367,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       if (candidateExhausted(s, c)) invalid("candidate budget exhausted");
       let next = moveItem(s, c.item, { stage: "building", status: "in_progress" }, i.by, i.now);
       next = patchItem(next, c.item, (w) => ({ ...w, role: i.by }));
-      return { ...next, experimentation: put(e, { ...c, status: "running" }) };
+      return writeExperimentation(next, put(e, { ...c, status: "running" }));
     }),
     submit: reduce("submitted", "deliver", (s, i) => {
       const e = experimentOf(s);
@@ -403,7 +406,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         log,
       };
       if (over) updated.reason = "candidate budget exceeded";
-      let next: WorkflowState = { ...s, experimentation: put(e, updated) };
+      let next: WorkflowState = writeExperimentation(s, put(e, updated));
       next = addEvidence(next, c.item, { kind: "candidate-sha", ref: commit, by: i.by }, i.now);
       next = addEvidence(
         next,
@@ -428,16 +431,16 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const usage = spent(i);
       const log = text(i.log, "log");
       return closeItem(
-        {
-          ...s,
-          experimentation: put(e, {
+        writeExperimentation(
+          { ...s },
+          put(e, {
             ...c,
             status: i.status as ExperimentCandidate["status"],
             reason,
             spent: maximum(effectiveSpent(s, c), effectiveSpent(s, { ...c, spent: usage })),
             terminalLog: log,
           }),
-        },
+        ),
         c,
         i,
       );
@@ -471,14 +474,14 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const reproducible = bool(i, "reproducible");
       const evidence = text(i.evidence, "evidence");
       const validation = { sha: commit, harness, by: i.by, passed, reproducible, evidence };
-      let next: WorkflowState = {
-        ...s,
-        experimentation: put(charge(e, i), {
+      let next: WorkflowState = writeExperimentation(
+        { ...s },
+        put(charge(e, i), {
           ...c,
           status: passed && reproducible ? "validated" : "failed",
           validation,
         }),
-      };
+      );
       next = addEvidence(next, c.item, { kind: "validation", ref: evidence, by: i.by }, i.now);
       next = moveItem(
         next,
@@ -502,10 +505,11 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       if (
         dimensions.some((k) => cfg.totalBudget[k] !== undefined && usage[k] > cfg.totalBudget[k]!)
       )
-        return {
-          ...s,
-          experimentation: { ...e, status: "stopped", reason: "total budget exceeded" },
-        };
+        return writeExperimentation(s, {
+          ...e,
+          status: "stopped",
+          reason: "total budget exceeded",
+        });
       const eligible = all.filter((c) => {
         const used = effectiveSpent(s, c);
         return (
@@ -524,12 +528,12 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         return delta || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
       });
       const selected = eligible[0];
-      return {
-        ...s,
-        experimentation: selected
+      return writeExperimentation(
+        { ...s },
+        selected
           ? { ...e, status: "selected", selected: selected.id }
           : { ...e, status: "stopped", reason: "no eligible candidate" },
-      };
+      );
     }),
     integrate: reduce("integration-recorded", "control-change", (s, i) => {
       const e = experimentOf(s);
@@ -544,14 +548,11 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const integrationSha = sha(i.integrationSha, "integrationSha");
       if (e.integration?.sha === integrationSha && e.integration.targetSha === targetSha)
         invalid("integration already recorded");
-      return {
-        ...s,
-        experimentation: {
-          ...charge(e, i),
-          status: "integrating",
-          integration: { selectedSha, targetSha, sha: integrationSha, by: i.by },
-        },
-      };
+      return writeExperimentation(s, {
+        ...charge(e, i),
+        status: "integrating",
+        integration: { selectedSha, targetSha, sha: integrationSha, by: i.by },
+      });
     }),
     "validate-integration": reduce("integration-validated", "verify", (s, i) => {
       const e = experimentOf(s);
@@ -578,20 +579,17 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const over = dimensions.some(
         (k) => cfg.totalBudget[k] !== undefined && usage[k] > cfg.totalBudget[k]!,
       );
-      return {
-        ...s,
-        experimentation: {
-          ...charged,
-          status: passed && !over ? "integrated" : "stopped",
-          ...(passed && !over
-            ? {}
-            : { reason: over ? "total budget exceeded" : "integration validation failed" }),
-          integration: {
-            ...integration,
-            validation: { by: i.by, sha: commit, harness, evidence, passed },
-          },
+      return writeExperimentation(s, {
+        ...charged,
+        status: passed && !over ? "integrated" : "stopped",
+        ...(passed && !over
+          ? {}
+          : { reason: over ? "total budget exceeded" : "integration validation failed" }),
+        integration: {
+          ...integration,
+          validation: { by: i.by, sha: commit, harness, evidence, passed },
         },
-      };
+      });
     }),
     stop: reduce("stopped", "manage-flow", (s, i) => {
       const e = experimentOf(s);
@@ -614,10 +612,12 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       );
       let next = s;
       for (const c of Object.values(e.candidates)) if (!done(c)) next = closeItem(next, c, i);
-      return {
-        ...next,
-        experimentation: { ...charge(e, i), status: "stopped", reason, candidates },
-      };
+      return writeExperimentation(next, {
+        ...charge(e, i),
+        status: "stopped",
+        reason,
+        candidates,
+      });
     }),
     cleanup: reduce("cleanup-recorded", "manage-flow", (s, i) => {
       const e = experimentOf(s);
@@ -635,10 +635,10 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         new Set(i.workspaces).size !== i.workspaces.length
       )
         invalid("workspaces must list distinct owned unreleased identities");
-      return {
-        ...s,
-        experimentation: { ...e, released: [...e.released, ...(i.workspaces as string[])] },
-      };
+      return writeExperimentation(s, {
+        ...e,
+        released: [...e.released, ...(i.workspaces as string[])],
+      });
     }),
   };
 }

@@ -1,9 +1,10 @@
+import { readExperimentation } from "./record.ts";
 import type { WorkflowState } from "../../core/types.ts";
 import { effectiveSpent, totalSpent } from "./ceremonies.ts";
 export function experimentationMetrics(
   s: WorkflowState,
 ): Record<string, number | Record<string, number>> {
-  const e = s.experimentation;
+  const e = readExperimentation(s);
   const all = Object.values(e?.candidates ?? {});
   return {
     candidates: all.length,
@@ -17,7 +18,7 @@ export function experimentationMetrics(
   };
 }
 export function experimentationReport(s: WorkflowState): Record<string, unknown> {
-  const e = s.experimentation;
+  const e = readExperimentation(s);
   return {
     status: e?.status ?? "unfrozen",
     baseSha: e?.baseSha ?? null,
