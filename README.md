@@ -241,7 +241,7 @@ const queue = readExt<string[]>(state, "triage") ?? [];
 state = writeExt(state, "triage", [...queue, "T-1"]); // returns a new state; undefined removes the key
 ```
 
-Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and, for 1.x readers, mirror it to the deprecated top-level `state.investigation` / `state.experimentation`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
+Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and mirror it to the deprecated top-level `state.investigation` / `state.experimentation`, so SDK code that reads those fields keeps working. The mirrors are read-only: once `ext.<name>` exists the engine reads only it, and a write to the legacy field is ignored; write through `writeExt`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
 
 ## CLI reference (`exwf`)
 
@@ -447,7 +447,7 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 5
 
 - Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
-- **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still written, as mirrors of `ext.investigation` / `ext.experimentation`, so a 1.x reader of a saved state sees the same record; read them with `readExt` instead. 2.0 removes the mirrors.
+- **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still written, as read-only mirrors of `ext.investigation` / `ext.experimentation`, so SDK code reading `state.investigation` / `state.experimentation` sees the same record; once `ext.<name>` exists a write to the legacy field is ignored. Read with `readExt` and write with `writeExt` instead. The mirrors do not make a 1.2 state loadable by 1.1.x (see [Known limitations](#known-limitations)). 2.0 removes the mirrors.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Known limitations
@@ -455,6 +455,7 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 5
 Deliberate, documented, and stable within 1.x.
 
 - **A custom methodology's state cannot go through the file adapter or the CLI.** The state schema accepts only the five built-in names in `methodology`, so `saveState`, `loadState` and every `exwf` command refuse it. Keep such a state through the SDK and persist it yourself.
+- **No downgrade for Investigation and Experimentation.** 1.1.x cannot load a state that 1.2 wrote for those two methodologies: the 1.1 state schema rejects the `ext` field, and the legacy mirrors do not change that. Keep a run on 1.2 once 1.2 has saved it.
 
 - **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), delete it by hand.
 - **Blockers are owned by a human.** Finishing a follow-up does not clear its blocker; `unblock` does.

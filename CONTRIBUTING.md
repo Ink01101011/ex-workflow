@@ -20,7 +20,7 @@ The conventions below are what the 1.0.0 release (Phase 7, design spec §23) est
 
 ## 3. Code
 
-- Core is pure: no I/O, no clock, no randomness. The file adapter (`src/adapters`) is the only module that touches disk and the CLI is built on it. A new methodology never executes commands, creates workspaces or calls Git; it records what the host did.
+- Core is pure: no I/O, no randomness, and one clock read: `nowOf` in `src/core/state.ts` reads the clock only when the caller passes no `now` (`docs/principles.md` rule 1); pass `now` for deterministic output. The file adapter (`src/adapters`) is the only module that touches disk and the CLI is built on it. A new methodology never executes commands, creates workspaces or calls Git; it records what the host did.
 - A methodology is a directory `src/methodologies/<name>/` with `config.ts`, `state.ts`, `roles.ts`, `stages.ts`, `rules.ts`, `ceremonies.ts`, `metrics.ts` and an `index.ts` that exports the factory `<name>()`, the config validator `validate<Name>Config` and its public types. Rules and ceremonies go through `applyAction` so capability checks and rule hooks see them; a ceremony that bypasses it is a bug.
 - Every failure is a `WorkflowError` with a documented `code`, a `message` that names the offending value and a `fix` that says what to change. New codes are added to the README Errors list in the same change. Input validation answers `invalid-input`; config validation answers `config-invalid` naming the key and an example value.
 - Runtime dependencies stay at `ex-flow` and `exsorted`. A new dependency is an owner decision recorded in the spec.

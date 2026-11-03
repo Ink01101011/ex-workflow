@@ -34,7 +34,9 @@ export function readExt(state: WorkflowState<string>, key: string): unknown {
 /**
  * Returns a copy of `state` with `state.ext[key] = value`; `undefined` removes the key. For
  * `investigation` and `experimentation` the legacy top-level field is written (or removed) too,
- * so a 1.1 reader of the saved state sees the same record (dual-write, spec 26).
+ * so SDK code reading `state.investigation` / `state.experimentation` sees the same record
+ * (dual-write, spec 26). The mirror is read-only: once `ext.<key>` exists, `readExt` ignores the
+ * legacy field. It does not make the state loadable by 1.1.x, whose schema rejects `ext`.
  */
 export function writeExt<N extends string, K extends LegacyKey>(
   state: WorkflowState<N>,
