@@ -68,8 +68,11 @@ function importsOf(src) {
 /** Count of runtime (value) exports declared in a file. */
 function runtimeExports(src) {
   let n = 0;
-  n += [...src.matchAll(/^export\s+(?:async\s+)?(?:function\*?|class|const|let|var|enum)\s/gm)]
-    .length;
+  n += [...src.matchAll(/^export\s+(?:async\s+)?(?:class|const|let|var|enum)\s/gm)].length;
+  // an overloaded function declares its name once per signature; count it once
+  n += new Set(
+    [...src.matchAll(/^export\s+(?:async\s+)?function\*?\s+([\w$]+)/gm)].map((m) => m[1]),
+  ).size;
   n += [...src.matchAll(/^export\s+default\s/gm)].length;
   for (const m of src.matchAll(/^export\s+(type\s+)?\{([^}]*)\}/gm)) {
     if (m[1]) continue;

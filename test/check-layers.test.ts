@@ -82,3 +82,15 @@ test("more than 5 runtime exports warns without failing; index and type-only fil
   assert.match(r.err, /src\/core\/many\.ts has 6 runtime exports/);
   assert.doesNotMatch(r.err, /index\.ts|types\.ts/);
 });
+
+test("an overloaded function counts as one runtime export", () => {
+  const overloaded = [
+    "export function f(a: string): string;",
+    "export function f(a: number): number;",
+    "export function f(a: unknown): unknown { return a; }",
+  ].join("\n");
+  const five = ["a", "b", "c", "d"].map((n) => `export const ${n} = 1;`).join("\n");
+  const r = run({ "src/core/over.ts": `${overloaded}\n${five}\n` });
+  assert.equal(r.code, 0, r.err);
+  assert.doesNotMatch(r.err, /over\.ts/);
+});
