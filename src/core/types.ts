@@ -1,5 +1,5 @@
-import type { InvestigationState } from "../methodologies/investigation/state.ts";
-import type { ExperimentationState } from "../methodologies/experimentation/state.ts";
+import type { InvestigationState } from "./records/investigation.ts";
+import type { ExperimentationState } from "./records/experimentation.ts";
 
 // ---- items ------------------------------------------------------------
 export type ItemType =

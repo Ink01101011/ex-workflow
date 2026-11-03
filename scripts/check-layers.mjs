@@ -15,12 +15,8 @@ const LAYERS = ["core", "common", "interface", "methodologies"];
 const OUTER = LAYERS.length;
 
 // Known existing violations, matched on "<importing file> -> <imported file>" (src-relative, "/" separators).
-const ALLOWLIST = [
-  // removed in U3 (spec 26, extension state)
-  { from: "src/core/types.ts", to: "src/methodologies/investigation/state.ts" },
-  // removed in U3 (spec 26, extension state)
-  { from: "src/core/types.ts", to: "src/methodologies/experimentation/state.ts" },
-];
+// Empty since 1.2 U3: the record types moved to src/core/records/ (spec 26, "Record types").
+const ALLOWLIST = [];
 
 const rootArg = process.argv.indexOf("--root");
 const root = resolve(rootArg > 0 ? process.argv[rootArg + 1] : ".");
