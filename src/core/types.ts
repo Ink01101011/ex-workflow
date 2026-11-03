@@ -267,9 +267,14 @@ export type MethodologyName =
   | "waterfall"
   | "investigation"
   | "experimentation";
-export interface WorkflowState {
+/**
+ * Workflow state. `N` is the methodology name: the default `MethodologyName` (the five
+ * built-ins) keeps every 1.1 consumer's type check unchanged; a custom methodology types its
+ * state as `WorkflowState<"its-name">` (design spec section 26).
+ */
+export interface WorkflowState<N extends string = MethodologyName> {
   version: 1;
-  methodology: MethodologyName;
+  methodology: N;
   config: unknown;
   /** Standalone investigation lifecycle, created by its intake ceremony. */
   investigation?: InvestigationState;
@@ -304,13 +309,13 @@ export interface Violation {
   message: string;
   fix: string;
 }
-export interface Rule {
+export interface Rule<N extends string = MethodologyName> {
   id: string;
   severity: "error" | "warning";
-  check(state: WorkflowState, action: Action): Violation[];
+  check(state: WorkflowState<N>, action: Action): Violation[];
 }
-export interface ApplyResult {
-  state: WorkflowState;
+export interface ApplyResult<N extends string = MethodologyName> {
+  state: WorkflowState<N>;
   warnings: Violation[];
 }
 
@@ -354,7 +359,10 @@ export type CoreTerm =
   | "ceremony"
   | "gate";
 export type CeremonyInput = { by: string; now?: string } & Record<string, unknown>;
-export type Ceremony = (state: WorkflowState, input: CeremonyInput) => ApplyResult;
+export type Ceremony<N extends string = MethodologyName> = (
+  state: WorkflowState<N>,
+  input: CeremonyInput,
+) => ApplyResult<N>;
 
 export interface PlannerOptions {
   schedulerMode: "level" | "throughput";
@@ -383,38 +391,42 @@ export interface PlannerOptions {
   fallbackTokensPerWeight?: number;
 }
 
-export interface Methodology<C = unknown> {
-  name: MethodologyName;
+/**
+ * A methodology. `N` is its name: the default `MethodologyName` is the five built-ins; a custom
+ * methodology declares `Methodology<MyConfig, "my-name">` (design spec section 26).
+ */
+export interface Methodology<C = unknown, N extends string = MethodologyName> {
+  name: N;
   vocabulary: Record<CoreTerm, string>;
   validateConfig(config: unknown): C;
   defaultStages(config: C): Stage[];
   defaultRoles(config: C): Role[];
   requiredCapabilities: Capability[];
   exclusiveCapabilities: Capability[];
-  plannerOptions(state: WorkflowState): PlannerOptions;
-  candidates(state: WorkflowState): WorkItem[];
-  invariants(state: WorkflowState, item: WorkItem): string[];
-  ceremonies: Record<string, Ceremony>;
-  rules: Rule[];
-  metrics(state: WorkflowState): Record<string, number | number[] | Record<string, number>>;
+  plannerOptions(state: WorkflowState<N>): PlannerOptions;
+  candidates(state: WorkflowState<N>): WorkItem[];
+  invariants(state: WorkflowState<N>, item: WorkItem): string[];
+  ceremonies: Record<string, Ceremony<N>>;
+  rules: Rule<N>[];
+  metrics(state: WorkflowState<N>): Record<string, number | number[] | Record<string, number>>;
   humanDefaults: { gates: "all" | "none" | string[] };
   /** Called after complete(); lets the methodology react (e.g. close a sprint when the budget is gone). */
-  afterComplete?(state: WorkflowState, itemId: string, now: string): WorkflowState;
+  afterComplete?(state: WorkflowState<N>, itemId: string, now: string): WorkflowState<N>;
   /** Config keys that cannot change after init (changeConfig refuses them). */
   lockedConfigKeys?: string[];
   /** Called by changeConfig after the new config is stored; keeps derived state (e.g. stage policies) in step. */
-  afterConfigChange?(state: WorkflowState, now: string): WorkflowState;
+  afterConfigChange?(state: WorkflowState<N>, now: string): WorkflowState<N>;
   /** Methodology-specific status for hosts (e.g. cadences due); printed by `exwf status`. */
-  report?(state: WorkflowState): Record<string, unknown>;
+  report?(state: WorkflowState<N>): Record<string, unknown>;
   /** Called by decide() after a pending entry is resolved; lets the methodology act on it (e.g. baseline a phase gate, apply a change-request decision). */
   afterDecide?(
-    state: WorkflowState,
+    state: WorkflowState<N>,
     entry: PendingHuman,
     decision: "approve" | "reject",
     by: string,
     note: string,
     now: string,
-  ): WorkflowState;
+  ): WorkflowState<N>;
 }
 
 // ---- errors ----------------------------------------------------------

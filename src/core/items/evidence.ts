@@ -3,7 +3,7 @@ import type { Evidence, WorkItem, WorkflowState } from "../types.ts";
 import { getItem, putItem } from "./record.ts";
 
 /** Evidence recorded at or after the item's last `item.rework` event; evidence stays stored, but earlier entries no longer count toward policies or gates. Never-reworked items keep all evidence. */
-export function freshEvidence(state: WorkflowState, item: WorkItem): Evidence[] {
+export function freshEvidence(state: WorkflowState<string>, item: WorkItem): Evidence[] {
   // Event order, not timestamps: evidence recorded by an item.evidence event AFTER the item's last
   // item.rework event is fresh. Evidence entries are appended in the same order as those events, so
   // the fresh entries are the last `after` ones. Evidence attached by the rework completion itself
@@ -22,12 +22,12 @@ export function freshEvidence(state: WorkflowState, item: WorkItem): Evidence[] 
   return found ? item.evidence.slice(Math.max(0, item.evidence.length - after)) : item.evidence;
 }
 
-export function addEvidence(
-  state: WorkflowState,
+export function addEvidence<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   evidence: Omit<Evidence, "at">,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const item = getItem(state, id);
   const at = nowOf(now);
   const updated: WorkItem = { ...item, evidence: [...item.evidence, { ...evidence, at }] };

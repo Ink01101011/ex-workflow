@@ -5,12 +5,12 @@ import { roleOf } from "./lookup.ts";
 
 const OPEN: ReadonlySet<string> = new Set(["in_progress", "review", "blocked"]);
 
-export function registerRole(
-  state: WorkflowState,
+export function registerRole<N extends string>(
+  state: WorkflowState<N>,
   role: Role,
   by: string,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   assertId(role.id, "role id");
   if (roleOf(state, role.id))
     fail(
@@ -28,12 +28,12 @@ export function registerRole(
   );
 }
 
-export function retireRole(
-  state: WorkflowState,
+export function retireRole<N extends string>(
+  state: WorkflowState<N>,
   roleId: string,
   by: string,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   if (!roleOf(state, roleId))
     fail(
       "unknown-role",

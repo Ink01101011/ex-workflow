@@ -4,13 +4,13 @@ import type { ItemStatus, WorkItem, WorkflowState } from "../types.ts";
 import { isTerminalStage, nextStageOf, stageOf } from "./stage.ts";
 import { getItem, patchItem, putItem } from "./record.ts";
 
-export function moveItem(
-  state: WorkflowState,
+export function moveItem<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   to: { stage?: string; status: ItemStatus },
   by: string,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const item = getItem(state, id);
   const toStage = to.stage ?? item.stage;
   stageOf(state, toStage);
@@ -59,18 +59,21 @@ export function moveItem(
 }
 
 /** Entering a new stage is a new assignment: the role that finished the previous stage is cleared so the planner picks the right one (a reviewer, not the author). */
-export function clearRole(state: WorkflowState, itemId: string): WorkflowState {
+export function clearRole<N extends string>(
+  state: WorkflowState<N>,
+  itemId: string,
+): WorkflowState<N> {
   return stripItemFields(state, itemId, ["role"]);
 }
 
 /** Move an item to the next stage (done at the end, review/todo otherwise) and clear its role. */
-export function advanceItem(
-  state: WorkflowState,
+export function advanceItem<N extends string>(
+  state: WorkflowState<N>,
   itemId: string,
   by: string,
   wantsReview: boolean,
   now: string,
-): WorkflowState {
+): WorkflowState<N> {
   const item = getItem(state, itemId);
   const to = nextStageOf(state, item.stage);
   if (!to) return moveItem(state, itemId, { status: "done" }, by, now);
@@ -81,11 +84,11 @@ export function advanceItem(
 }
 
 /** Drop optional fields (iteration, role, ...) from one item; no event. */
-export function stripItemFields(
-  state: WorkflowState,
+export function stripItemFields<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   keys: Array<"iteration" | "role">,
-): WorkflowState {
+): WorkflowState<N> {
   return patchItem(state, id, (item) => {
     const copy = { ...item };
     for (const k of keys) delete copy[k];

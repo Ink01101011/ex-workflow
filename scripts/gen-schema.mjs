@@ -9,13 +9,21 @@ import { createGenerator } from "ts-json-schema-generator";
 
 const OUT = path.join("src", "schema", "generated.ts");
 const GROUPS = [
-  { name: "CORE", path: "src/core/types.ts", types: ["WorkflowState", "Role", "NewItem", "ItemPatch", "Handoff"] },
+  {
+    name: "CORE",
+    // the generic WorkflowState is reached through its alias in schema-roots.ts (see ALIASES)
+    path: "scripts/schema-roots.ts",
+    types: ["WorkflowStateRoot", "Role", "NewItem", "ItemPatch", "Handoff"],
+  },
   { name: "SCRUM", path: "src/methodologies/scrum/config.ts", types: ["ScrumConfig"] },
   { name: "KANBAN", path: "src/methodologies/kanban/config.ts", types: ["KanbanConfig"] },
   { name: "WATERFALL", path: "src/methodologies/waterfall/config.ts", types: ["WaterfallConfig"] },
   { name: "INVESTIGATION", path: "src/methodologies/investigation/config.ts", types: ["InvestigationConfig"] },
   { name: "EXPERIMENTATION", path: "src/methodologies/experimentation/config.ts", types: ["ExperimentationConfig"] },
 ];
+
+// root alias -> the definition it references; the alias entry itself is not emitted
+const ALIASES = { WorkflowStateRoot: "WorkflowState" };
 
 function definitionsFor(group) {
   const generator = createGenerator({
@@ -32,6 +40,11 @@ function definitionsFor(group) {
   for (const type of group.types) {
     const schema = generator.createSchema(type);
     for (const [name, def] of Object.entries(schema.definitions ?? {})) {
+      if (Object.hasOwn(ALIASES, name)) {
+        if (def.$ref !== `#/definitions/${ALIASES[name]}`)
+          throw new Error(`${group.path}: alias ${name} must reference ${ALIASES[name]}`);
+        continue;
+      }
       const seen = definitions[name];
       if (seen && JSON.stringify(seen) !== JSON.stringify(def))
         throw new Error(

@@ -7,29 +7,30 @@ import type {
   Action,
   ApplyResult,
   Methodology,
+  MethodologyName,
   Role,
   Stage,
   Violation,
   WorkflowState,
 } from "./types.ts";
 
-export function validateAction(
-  state: WorkflowState,
-  methodology: Methodology,
+export function validateAction<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   action: Action,
 ): Violation[] {
   const out: Violation[] = [];
-  for (const rule of [...coreRulesFor(methodology), ...methodology.rules])
+  for (const rule of [...coreRulesFor<N>(methodology), ...methodology.rules])
     out.push(...rule.check(state, action));
   return out;
 }
 
-export function applyAction(
-  state: WorkflowState,
-  methodology: Methodology,
+export function applyAction<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   action: Action,
-  reduce: (s: WorkflowState) => WorkflowState,
-): ApplyResult {
+  reduce: (s: WorkflowState<N>) => WorkflowState<N>,
+): ApplyResult<N> {
   const violations = validateAction(state, methodology, action);
   const errors = violations.filter((v) => v.severity === "error");
   if (errors.length) {
@@ -43,8 +44,8 @@ export function applyAction(
   return { state: reduce(state), warnings: violations.filter((v) => v.severity === "warning") };
 }
 
-export interface InitInput<C> {
-  methodology: Methodology<C>;
+export interface InitInput<C, N extends string = MethodologyName> {
+  methodology: Methodology<C, N>;
   config: unknown;
   roles?: Role[];
   stages?: Stage[];
@@ -52,7 +53,10 @@ export interface InitInput<C> {
   now?: string;
 }
 
-export function init<C>(input: InitInput<C>): ApplyResult {
+// The first overload is the 1.1 signature; a custom methodology name resolves to the second.
+export function init<C>(input: InitInput<C>): ApplyResult;
+export function init<C, N extends string>(input: InitInput<C, N>): ApplyResult<N>;
+export function init<C, N extends string>(input: InitInput<C, N>): ApplyResult<N> {
   const m = input.methodology;
   const config = m.validateConfig(input.config);
   const stages = input.stages ?? m.defaultStages(config);
@@ -63,17 +67,22 @@ export function init<C>(input: InitInput<C>): ApplyResult {
       : { methodology: m.name, config, stages, roles };
   const state = createState(stateInput);
   requireCapabilities(state, m.requiredCapabilities, m.exclusiveCapabilities);
-  return applyAction(state, m as Methodology, { type: "init", by: input.by ?? "system" }, (s) => s);
+  return applyAction(
+    state,
+    m as Methodology<unknown, N>,
+    { type: "init", by: input.by ?? "system" },
+    (s) => s,
+  );
 }
 
 /** Change the config between iterations: re-validated, recorded as config.changed, derived state kept in step by the methodology hook. */
-export function changeConfig(
-  state: WorkflowState,
-  methodology: Methodology,
+export function changeConfig<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   patch: Record<string, unknown>,
   by: string,
   now?: string,
-): ApplyResult {
+): ApplyResult<N> {
   if (
     typeof patch !== "object" ||
     patch === null ||

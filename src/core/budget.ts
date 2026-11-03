@@ -30,7 +30,7 @@ export function isExhausted(budget: Budget, spent: Required<Budget>): boolean {
 export type EstimateMode = "per-weight" | "per-call";
 
 export function estimateTokens(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   weight: number | undefined,
   fallbackPerWeight = 20000,
   mode: EstimateMode = "per-weight",

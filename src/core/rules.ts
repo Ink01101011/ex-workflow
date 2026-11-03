@@ -1,10 +1,12 @@
 import { authorOf } from "./gates.ts";
 import { approverIds } from "./roles/lookup.ts";
 import { separationLost } from "./roles/guards.ts";
-import type { Action, Handoff, Methodology, Rule, Violation } from "./types.ts";
+import type { Action, Handoff, Methodology, MethodologyName, Rule, Violation } from "./types.ts";
 
-export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilities">): Rule[] {
-  const separation: Rule = {
+export function coreRulesFor<N extends string = MethodologyName>(
+  methodology: Pick<Methodology, "requiredCapabilities">,
+): Rule<N>[] {
+  const separation: Rule<N> = {
     id: "separation-lost",
     severity: "warning",
     check(state, action: Action): Violation[] {
@@ -17,7 +19,7 @@ export function coreRulesFor(methodology: Pick<Methodology, "requiredCapabilitie
       }));
     },
   };
-  const coi: Rule = {
+  const coi: Rule<N> = {
     id: "conflict-of-interest",
     severity: "error",
     check(state, action: Action): Violation[] {

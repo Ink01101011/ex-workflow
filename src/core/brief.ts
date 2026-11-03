@@ -3,7 +3,15 @@ import { fail } from "./errors.ts";
 import { stageOf } from "./items/stage.ts";
 import { openIteration, plan, type PlanOptions, type PlanReason, type Skipped } from "./planner.ts";
 import { roleOf } from "./roles/lookup.ts";
-import type { Brief, Handoff, Methodology, Verdict, WorkItem, WorkflowState } from "./types.ts";
+import type {
+  Brief,
+  Handoff,
+  Methodology,
+  MethodologyName,
+  Verdict,
+  WorkItem,
+  WorkflowState,
+} from "./types.ts";
 
 interface CompletedPayload {
   id: string;
@@ -16,7 +24,7 @@ interface CompletedPayload {
 }
 
 function completions(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   itemId: string,
 ): Array<CompletedPayload & { at: string }> {
   const out: Array<CompletedPayload & { at: string }> = [];
@@ -27,14 +35,17 @@ function completions(
   return out;
 }
 
-function lastCompletion(state: WorkflowState, itemId: string): CompletedPayload | undefined {
+function lastCompletion(
+  state: WorkflowState<string>,
+  itemId: string,
+): CompletedPayload | undefined {
   const all = completions(state, itemId);
   return all[all.length - 1];
 }
 
-export function synthesizeBrief(
-  state: WorkflowState,
-  methodology: Methodology,
+export function synthesizeBrief<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   item: WorkItem,
 ): Brief {
   if (!item.role)
@@ -115,7 +126,7 @@ export function synthesizeBrief(
 
 /** Open questions of finished items: the last completion per item, verdict done/needs-review, with open_questions left unanswered. */
 export function openQuestions(
-  state: WorkflowState,
+  state: WorkflowState<string>,
 ): Array<{ item: string; role: string; questions: string[]; at: string }> {
   const last = new Map<string, CompletedPayload & { at: string }>();
   for (const ev of state.events) {
@@ -133,18 +144,18 @@ export function openQuestions(
     .map((p) => ({ item: p.id, role: p.role, questions: p.open_questions ?? [], at: p.at }));
 }
 
-export interface NextResult {
-  state: WorkflowState;
+export interface NextResult<N extends string = MethodologyName> {
+  state: WorkflowState<N>;
   briefs: Brief[];
   skipped: Skipped[];
   reason?: PlanReason;
 }
 
-export function next(
-  state: WorkflowState,
-  methodology: Methodology,
+export function next<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   opts: PlanOptions = {},
-): NextResult {
+): NextResult<N> {
   const res = plan(state, methodology, opts);
   const briefs = res.dispatched.map((d) =>
     synthesizeBrief(res.state, methodology, res.state.items[d.id]!),

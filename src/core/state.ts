@@ -5,15 +5,19 @@ export function nowOf(now?: string): string {
   return now ?? new Date().toISOString();
 }
 
-export interface CreateStateInput {
-  methodology: MethodologyName;
+export interface CreateStateInput<N extends string = MethodologyName> {
+  methodology: N;
   config: unknown;
   stages: Stage[];
   roles: Role[];
   now?: string;
 }
 
-export function createState(input: CreateStateInput): WorkflowState {
+// The first overload is the 1.1 signature: a built-in name keeps the plain WorkflowState type
+// instead of narrowing to one literal; a custom name gets WorkflowState<"its-name">.
+export function createState(input: CreateStateInput): WorkflowState;
+export function createState<N extends string>(input: CreateStateInput<N>): WorkflowState<N>;
+export function createState<N extends string>(input: CreateStateInput<N>): WorkflowState<N> {
   const seenStages = new Set<string>();
   for (const st of input.stages) {
     if (seenStages.has(st.id))
@@ -52,19 +56,19 @@ export function createState(input: CreateStateInput): WorkflowState {
   };
 }
 
-export function appendEvent(
-  state: WorkflowState,
+export function appendEvent<N extends string>(
+  state: WorkflowState<N>,
   type: string,
   by: string,
   payload: unknown,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const last = state.events[state.events.length - 1];
   const ev: Event = { seq: (last?.seq ?? 0) + 1, at: nowOf(now), type, by, payload };
   return { ...state, events: [...state.events, ev] };
 }
 
-export function lastEvent(state: WorkflowState, type?: string): Event | undefined {
+export function lastEvent(state: WorkflowState<string>, type?: string): Event | undefined {
   for (let i = state.events.length - 1; i >= 0; i--) {
     const ev = state.events[i]!;
     if (type === undefined || ev.type === type) return ev;

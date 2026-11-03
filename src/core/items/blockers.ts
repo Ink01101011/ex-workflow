@@ -4,14 +4,14 @@ import type { ItemStatus, Transition, WorkItem, WorkflowState } from "../types.t
 import { stageOf } from "./stage.ts";
 import { getItem, putItem } from "./record.ts";
 
-export function raiseBlocker(
-  state: WorkflowState,
+export function raiseBlocker<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   reason: string,
   owner: string,
   by: string,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const item = getItem(state, id);
   const at = nowOf(now);
   const blockerId = `${id}-b${item.blockers.length + 1}`;
@@ -48,14 +48,14 @@ function lastTransitionTo(item: WorkItem, status: ItemStatus): Transition | unde
   return undefined;
 }
 
-export function clearBlocker(
-  state: WorkflowState,
+export function clearBlocker<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   blockerId: string,
   by: string,
   now?: string,
   note?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const item = getItem(state, id);
   const idx = item.blockers.findIndex((b) => b.id === blockerId && !b.clearedAt);
   if (idx < 0)

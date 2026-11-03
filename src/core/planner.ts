@@ -7,16 +7,24 @@ import { stageOf } from "./items/stage.ts";
 import { evaluatePolicies } from "./policies.ts";
 import { roleOf, rolesWith } from "./roles/lookup.ts";
 import { appendEvent, nowOf } from "./state.ts";
-import type { ItemStatus, Iteration, Methodology, Role, WorkItem, WorkflowState } from "./types.ts";
+import type {
+  ItemStatus,
+  Iteration,
+  Methodology,
+  MethodologyName,
+  Role,
+  WorkItem,
+  WorkflowState,
+} from "./types.ts";
 
 type NodeData = { id: string };
 
-export function openIteration(state: WorkflowState): Iteration | undefined {
+export function openIteration(state: WorkflowState<string>): Iteration | undefined {
   return state.iterations.find((it) => it.endedAt === undefined);
 }
 
 export function assignRole(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   item: WorkItem,
   roleFor?: (item: WorkItem) => string | undefined,
 ): Role {
@@ -67,7 +75,7 @@ export function assignRole(
   return r;
 }
 
-export function resourceCapsFor(state: WorkflowState): Record<string, number> {
+export function resourceCapsFor(state: WorkflowState<string>): Record<string, number> {
   const caps: Record<string, number> = {};
   for (const r of Object.values(state.roles)) {
     if (r.maxConcurrent !== undefined) caps[r.resourceClass ?? r.id] = r.maxConcurrent;
@@ -77,7 +85,7 @@ export function resourceCapsFor(state: WorkflowState): Record<string, number> {
 
 export function toExNodes(
   items: WorkItem[],
-  state: WorkflowState,
+  state: WorkflowState<string>,
   priorityOf?: (item: WorkItem) => number | undefined,
   roleFor?: (item: WorkItem) => string | undefined,
 ): ExNode<NodeData>[] {
@@ -110,18 +118,18 @@ export interface Skipped {
   reason: "entry-policy" | "wip" | "resource-cap" | "budget";
   detail: string;
 }
-export interface PlanResult {
-  state: WorkflowState;
+export interface PlanResult<N extends string = MethodologyName> {
+  state: WorkflowState<N>;
   dispatched: WorkItem[];
   skipped: Skipped[];
   reason?: PlanReason;
 }
 
-export function plan(
-  state: WorkflowState,
-  methodology: Methodology,
+export function plan<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   opts: PlanOptions = {},
-): PlanResult {
+): PlanResult<N> {
   const at = nowOf(opts.now);
   // an item may enter the graph only if every dependency is done or is itself a candidate (so ex-flow orders it)
   const all = methodology.candidates(state);

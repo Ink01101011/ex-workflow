@@ -3,7 +3,7 @@ import { freshEvidence } from "./items/evidence.ts";
 import type { Policy, Violation, WorkItem, WorkflowState } from "./types.ts";
 
 export function evaluatePolicies(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   item: WorkItem,
   policies: Policy[],
 ): Violation[] {
@@ -71,7 +71,7 @@ export function evaluatePolicies(
 }
 
 export function assertPolicies(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   item: WorkItem,
   policies: Policy[],
   context: string,

@@ -29,7 +29,7 @@ const isObj = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
 const str = (x: unknown) => typeof x === "string";
 
-function validate(state: WorkflowState, handoff: Handoff, acc: Accounting): void {
+function validate(state: WorkflowState<string>, handoff: Handoff, acc: Accounting): void {
   const item = getItem(state, handoff.item);
   if (item.status !== "in_progress")
     fail(
@@ -113,20 +113,20 @@ function pulledFromStage(item: WorkItem): string {
 }
 
 /** Stage a reworked item returns to: the from.stage of the last dispatch made from a stage strictly before the current one (so a reviewer's rework lands where the work was pulled from), else the plain pulled-from stage. */
-function reworkStage(state: WorkflowState, item: WorkItem): string {
+function reworkStage(state: WorkflowState<string>, item: WorkItem): string {
   return lastDispatchBefore(state, item)?.from.stage ?? pulledFromStage(item);
 }
 
-export function complete(
-  state: WorkflowState,
-  methodology: Methodology,
+export function complete<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   handoff: Handoff,
   acc: Accounting,
   now?: string,
-): ApplyResult {
+): ApplyResult<N> {
   validate(state, handoff, acc);
   // the methodology's rules see the completion (applyAction validates, appends nothing, then reduces)
-  let result: ApplyResult | undefined;
+  let result: ApplyResult<N> | undefined;
   const ruled = applyAction(
     state,
     methodology,
@@ -139,17 +139,17 @@ export function complete(
   return { state: ruled.state, warnings: [...ruled.warnings, ...result!.warnings] };
 }
 
-function completeBody(
-  state: WorkflowState,
-  methodology: Methodology,
+function completeBody<N extends string>(
+  state: WorkflowState<N>,
+  methodology: Methodology<unknown, N>,
   handoff: Handoff,
   acc: Accounting,
   now?: string,
-): ApplyResult {
+): ApplyResult<N> {
   const at = nowOf(now);
   const id = handoff.item;
   const role = handoff.role;
-  let s: WorkflowState = { ...state, accounting: [...state.accounting, acc] };
+  let s: WorkflowState<N> = { ...state, accounting: [...state.accounting, acc] };
   for (const p of handoff.produced)
     s = addEvidence(s, id, { kind: p.kind, ref: p.ref, by: role }, at);
   const it = openIteration(s);

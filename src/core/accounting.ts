@@ -27,14 +27,14 @@ const pick = (a: Accounting) => ({
  * Rewrite one accounting line of an item (`line` is 1-based among the item's lines, default the last).
  * The owning iteration's spent follows the delta, open or closed; the event records before/after.
  */
-export function correctAccounting(
-  state: WorkflowState,
+export function correctAccounting<N extends string>(
+  state: WorkflowState<N>,
   itemId: string,
   patch: AccountingPatch,
   by: string,
   now?: string,
   line?: number,
-): WorkflowState {
+): WorkflowState<N> {
   getItem(state, itemId);
   const indexes: number[] = [];
   state.accounting.forEach((a, i) => {
@@ -119,7 +119,7 @@ export function correctAccounting(
     )
       owner = it;
   }
-  let s: WorkflowState = {
+  let s: WorkflowState<N> = {
     ...state,
     accounting: state.accounting.map((x, i) => (i === idx ? after : x)),
   };

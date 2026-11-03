@@ -1,7 +1,7 @@
 import { applyAgreement, retireAgreement } from "./agreements.ts";
 import { fail } from "./errors.ts";
 import { getItem } from "./items/record.ts";
-import type { Lesson, LessonChange, WorkflowState } from "./types.ts";
+import type { Lesson, LessonChange, MethodologyName, WorkflowState } from "./types.ts";
 
 const LESSON_SCOPES: readonly string[] = ["policy", "skill", "memory", "spec", "review"];
 const RETIRE_EXAMPLE: Readonly<Record<string, string>> = {
@@ -28,8 +28,8 @@ export interface LessonInput {
   dismiss: string[];
   retire: string[];
 }
-export interface LessonOutcome {
-  state: WorkflowState;
+export interface LessonOutcome<N extends string = MethodologyName> {
+  state: WorkflowState<N>;
   /** ids of the lessons created by this input */
   created: string[];
   /** created ids first, then the adopted refs */
@@ -42,7 +42,7 @@ export interface LessonOutcome {
 
 /** Validates the lesson keys of a retrospective-style ceremony input; every failure names the ceremony. */
 export function parseLessonInput(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   input: Record<string, unknown>,
   ceremony: string,
 ): LessonInput {
@@ -141,13 +141,13 @@ export function parseLessonInput(
  * Creates the new lessons as adopted, adopts and dismisses the referenced ones, retires agreements
  * and applies `agreement` changes; every other change kind goes to `applyChange` when given.
  */
-export function applyLessonInput(
-  state: WorkflowState,
+export function applyLessonInput<N extends string>(
+  state: WorkflowState<N>,
   parsed: LessonInput,
   by: string,
   now: string,
-  applyChange?: (s: WorkflowState, change: LessonChange) => WorkflowState | void,
-): LessonOutcome {
+  applyChange?: (s: WorkflowState<N>, change: LessonChange) => WorkflowState<N> | void,
+): LessonOutcome<N> {
   let s = state;
   const created: string[] = [];
   const adopted: string[] = [];

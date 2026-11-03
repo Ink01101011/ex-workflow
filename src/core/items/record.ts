@@ -5,20 +5,23 @@ import { stageOf } from "./stage.ts";
 
 export type { ItemPatch };
 
-export function putItem(state: WorkflowState, item: WorkItem): WorkflowState {
+export function putItem<N extends string>(
+  state: WorkflowState<N>,
+  item: WorkItem,
+): WorkflowState<N> {
   return { ...state, items: { ...state.items, [item.id]: item } };
 }
 
 /** Replace one item with `fn(item)`; no event. */
-export function patchItem(
-  state: WorkflowState,
+export function patchItem<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   fn: (item: WorkItem) => WorkItem,
-): WorkflowState {
+): WorkflowState<N> {
   return putItem(state, fn(getItem(state, id)));
 }
 
-export function getItem(state: WorkflowState, id: string): WorkItem {
+export function getItem(state: WorkflowState<string>, id: string): WorkItem {
   const it = Object.hasOwn(state.items, id) ? state.items[id] : undefined;
   if (!it)
     fail(
@@ -30,7 +33,7 @@ export function getItem(state: WorkflowState, id: string): WorkItem {
   return it;
 }
 
-function assertKnownItems(state: WorkflowState, ids: string[], what: string): void {
+function assertKnownItems(state: WorkflowState<string>, ids: string[], what: string): void {
   const missing = ids.filter((d) => !Object.hasOwn(state.items, d));
   if (missing.length)
     fail(
@@ -41,12 +44,12 @@ function assertKnownItems(state: WorkflowState, ids: string[], what: string): vo
     );
 }
 
-export function addItem(
-  state: WorkflowState,
+export function addItem<N extends string>(
+  state: WorkflowState<N>,
   input: NewItem,
   by: string,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   assertId(input.id, "item id");
   if (Object.hasOwn(state.items, input.id))
     fail(
@@ -103,13 +106,13 @@ export function addItem(
   );
 }
 
-export function editItem(
-  state: WorkflowState,
+export function editItem<N extends string>(
+  state: WorkflowState<N>,
   id: string,
   patch: ItemPatch,
   by: string,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const item = getItem(state, id);
   if (patch.dependsOn) assertKnownItems(state, patch.dependsOn, `item "${id}".dependsOn`);
   if (patch.affects) assertKnownItems(state, patch.affects, `item "${id}".affects`);

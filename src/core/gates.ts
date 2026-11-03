@@ -21,7 +21,10 @@ export type GateResult =
   | { outcome: "fail"; violations: Violation[] };
 
 /** Last in_progress dispatch made from a stage that comes STRICTLY BEFORE the item's current stage in `state.stages` order (unknown stage ids count as not-before). */
-export function lastDispatchBefore(state: WorkflowState, item: WorkItem): Transition | undefined {
+export function lastDispatchBefore(
+  state: WorkflowState<string>,
+  item: WorkItem,
+): Transition | undefined {
   const order = new Map(state.stages.map((s, i) => [s.id, i] as const));
   const here = order.get(item.stage);
   if (here === undefined) return undefined;
@@ -34,7 +37,7 @@ export function lastDispatchBefore(state: WorkflowState, item: WorkItem): Transi
 }
 
 /** Role that did the work the gate guards: the last dispatch made from a stage strictly before the current one (so a reviewer dispatched into the gated stage is not its author); else the last dispatch of any stage; undefined if never dispatched. */
-export function authorOf(state: WorkflowState, item: WorkItem): string | undefined {
+export function authorOf(state: WorkflowState<string>, item: WorkItem): string | undefined {
   const before = lastDispatchBefore(state, item);
   if (before) return before.by;
   for (let i = item.transitions.length - 1; i >= 0; i--) {
@@ -45,7 +48,7 @@ export function authorOf(state: WorkflowState, item: WorkItem): string | undefin
 }
 
 export function checkGate(
-  state: WorkflowState,
+  state: WorkflowState<string>,
   item: WorkItem,
   gate: Gate,
   by: string,
@@ -98,15 +101,15 @@ export function checkGate(
   return needsHuman ? { outcome: "human" } : { outcome: "pass" };
 }
 
-export function raisePending(
-  state: WorkflowState,
+export function raisePending<N extends string>(
+  state: WorkflowState<N>,
   pending: Omit<PendingHuman, "id" | "raisedAt">,
   now?: string,
-): WorkflowState {
+): WorkflowState<N> {
   const at = nowOf(now);
   const id = `p${state.events.filter((e) => e.type === "pending.raised").length + 1}`;
   const entry: PendingHuman = { ...pending, id, raisedAt: at };
-  let next: WorkflowState = { ...state, pending: [...state.pending, entry] };
+  let next: WorkflowState<N> = { ...state, pending: [...state.pending, entry] };
   if (pending.item) {
     const item = getItem(next, pending.item);
     if (item.status !== "awaiting_human")
@@ -121,15 +124,15 @@ export function raisePending(
   );
 }
 
-export function decide(
-  state: WorkflowState,
+export function decide<N extends string>(
+  state: WorkflowState<N>,
   pendingId: string,
   decision: "approve" | "reject",
   by: string,
   note: string,
   now?: string,
-  methodology?: Methodology,
-): WorkflowState {
+  methodology?: Methodology<unknown, N>,
+): WorkflowState<N> {
   if (decision !== "approve" && decision !== "reject")
     fail(
       "invalid-input",
@@ -162,7 +165,10 @@ export function decide(
       );
   }
   const at = nowOf(now);
-  let next: WorkflowState = { ...state, pending: state.pending.filter((p) => p.id !== pendingId) };
+  let next: WorkflowState<N> = {
+    ...state,
+    pending: state.pending.filter((p) => p.id !== pendingId),
+  };
   next = appendEvent(
     next,
     "pending.decided",
