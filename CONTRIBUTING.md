@@ -64,7 +64,7 @@ The conventions below are what the 1.0.0 release (Phase 7, design spec §23) est
 8. the counts in Compatibility and versioning (schema documents, event kinds);
 9. the accepted limitations as bullets under Known limitations, written as what happens and what to do.
 
-The Install line names the supported `latest` version. The README does not carry roadmaps, status history, publishing notes or the reasoning behind a limitation; the spec and the CHANGELOG do.
+The README has no Install section; the npm page carries the install command and the supported version. The README does not carry roadmaps, status history, publishing notes or the reasoning behind a limitation; the spec and the CHANGELOG do.
 
 **CHANGELOG** has one entry per release, `## X.Y.Z (YYYY-MM-DD)`, newest first:
 

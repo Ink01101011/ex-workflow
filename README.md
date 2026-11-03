@@ -11,34 +11,24 @@
 
 ## Contents
 
-1. [Install](#install)
-2. [Pick a methodology](#pick-a-methodology)
-3. [How a run works](#how-a-run-works)
-4. [Quick start: Scrum](#quick-start-scrum)
-5. [Quick start: Kanban](#quick-start-kanban)
-6. [Quick start: Waterfall](#quick-start-waterfall)
-7. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
-8. [Persisting state](#persisting-state)
-9. [CLI reference (`exwf`)](#cli-reference-exwf)
-10. [Configuration](#configuration)
-11. [Ceremonies](#ceremonies)
-12. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
-13. [Errors](#errors)
-14. [JSON Schema](#json-schema)
-15. [Package entry points](#package-entry-points)
-16. [Compatibility and versioning](#compatibility-and-versioning)
-17. [Known limitations](#known-limitations)
-18. [Contributing](#contributing)
-19. [License](#license)
-
-## Install
-
-```sh
-npm install ex-workflow      # or: pnpm add ex-workflow
-npx exwf                     # prints the CLI usage
-```
-
-`latest` is the supported line (1.1.1). Pre-releases, when any, are published under the `stage` dist-tag.
+1. [Pick a methodology](#pick-a-methodology)
+2. [How a run works](#how-a-run-works)
+3. [Quick start: Scrum](#quick-start-scrum)
+4. [Quick start: Kanban](#quick-start-kanban)
+5. [Quick start: Waterfall](#quick-start-waterfall)
+6. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
+7. [Persisting state](#persisting-state)
+8. [CLI reference (`exwf`)](#cli-reference-exwf)
+9. [Configuration](#configuration)
+10. [Ceremonies](#ceremonies)
+11. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
+12. [Errors](#errors)
+13. [JSON Schema](#json-schema)
+14. [Package entry points](#package-entry-points)
+15. [Compatibility and versioning](#compatibility-and-versioning)
+16. [Known limitations](#known-limitations)
+17. [Contributing](#contributing)
+18. [License](#license)
 
 ## Pick a methodology
 
