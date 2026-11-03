@@ -332,3 +332,37 @@ test("withStateLock gives up on a stale lock it cannot remove, naming the lock (
   }
   assert.ok(calls >= 1 && calls <= 4, `bounded unlink attempts, got ${calls}`);
 });
+
+test("withStateLock reports fs failures as WorkflowError, not a raw fs error (U9 P5)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  // .workflow is a file, so the lock directory cannot be created
+  await writeFile(path.join(root, ".workflow"), "not a directory");
+  await assert.rejects(
+    withStateLock(root, async () => "never"),
+    (e: unknown) => {
+      assert.ok(e instanceof WorkflowError, String(e));
+      assert.equal(e.code, "invalid-input");
+      assert.match(e.message, /state\.lock/);
+      return true;
+    },
+  );
+  const root2 = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  mock.method(fsp, "open", async () => {
+    throw Object.assign(new Error("EACCES simulated"), { code: "EACCES" });
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withStateLock(root2, async () => "never"),
+      (e: unknown) => {
+        assert.ok(e instanceof WorkflowError, String(e));
+        assert.equal(e.code, "invalid-input");
+        assert.match(e.message, /EACCES simulated/);
+        return true;
+      },
+    );
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});

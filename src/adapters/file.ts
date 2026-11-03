@@ -43,7 +43,13 @@ export async function withStateLock<T>(
 ): Promise<T> {
   const { retries = 40, intervalMs = 50, staleMs = 60_000 } = opts;
   const lock = path.join(root, WORKFLOW_DIR, "state.lock");
-  await mkdir(path.dirname(lock), { recursive: true });
+  const fsFail = (e: unknown): never =>
+    fail(
+      "invalid-input",
+      `cannot create ${lock}: ${(e as Error).message}`,
+      `check that ${path.dirname(lock)} is a writable directory`,
+    );
+  await mkdir(path.dirname(lock), { recursive: true }).catch(fsFail);
   let held = false;
   for (let attempt = 0; !held; attempt++) {
     try {
@@ -52,7 +58,7 @@ export async function withStateLock<T>(
       await fh.close();
       held = true;
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") fsFail(e);
       const snap = await stat(lock).catch(() => undefined);
       if (snap && Date.now() - snap.mtimeMs > staleMs) {
         // bounded like the wait below: a stale lock that unlink cannot remove must not loop forever
