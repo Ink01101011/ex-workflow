@@ -8,6 +8,7 @@
 - Every error names the rule, the item and a concrete fix.
 - Two runtime dependencies: [`ex-flow`](https://www.npmjs.com/package/ex-flow) (DAG planner) and [`exsorted`](https://www.npmjs.com/package/exsorted).
 - Works with any LLM host: the engine hands out **briefs**, you run them with your agents and hand back **handoffs**.
+- The invariants the engine enforces, each with the file and the test behind it: [docs/principles.md](docs/principles.md).
 
 ## Contents
 
@@ -33,18 +34,16 @@
 
 ## Pick a methodology
 
-| | Scrum (`ex-workflow/scrum`) | Kanban (`ex-workflow/kanban`) | Waterfall (`ex-workflow/waterfall`) |
-|---|---|---|---|
-| Fits | a goal delivered in budgeted sprints | a continuous flow of requests | a phase-gated project with a frozen baseline |
-| Unit of control | sprint budget (tokens, turns, wall-clock) | WIP limits per column, classes of service | human-approved gate per phase |
-| Flow | backlog → sprint → review | options → ready → dev → review → done | work → review → done, inside each phase |
-| Preset roles | product-owner, scrum-master, developer | service-request-manager, service-delivery-manager, worker | project-manager, business-analyst, architect, developer, qa, release-manager |
-| Ceremonies | refine, plan, commit, uncommit, daily, review, retro, cancel | replenishment, delivery-planning, service-delivery-review, operations-review, risk-review, strategy-review | kickoff, gateReview, changeControlBoard, phaseRetrospective |
-| Metrics | velocity, cost per point, budget utilisation | lead and cycle time, throughput, WIP, flow efficiency, aging, CFD, SLE compliance | phase report, requirement coverage, traceability matrix |
+| | Scrum (`ex-workflow/scrum`) | Kanban (`ex-workflow/kanban`) | Waterfall (`ex-workflow/waterfall`) | Investigation (`ex-workflow/investigation`) | Experimentation (`ex-workflow/experimentation`) |
+|---|---|---|---|---|---|
+| Fits | a goal delivered in budgeted sprints | a continuous flow of requests | a phase-gated project with a frozen baseline | one bounded question answered from preregistered experiments | competing candidates compared against a frozen baseline and harness |
+| Unit of control | sprint budget (tokens, turns, wall-clock) | WIP limits per column, classes of service | human-approved gate per phase | round limit and budget, independent replay and conclusion review | concurrency cap, per-candidate and total budgets, independent validation at the exact SHA |
+| Flow | backlog → sprint → review | options → ready → dev → review → done | work → review → done, inside each phase | intake → execute → observed | candidate → building → validation → done |
+| Preset roles | product-owner, scrum-master, developer | service-request-manager, service-delivery-manager, worker | project-manager, business-analyst, architect, developer, qa, release-manager | investigator, replay-worker, conclusion-reviewer | coordinator, builder, validator, integrator |
+| Ceremonies | refine, plan, commit, uncommit, daily, review, retro, cancel | replenishment, delivery-planning, service-delivery-review, operations-review, risk-review, strategy-review | kickoff, gateReview, changeControlBoard, phaseRetrospective | intake, hypotheses, preregister, observe, update-belief, conclude, review-conclusion, stop | freeze, provision, start, submit, validate, compare, integrate, validate-integration, terminate, stop, cleanup |
+| Metrics | velocity, cost per point, budget utilisation | lead and cycle time, throughput, WIP, flow efficiency, aging, CFD, SLE compliance | phase report, requirement coverage, traceability matrix | rounds, valid and invalid runs | candidates by outcome, spent, tokens per candidate |
 
-Scrum, Kanban and Waterfall share one core: the same item model, the same brief and handoff contracts, the same CLI and the same `.workflow/` files. Roles are data (capabilities, not names), so you can replace or extend the presets with `exwf role add`.
-
-Standalone [Investigation and Experimentation](#standalone-investigation-and-experimentation) add evidence-driven inquiry and isolated candidate comparison; each runs in its own state.
+All five share one core: the same item model, the same brief and handoff contracts, the same CLI and the same `.workflow/` files. Roles are data (capabilities, not names), so you can replace or extend the presets with `exwf role add`. [Investigation and Experimentation](#standalone-investigation-and-experimentation) each run alone, in their own `.workflow/`.
 
 ## How a run works
 
@@ -430,7 +429,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 
 | Import | Contents |
 |---|---|
-| `ex-workflow` | core: `init`, `addItem`, `editItem`, `next`, `complete`, `decide`, `applyAction`, `validateAction`, `changeConfig`, `correctAccounting`, `clearBlocker`, `raiseBlocker`, `registerRole`, `openQuestions`, `readExt`, `writeExt`, `WorkflowError`, `VERSION`, … |
+| `ex-workflow` | core: `init`, `addItem`, `editItem`, `next`, `complete`, `decide`, `applyAction`, `validateAction`, `changeConfig`, `correctAccounting`, `clearBlocker`, `raiseBlocker`, `registerRole`, `openQuestions`, `readExt`, `writeExt`, `independenceConflicts`, `frozenChanges`, `WorkflowError`, `VERSION`, … |
 | `ex-workflow/scrum` | `scrum()`, `scrumMetrics`, `dailyReport`, `closeSprint`, presets |
 | `ex-workflow/kanban` | `kanban()`, `board`, `kanbanMetrics`, `opsReport`, `riskReport`, `cadencesDue`, `DEFAULT_COLUMNS`, presets |
 | `ex-workflow/waterfall` | `waterfall()`, `phaseReport`, `traceabilityMatrix`, `waterfallMetrics`, `baselinePhase`, `reopenPhases`, presets |
@@ -442,7 +441,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
 | `ex-workflow/types` | every public type |
 
-Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 51–68 kB minified.
+Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 53–69 kB minified.
 
 ## Compatibility and versioning
 
