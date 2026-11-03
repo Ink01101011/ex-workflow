@@ -11,6 +11,7 @@ import * as waterfall from "../src/methodologies/waterfall/index.ts";
 import * as investigation from "../src/methodologies/investigation/index.ts";
 import * as experimentation from "../src/methodologies/experimentation/index.ts";
 import * as schema from "../src/schema/index.ts";
+import * as registry from "../src/registry.ts";
 import { USAGE } from "../src/cli/commands.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -87,6 +88,7 @@ function current() {
       "./investigation": names(investigation),
       "./experimentation": names(experimentation),
       "./schema": names(schema),
+      "./registry": names(registry),
     },
     usage: [...USAGE],
     schemaDocuments: sorted(

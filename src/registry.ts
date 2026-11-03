@@ -1,6 +1,6 @@
-// The methodology registry with the five built-ins pre-registered (design spec section 26,
-// "Registry placement"). Outer ring: src/interface/ may not import src/methodologies/, so the
-// built-in table lives here. The registry is created on first use, so a bundle that never
+// The `ex-workflow/registry` entry: the methodology registry with the five built-ins
+// pre-registered (design spec section 26, "Registry placement"). Outer ring: src/interface/ may
+// not import src/methodologies/, so the built-in table lives here; the CLI resolves through it. The registry is created on first use, so a bundle that never
 // calls these functions does not keep the built-in factories.
 import { experimentation } from "./methodologies/experimentation/index.ts";
 import { investigation } from "./methodologies/investigation/index.ts";
@@ -13,6 +13,8 @@ import {
   type MethodologyRegistry,
 } from "./interface/registry.ts";
 import type { Methodology } from "./core/types.ts";
+
+export type { MethodologyFactory, MethodologyRegistry };
 
 let registry: MethodologyRegistry | undefined;
 const builtins = (): MethodologyRegistry =>

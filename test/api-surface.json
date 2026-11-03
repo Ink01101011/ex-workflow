@@ -179,7 +179,8 @@
       "validate",
       "waterfallConfigSchema",
       "workflowStateSchema"
-    ]
+    ],
+    "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"]
   },
   "usage": [
     "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",

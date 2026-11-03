@@ -132,6 +132,16 @@
         "types": "./dist/experimentation/index.d.cts",
         "default": "./dist/experimentation/index.cjs"
       }
+    },
+    "./registry": {
+      "import": {
+        "types": "./dist/registry/index.d.ts",
+        "default": "./dist/registry/index.mjs"
+      },
+      "require": {
+        "types": "./dist/registry/index.d.cts",
+        "default": "./dist/registry/index.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -162,6 +172,9 @@
       ],
       "experimentation": [
         "dist/experimentation/index.d.ts"
+      ],
+      "registry": [
+        "dist/registry/index.d.ts"
       ]
     }
   },

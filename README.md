@@ -221,7 +221,17 @@ function triage(): Methodology<TriageConfig, "triage"> {
 let { state } = init({ methodology: triage(), config: { queue: "support" } }); // WorkflowState<"triage">
 ```
 
-Custom methodologies are SDK-only in 1.2: the CLI resolves `exwf init <name>` through a registry holding the five built-ins and cannot load third-party modules, and the file adapter only accepts the five built-in names (see [Known limitations](#known-limitations)).
+`ex-workflow/registry` maps names to factories, with the five built-ins pre-registered. Use it to resolve a loaded state's `methodology`, or to register your own:
+
+```ts
+import { methodologyFactory, registerMethodology, registeredMethodologies } from "ex-workflow/registry";
+
+const m = methodologyFactory(state.methodology)(); // unknown name: invalid-input, the fix lists the known names
+registerMethodology("triage", triage); // a taken name, a built-in included: invalid-input
+registeredMethodologies(); // ["scrum", "kanban", "waterfall", "investigation", "experimentation", "triage"]
+```
+
+The registry is its own entry so that importing core plus one methodology does not pull in the other four. Custom methodologies are SDK-only in 1.2: `exwf init <name>` resolves through the same registry, but the `exwf` binary cannot load third-party modules, and the file adapter only accepts the five built-in names (see [Known limitations](#known-limitations)).
 
 A methodology keeps its own record in `state.ext`, keyed by its name, and reads and writes it only through the accessors:
 
@@ -426,6 +436,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/waterfall` | `waterfall()`, `phaseReport`, `traceabilityMatrix`, `waterfallMetrics`, `baselinePhase`, `reopenPhases`, presets |
 | `ex-workflow/investigation` | `investigation()`, `validateInvestigationConfig`; types `InvestigationConfig`, `InvestigationState`, `InvestigationRound`, `InvestigationConclusion`, `Hypothesis`, `Experiment`, `Observation`, `BeliefUpdate` |
 | `ex-workflow/experimentation` | `experimentation()`, `validateExperimentationConfig`, `experimentationCeremonies`, `experimentationMetrics`, `experimentationReport`, `experimentationRoles`, `experimentationRules`, `experimentationStages`; types `ExperimentationConfig`, `ExperimentationState`, `ExperimentCandidate` |
+| `ex-workflow/registry` | `registerMethodology`, `methodologyFactory`, `registeredMethodologies` (five built-ins pre-registered); types `MethodologyFactory`, `MethodologyRegistry` |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
 | `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |

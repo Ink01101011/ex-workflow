@@ -10,6 +10,7 @@ export default defineConfig({
     "investigation/index": "src/methodologies/investigation/index.ts",
     "experimentation/index": "src/methodologies/experimentation/index.ts",
     "schema/index": "src/schema/index.ts",
+    "registry/index": "src/registry.ts",
     "adapters/index": "src/adapters/index.ts",
     "cli/index": "src/cli/index.ts",
     "cli/bin": "src/cli/bin.ts",
