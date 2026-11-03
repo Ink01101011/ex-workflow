@@ -1,5 +1,6 @@
 import { readInvestigation } from "./record.ts";
 import { executionActors } from "./execution.ts";
+import { independenceConflicts } from "../../common/independence.ts";
 import type { Rule } from "../../core/types.ts";
 export function investigationRules(): Rule[] {
   return [
@@ -14,7 +15,7 @@ export function investigationRules(): Rule[] {
         const prior = readInvestigation(s)?.rounds.find(
           (r) => r.experiment.id === round?.experiment.replayOf,
         );
-        return prior && executionActors(s, prior.item).includes(a.by)
+        return prior && independenceConflicts(a.by, executionActors(s, prior.item)).length
           ? [
               {
                 rule: "independent-replay",

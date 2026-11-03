@@ -1,5 +1,7 @@
 import { readInvestigation, writeInvestigation } from "./record.ts";
 import { executionActors, freshOutputRefs } from "./execution.ts";
+import { independenceConflicts } from "../../common/independence.ts";
+import { frozenChanges } from "../../common/frozen.ts";
 import { fail } from "../../core/errors.ts";
 import { roleOf } from "../../core/roles/lookup.ts";
 import { addItem } from "../../core/items/record.ts";
@@ -30,7 +32,7 @@ function reject(s: WorkflowState, name: string, message: string, fix: string): n
   });
 }
 const sameHypothesis = (a: Hypothesis | undefined, b: Hypothesis | undefined) =>
-  !!a && !!b && a.id === b.id && a.claim === b.claim && a.falsifiedBy === b.falsifiedBy;
+  !!a && !!b && !frozenChanges(a, b, ["id", "claim", "falsifiedBy"]).length;
 const text = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 const refs = (v: unknown): v is string[] =>
   Array.isArray(v) && v.length > 0 && v.every(text) && new Set(v).size === v.length;
@@ -261,7 +263,7 @@ export function investigationCeremonies(
         const prior = x.rounds.find((r) => r.experiment.id === e.replayOf && r.result?.valid);
         if (
           !prior ||
-          prior.experiment.procedureRef !== e.procedureRef ||
+          frozenChanges(prior.experiment, e, ["procedureRef"]).length ||
           prior.hypotheses.length !== x.hypotheses.length ||
           x.hypotheses.some(
             (h) =>
@@ -273,7 +275,7 @@ export function investigationCeremonies(
           e.predictions.some(
             (p) =>
               !prior.experiment.predictions.some(
-                (q) => q.hypothesis === p.hypothesis && q.prediction === p.prediction,
+                (q) => !frozenChanges(q, p, ["hypothesis", "prediction"]).length,
               ),
           )
         )
@@ -508,7 +510,7 @@ export function investigationCeremonies(
       );
     }),
     "review-conclusion": make("review-conclusion", "review", "review", (s, x, i, bad) => {
-      if (x.contributors.includes(i.by))
+      if (independenceConflicts(i.by, x.contributors).length)
         bad(
           "conclusion reviewer must be independent of investigation contributors",
           "use a review-capable role that did not contribute to or execute this investigation",
@@ -566,12 +568,13 @@ export function investigationCeremonies(
           !x.rounds.some(
             (r) =>
               r.experiment.replayOf &&
-              !executionActors(s, r.item).some((actor) =>
+              !independenceConflicts(
+                executionActors(s, r.item),
                 executionActors(
                   s,
                   x.rounds.find((p) => p.experiment.id === r.experiment.replayOf)!.item,
-                ).includes(actor),
-              ) &&
+                ),
+              ).length &&
               sameHypothesis(
                 r.hypotheses.find((h) => h.id === x.conclusion!.supportedHypothesis),
                 x.rounds.at(-1)!.hypotheses.find((h) => h.id === x.conclusion!.supportedHypothesis),

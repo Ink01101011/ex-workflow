@@ -1,4 +1,6 @@
 import { readExperimentation, writeExperimentation } from "./record.ts";
+import { independenceConflicts } from "../../common/independence.ts";
+import { frozenChanges } from "../../common/frozen.ts";
 import { assertId, fail } from "../../core/errors.ts";
 import { estimateTokens } from "../../core/budget.ts";
 import { resourceCapsFor } from "../../core/planner.ts";
@@ -314,7 +316,10 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       const c = candidate(e, i);
       if (c.status !== "pending") invalid("candidate already provisioned");
       const workspace = text(i.workspace, "workspace");
-      if (sha(i.baseSha, "baseSha") !== e.baseSha || i.isolated !== true)
+      if (
+        frozenChanges({ baseSha: e.baseSha }, { baseSha: sha(i.baseSha, "baseSha") }).length ||
+        i.isolated !== true
+      )
         invalid("provision must attest isolated workspace at the exact frozen base SHA");
       if (Object.values(e.candidates).some((x) => x.workspace === workspace))
         invalid("candidate workspaces must be distinct");
@@ -382,9 +387,8 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         invalid("only the running candidate author may submit once");
       const commit = sha(i.sha);
       if (
-        i.workspace !== c.workspace ||
-        i.harness !== e.harness ||
-        sha(i.baseSha, "baseSha") !== e.baseSha
+        frozenChanges({ workspace: c.workspace, harness: e.harness }, i).length ||
+        frozenChanges({ baseSha: e.baseSha }, { baseSha: sha(i.baseSha, "baseSha") }).length
       )
         invalid("submission provenance must match frozen base SHA, harness and owned workspace");
       if (typeof i.score !== "number" || !Number.isFinite(i.score)) invalid("score must be finite");
@@ -450,7 +454,8 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
       active(e);
       const c = candidate(e, i);
       if (c.status !== "submitted") invalid("validate an unvalidated submitted candidate");
-      if (i.by === c.author) invalid("candidate author cannot independently validate");
+      if (independenceConflicts(i.by, [c.author]).length)
+        invalid("candidate author cannot independently validate");
       // A candidate the planner dispatched is completed by its builder (handoff and accounting)
       // before validation; one the host started by ceremony has no completion to wait for.
       const started = s.events.some(
@@ -468,7 +473,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         );
       const commit = sha(i.sha);
       const harness = text(i.harness, "harness");
-      if (commit !== c.sha || harness !== e.harness)
+      if (frozenChanges({ sha: c.sha, harness: e.harness }, { sha: commit, harness }).length)
         invalid("validation must match exact submitted SHA and frozen harness");
       const passed = bool(i, "passed");
       const reproducible = bool(i, "reproducible");
@@ -516,8 +521,7 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
           c.status === "validated" &&
           c.validation?.passed &&
           c.validation.reproducible &&
-          c.validation.sha === c.sha &&
-          c.validation.harness === e.harness &&
+          !frozenChanges({ sha: c.sha, harness: e.harness }, c.validation).length &&
           !dimensions.some(
             (k) => cfg.candidateBudget[k] !== undefined && used[k] > cfg.candidateBudget[k]!,
           )
@@ -560,15 +564,16 @@ export function experimentationCeremonies(): Record<string, Ceremony> {
         invalid("record integration before fresh validation");
       const integration = e.integration;
       const c = e.candidates[e.selected]!;
-      if (i.by === integration.by || i.by === c.author)
+      if (independenceConflicts(i.by, [integration.by, c.author]).length)
         invalid("integration validation must be independent of candidate author and integrator");
       const commit = sha(i.sha);
       const targetSha = sha(i.targetSha, "targetSha");
       const harness = text(i.harness, "harness");
       if (
-        commit !== integration.sha ||
-        targetSha !== integration.targetSha ||
-        harness !== e.harness
+        frozenChanges(
+          { sha: integration.sha, targetSha: integration.targetSha, harness: e.harness },
+          { sha: commit, targetSha, harness },
+        ).length
       )
         invalid("fresh validation must match integration SHA, current target SHA and harness");
       const passed = bool(i, "passed");

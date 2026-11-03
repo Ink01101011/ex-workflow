@@ -1,6 +1,7 @@
 import { readInvestigation } from "./record.ts";
 import { fail } from "../../core/errors.ts";
 import { executionActors } from "./execution.ts";
+import { independenceConflicts } from "../../common/independence.ts";
 import { closeInvestigation, investigationCeremonies } from "./ceremonies.ts";
 import { investigationRules } from "./rules.ts";
 import { investigationRoles } from "./roles.ts";
@@ -50,7 +51,9 @@ export function investigation(): Methodology<InvestigationConfig> {
               )
             : undefined) ??
           roles.find(
-            (role) => role.capabilities.includes("deliver") && !excluded.includes(role.id),
+            (role) =>
+              role.capabilities.includes("deliver") &&
+              !independenceConflicts(role.id, excluded).length,
           );
         if (!selected)
           fail(
