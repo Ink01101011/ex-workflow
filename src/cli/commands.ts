@@ -27,11 +27,7 @@ import {
   roleSchema,
 } from "../schema/index.ts";
 import { lastEvent } from "../core/state.ts";
-import { scrum } from "../methodologies/scrum/index.ts";
-import { kanban } from "../methodologies/kanban/index.ts";
-import { waterfall } from "../methodologies/waterfall/index.ts";
-import { investigation } from "../methodologies/investigation/index.ts";
-import { experimentation } from "../methodologies/experimentation/index.ts";
+import { methodologyFactory, registeredMethodologies } from "../registry.ts";
 import type {
   Accounting,
   Action,
@@ -43,13 +39,11 @@ import type {
   WorkflowState,
 } from "../core/types.ts";
 
-const METHODOLOGIES: Record<string, () => Methodology> = {
-  scrum: scrum as () => Methodology,
-  kanban: kanban as () => Methodology,
-  waterfall: waterfall as () => Methodology,
-  investigation: investigation as () => Methodology,
-  experimentation: experimentation as () => Methodology,
-};
+/** The factory `name` resolves to in the methodology registry (built-ins pre-registered), if any. */
+const factoryOf = (name: string | undefined): (() => Methodology) | undefined =>
+  name !== undefined && registeredMethodologies().includes(name)
+    ? (methodologyFactory(name) as () => Methodology)
+    : undefined;
 
 export const USAGE = [
   "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",
@@ -105,14 +99,12 @@ async function readJson<T>(file: string): Promise<T> {
 }
 
 function methodologyOf(state: WorkflowState): Methodology {
-  const f = Object.hasOwn(METHODOLOGIES, state.methodology)
-    ? METHODOLOGIES[state.methodology]
-    : undefined;
+  const f = factoryOf(state.methodology);
   if (!f)
     fail(
       "config-invalid",
       `methodology "${state.methodology}" is not available in this build`,
-      `available: ${Object.keys(METHODOLOGIES).join(", ")}`,
+      `available: ${registeredMethodologies().join(", ")}`,
     );
   return f();
 }
@@ -169,7 +161,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
   switch (cmd) {
     case "init": {
       const [name] = rest;
-      const f = name && Object.hasOwn(METHODOLOGIES, name) ? METHODOLOGIES[name] : undefined;
+      const f = factoryOf(name);
       if (!f || !flags["config"]) return { exit: 2, out: { ok: false, usage: USAGE } };
       try {
         await stat(statePath(cwd));

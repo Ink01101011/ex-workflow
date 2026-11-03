@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runCommand, parseArgs } from "./commands.ts";
+import { runCommand, parseArgs, USAGE } from "./commands.ts";
 
 async function project() {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-cli-"));
@@ -38,6 +38,15 @@ test("init refuses twice and unknown commands exit 2", async () => {
   assert.equal(out<{ error: { code: string } }>(r2).error.code, "invalid-input");
   assert.equal((await runCommand(["frobnicate"], root)).exit, 2);
   assert.equal((await runCommand([], root)).exit, 2);
+});
+
+test("init resolves the name through the methodology registry; an unregistered name prints usage", async () => {
+  const { root, cfg } = await project();
+  for (const name of ["triage", "__proto__", "constructor", ""]) {
+    const r = await runCommand(["init", name, "--config", cfg], root);
+    assert.equal(r.exit, 2, name);
+    assert.deepEqual(out<{ usage: string[] }>(r).usage, USAGE);
+  }
 });
 
 test("full loop: add → ceremony plan → next → complete → status → board → metrics", async () => {
