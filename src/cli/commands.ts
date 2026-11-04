@@ -279,11 +279,12 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       const role = flags["role"] ?? handoff.role;
       const durationMs = num(flags, "duration-ms");
       const startedAt = Date.parse(now) - durationMs;
-      // a negative duration stays accounting-invalid (complete); only refuse what Date cannot hold
-      if (!Number.isSafeInteger(durationMs) || Number.isNaN(new Date(startedAt).getTime()))
+      // a negative duration stays accounting-invalid (complete) and a fraction is accepted, as in
+      // 1.1; only refuse what Date cannot hold
+      if (!Number.isFinite(durationMs) || Number.isNaN(new Date(startedAt).getTime()))
         fail(
           "invalid-input",
-          `--duration-ms must be a whole number of milliseconds (got ${flags["duration-ms"]})`,
+          `--duration-ms must be a number of milliseconds that dates the start (got ${flags["duration-ms"]})`,
           "pass the measured wall-clock time in ms, e.g. --duration-ms 42000",
         );
       const acc: Accounting = {
