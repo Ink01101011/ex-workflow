@@ -34,11 +34,12 @@ export function readExt(state: WorkflowState<string>, key: string): unknown {
 }
 
 /**
- * Returns a copy of `state` with `state.ext[key] = value`; `undefined` removes the key. For
- * `investigation` and `experimentation` the legacy top-level field is written (or removed) too,
- * so SDK code reading `state.investigation` / `state.experimentation` sees the same record
- * (dual-write, spec 26). The mirror is read-only: once `ext.<key>` exists, `readExt` ignores the
- * legacy field. It does not make the state loadable by 1.1.x, whose schema rejects `ext`.
+ * Returns a copy of `state` with `state.ext[key] = value`; `undefined` removes the key, and adds
+ * no empty `ext` to a state that had none. For `investigation` and `experimentation` the legacy
+ * top-level field is written (or removed) too, so SDK code reading `state.investigation` /
+ * `state.experimentation` sees the same record (dual-write, spec 26). The mirror is read-only:
+ * once `ext.<key>` exists, `readExt` ignores the legacy field. It does not make the state
+ * loadable by 1.1.x, whose schema rejects `ext`.
  */
 export function writeExt<N extends string, K extends LegacyKey>(
   state: WorkflowState<N>,
@@ -62,6 +63,8 @@ export function writeExt<N extends string>(
     if (value === undefined) delete target[key];
     else target[key] = value;
   }
+  // removing a key from a state that had no ext adds no empty ext (U11 N4)
+  if (!state.ext && !Object.keys(ext).length) delete out.ext;
   return out as unknown as WorkflowState<N>;
 }
 

@@ -53,6 +53,24 @@ test("writeExt with undefined removes the key and its legacy mirror", () => {
   assert.equal(Object.hasOwn(s2, "investigation"), false);
 });
 
+test("writeExt with undefined on a state without ext adds no empty ext (U11 N4)", () => {
+  const s0 = base();
+  const s1 = writeExt(s0, "triage", undefined);
+  assert.equal(Object.hasOwn(s1, "ext"), false);
+  assert.notEqual(s1, s0, "still a copy");
+  // a 1.1 state with only the legacy field: removing it leaves neither field
+  const legacy = { ...base(), investigation: record("observe") };
+  const s2 = writeExt(legacy, "investigation", undefined);
+  assert.equal(Object.hasOwn(s2, "ext"), false);
+  assert.equal(Object.hasOwn(s2, "investigation"), false);
+  assert.deepEqual(legacy.investigation, record("observe"), "the input state is not mutated");
+  // an ext the input already had stays, even when it ends up empty
+  const s3 = writeExt(writeExt(base(), "triage", 1), "triage", undefined);
+  assert.deepEqual(s3.ext, {});
+  const s4 = writeExt({ ...base(), ext: {} }, "triage", undefined);
+  assert.deepEqual(s4.ext, {});
+});
+
 test("readExt reads ext first and falls back to the legacy field of a 1.1 state", () => {
   const legacy: WorkflowState = { ...base(), investigation: record("observe") };
   assert.deepEqual(readExt(legacy, "investigation"), record("observe"));
