@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
+  checkBriefNames,
   loadState,
   saveBrief,
   saveHandoff,
@@ -252,6 +253,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (flags["fallback-tokens-per-weight"])
         opts.fallbackTokensPerWeight = num(flags, "fallback-tokens-per-weight");
       const res = planNext(state, methodologyOf(state), opts);
+      // every brief name is checked first, so a refusal writes none of the batch
+      await checkBriefNames(
+        cwd,
+        res.briefs.map((b) => b.item.id),
+      );
       // briefs first: a crash then leaves an orphan brief (overwritten next dispatch), never a dispatched item without one
       for (const b of res.briefs) await saveBrief(cwd, b);
       await saveState(cwd, res.state);

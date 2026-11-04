@@ -1142,3 +1142,46 @@ test("complete accepts a fractional --duration-ms as 1.1.1 did; account takes th
     );
   }
 });
+
+async function plannedProject(ids: string[]) {
+  const p = await project();
+  await runCommand(["init", "scrum", "--config", p.cfg], p.root);
+  for (const id of ids) {
+    const f = await p.w("it.json", { id, title: id, weight: 1, acceptance: ["ok"] });
+    assert.equal((await runCommand(["add", f, "--by", "product-owner"], p.root)).exit, 0, id);
+  }
+  const plan = await p.w("plan.json", { goal: "g", items: ids });
+  assert.equal(
+    (await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], p.root)).exit,
+    0,
+  );
+  return p;
+}
+
+test("next dispatches items whose ids 1.1.1 accepted but the creation rules now refuse (U14 F3)", async () => {
+  const long = `L${"x".repeat(199)}`;
+  const { root } = await plannedProject(["A-1", "B-1", "C-1"]);
+  // an older release stored these ids; rename them in the file as such a release would have written them
+  const file = path.join(root, ".workflow", "state.json");
+  const raw = await readFile(file, "utf8");
+  await writeFile(file, raw.replaceAll('"B-1"', '"aux.1"').replaceAll('"C-1"', `"${long}"`));
+  const r = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  const files = await readdir(path.join(root, ".workflow", "briefs"));
+  assert.deepEqual(files.sort(), ["A-1.json", `${long}.json`, "aux.1.json"].sort());
+});
+
+test("next checks every brief name first: a case clash in one batch writes no brief and names the item (U14 F3)", async () => {
+  const { root } = await plannedProject(["A-1", "Cart-1", "cart-1"]);
+  const before = await readFile(path.join(root, ".workflow", "state.json"), "utf8");
+  const r = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(r.exit, 1, JSON.stringify(r.out));
+  const err = out<{ error: { code: string; message: string; fix: string } }>(r).error;
+  assert.equal(err.code, "invalid-input");
+  assert.match(err.message, /cart-1/);
+  assert.match(err.message, /Cart-1/);
+  assert.match(err.fix, /letter case/);
+  const briefs = await readdir(path.join(root, ".workflow", "briefs")).catch(() => []);
+  assert.deepEqual(briefs, []);
+  assert.equal(await readFile(path.join(root, ".workflow", "state.json"), "utf8"), before);
+});

@@ -394,10 +394,11 @@ test("saveState and loadState refuse a deeply nested value with invalid-input, n
 test("saveBrief and saveHandoff check the id and the seq; loadState checks each item's key (U9 P8)", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
   const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
-  // ids inside .workflow but not valid ids: the path check alone let these through
-  await assert.rejects(saveBrief(root, { item: { id: "CON" } } as never), invalid);
-  await assert.rejects(saveBrief(root, { item: { id: "a/b" } } as never), invalid);
-  await assert.rejects(saveHandoff(root, { ...h, item: "toString" }, 1), invalid);
+  // ids inside .workflow but not safe file names: the path check alone let these through
+  for (const id of ["a/b", "a..b", ".x", "", 7])
+    await assert.rejects(saveBrief(root, { item: { id } } as never), invalid, String(id));
+  await assert.rejects(saveHandoff(root, { ...h, item: "a/b" }, 1), invalid);
+  await assert.rejects(saveHandoff(root, { ...h, item: "a..b" }, 1), invalid);
   for (const seq of [-1, 1.5, Number.NaN, 2 ** 53])
     await assert.rejects(saveHandoff(root, h, seq), invalid);
   assert.deepEqual(await readdir(root), []);
@@ -410,6 +411,18 @@ test("saveBrief and saveHandoff check the id and the seq; loadState checks each 
     loadState(root),
     (e: unknown) => invalid(e) && /items\/A/.test((e as Error).message),
   );
+});
+
+test("saveBrief and saveHandoff keep the 1.1 file-name rule for existing ids (U14 F3)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
+  // ids 1.1.1 stored and wrote files for; assertId now refuses them at creation only
+  for (const id of ["aux.1", "toString", `L${"x".repeat(199)}`]) {
+    await saveBrief(root, { item: { id } } as never);
+    await saveHandoff(root, { ...h, item: id }, 1);
+  }
+  assert.equal((await readdir(path.join(root, ".workflow", "briefs"))).length, 3);
+  assert.equal((await readdir(path.join(root, ".workflow", "handoffs"))).length, 3);
 });
 
 test("saveBrief refuses an id that differs from an existing brief's only in case (U9 P6)", async () => {

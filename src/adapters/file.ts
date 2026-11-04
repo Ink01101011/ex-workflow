@@ -1,7 +1,7 @@
 import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { assertId, fail } from "../core/errors.ts";
+import { fail } from "../core/errors.ts";
 import { withLegacyMirrors, withoutLegacyMirrors } from "../interface/ext.ts";
 import { assertValid, roleSchema, workflowStateSchema } from "../schema/index.ts";
 import type { Brief, Handoff, Role, WorkflowState } from "../core/types.ts";
@@ -212,27 +212,52 @@ function inWorkflowDir(root: string, file: string): string {
   return file;
 }
 
-export async function saveBrief(root: string, brief: Brief): Promise<string> {
-  assertId(brief.item.id, "brief item id");
-  const name = `${brief.item.id}.json`;
-  const dir = path.join(root, WORKFLOW_DIR, "briefs");
-  // on a case-insensitive file system A.json and a.json are one file: refuse the second item
-  const clash = (await readdir(dir).catch(() => [] as string[])).find(
-    (f) => f !== name && f.toLowerCase() === name.toLowerCase(),
-  );
-  if (clash)
+// the 1.1 id rule: what makes `<id>.json` a safe file name. The creation-time rules of assertId
+// (length cap, device and prototype names) are not applied to an id that already exists (spec 26)
+function assertFileId(id: unknown, what: string): asserts id is string {
+  if (typeof id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id.includes(".."))
     fail(
       "invalid-input",
-      `brief item id "${brief.item.id}" differs only in case from the brief ${clash} of another item`,
-      "give ids that differ by more than letter case (briefs/<id>.json would overwrite each other on macOS and Windows)",
+      `${what} ${JSON.stringify(id)} cannot be a file name under ${WORKFLOW_DIR}/`,
+      "use letters, digits, - _ . and no .. (e.g. CART-12)",
     );
-  const file = inWorkflowDir(root, path.join(dir, name));
+}
+
+/**
+ * Checks the brief file names of one dispatch before any is written: each id is a safe file name
+ * and no two names, in the batch or against `.workflow/briefs/`, differ only in letter case.
+ */
+export async function checkBriefNames(root: string, ids: readonly string[]): Promise<void> {
+  const dir = path.join(root, WORKFLOW_DIR, "briefs");
+  const taken = new Map<string, string>();
+  for (const f of await readdir(dir).catch(() => [] as string[])) taken.set(f.toLowerCase(), f);
+  const batch = new Map<string, string>();
+  for (const id of ids) {
+    assertFileId(id, "brief item id");
+    const name = `${id}.json`;
+    inWorkflowDir(root, path.join(dir, name));
+    const key = name.toLowerCase();
+    // on a case-insensitive file system A.json and a.json are one file
+    const clash = [batch.get(key), taken.get(key)].find((f) => f !== undefined && f !== name);
+    if (clash)
+      fail(
+        "invalid-input",
+        `item "${id}": its brief ${name} differs only in letter case from the brief ${clash} of another item`,
+        "give ids that differ by more than letter case (re-add one item under a new id); briefs/<id>.json would overwrite each other on macOS and Windows",
+      );
+    batch.set(key, name);
+  }
+}
+
+export async function saveBrief(root: string, brief: Brief): Promise<string> {
+  await checkBriefNames(root, [brief.item.id]);
+  const file = path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`);
   await writeAtomic(file, JSON.stringify(brief, null, 2) + "\n");
   return file;
 }
 
 export async function saveHandoff(root: string, handoff: Handoff, seq: number): Promise<string> {
-  assertId(handoff.item, "handoff item id");
+  assertFileId(handoff.item, "handoff item id");
   if (!Number.isSafeInteger(seq) || seq < 0)
     fail(
       "invalid-input",
