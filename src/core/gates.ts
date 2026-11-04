@@ -24,6 +24,11 @@ export type GateResult =
 export function lastDispatchBefore(
   state: WorkflowState<string>,
   item: WorkItem,
+): Transition | undefined;
+export function lastDispatchBefore(state: WorkflowState, item: WorkItem): Transition | undefined;
+export function lastDispatchBefore(
+  state: WorkflowState<string>,
+  item: WorkItem,
 ): Transition | undefined {
   const order = new Map(state.stages.map((s, i) => [s.id, i] as const));
   const here = order.get(item.stage);
@@ -37,6 +42,8 @@ export function lastDispatchBefore(
 }
 
 /** Role that did the work the gate guards: the last dispatch made from a stage strictly before the current one (so a reviewer dispatched into the gated stage is not its author); else the last dispatch of any stage; undefined if never dispatched. */
+export function authorOf(state: WorkflowState<string>, item: WorkItem): string | undefined;
+export function authorOf(state: WorkflowState, item: WorkItem): string | undefined;
 export function authorOf(state: WorkflowState<string>, item: WorkItem): string | undefined {
   const before = lastDispatchBefore(state, item);
   if (before) return before.by;
@@ -47,6 +54,13 @@ export function authorOf(state: WorkflowState<string>, item: WorkItem): string |
   return undefined;
 }
 
+export function checkGate(
+  state: WorkflowState<string>,
+  item: WorkItem,
+  gate: Gate,
+  by: string,
+): GateResult;
+export function checkGate(state: WorkflowState, item: WorkItem, gate: Gate, by: string): GateResult;
 export function checkGate(
   state: WorkflowState<string>,
   item: WorkItem,

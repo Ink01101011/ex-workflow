@@ -9,6 +9,8 @@ export function hasCapability(role: Role, cap: Capability): boolean {
   return role.capabilities.includes(cap);
 }
 
+export function rolesWith(state: WorkflowState<string>, cap: Capability): Role[];
+export function rolesWith(state: WorkflowState, cap: Capability): Role[];
 export function rolesWith(state: WorkflowState<string>, cap: Capability): Role[] {
   return Object.values(state.roles).filter((r) => hasCapability(r, cap));
 }
@@ -30,6 +32,8 @@ export function approverIds(
     .map((r) => r.id);
 }
 
+export function approversFor(state: WorkflowState<string>, gateId: string): Role[];
+export function approversFor(state: WorkflowState, gateId: string): Role[];
 export function approversFor(state: WorkflowState<string>, gateId: string): Role[] {
   return rolesWith(state, "approve-gate").filter((r) => r.canApprove.includes(gateId));
 }

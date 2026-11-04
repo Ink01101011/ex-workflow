@@ -37,6 +37,18 @@ export type EstimateMode = "per-weight" | "per-call";
 export function estimateTokens(
   state: WorkflowState<string>,
   weight: number | undefined,
+  fallbackPerWeight?: number,
+  mode?: EstimateMode,
+): number;
+export function estimateTokens(
+  state: WorkflowState,
+  weight: number | undefined,
+  fallbackPerWeight?: number,
+  mode?: EstimateMode,
+): number;
+export function estimateTokens(
+  state: WorkflowState<string>,
+  weight: number | undefined,
   fallbackPerWeight = 20000,
   mode: EstimateMode = "per-weight",
 ): number {

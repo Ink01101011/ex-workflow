@@ -6,6 +6,16 @@ export function evaluatePolicies(
   state: WorkflowState<string>,
   item: WorkItem,
   policies: Policy[],
+): Violation[];
+export function evaluatePolicies(
+  state: WorkflowState,
+  item: WorkItem,
+  policies: Policy[],
+): Violation[];
+export function evaluatePolicies(
+  state: WorkflowState<string>,
+  item: WorkItem,
+  policies: Policy[],
 ): Violation[] {
   const out: Violation[] = [];
   const fresh = freshEvidence(state, item);
@@ -70,6 +80,18 @@ export function evaluatePolicies(
   return out;
 }
 
+export function assertPolicies(
+  state: WorkflowState<string>,
+  item: WorkItem,
+  policies: Policy[],
+  context: string,
+): void;
+export function assertPolicies(
+  state: WorkflowState,
+  item: WorkItem,
+  policies: Policy[],
+  context: string,
+): void;
 export function assertPolicies(
   state: WorkflowState<string>,
   item: WorkItem,

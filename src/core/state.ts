@@ -84,6 +84,8 @@ export function appendEvent<N extends string>(
   return { ...state, events: [...state.events, ev] };
 }
 
+export function lastEvent(state: WorkflowState<string>, type?: string): Event | undefined;
+export function lastEvent(state: WorkflowState, type?: string): Event | undefined;
 export function lastEvent(state: WorkflowState<string>, type?: string): Event | undefined {
   for (let i = state.events.length - 1; i >= 0; i--) {
     const ev = state.events[i]!;

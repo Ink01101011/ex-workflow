@@ -19,10 +19,22 @@ import type {
 
 type NodeData = { id: string };
 
+export function openIteration(state: WorkflowState<string>): Iteration | undefined;
+export function openIteration(state: WorkflowState): Iteration | undefined;
 export function openIteration(state: WorkflowState<string>): Iteration | undefined {
   return state.iterations.find((it) => it.endedAt === undefined);
 }
 
+export function assignRole(
+  state: WorkflowState<string>,
+  item: WorkItem,
+  roleFor?: (item: WorkItem) => string | undefined,
+): Role;
+export function assignRole(
+  state: WorkflowState,
+  item: WorkItem,
+  roleFor?: (item: WorkItem) => string | undefined,
+): Role;
 export function assignRole(
   state: WorkflowState<string>,
   item: WorkItem,
@@ -75,6 +87,8 @@ export function assignRole(
   return r;
 }
 
+export function resourceCapsFor(state: WorkflowState<string>): Record<string, number>;
+export function resourceCapsFor(state: WorkflowState): Record<string, number>;
 export function resourceCapsFor(state: WorkflowState<string>): Record<string, number> {
   const caps: Record<string, number> = {};
   for (const r of Object.values(state.roles)) {
@@ -83,6 +97,18 @@ export function resourceCapsFor(state: WorkflowState<string>): Record<string, nu
   return caps;
 }
 
+export function toExNodes(
+  items: WorkItem[],
+  state: WorkflowState<string>,
+  priorityOf?: (item: WorkItem) => number | undefined,
+  roleFor?: (item: WorkItem) => string | undefined,
+): ExNode<NodeData>[];
+export function toExNodes(
+  items: WorkItem[],
+  state: WorkflowState,
+  priorityOf?: (item: WorkItem) => number | undefined,
+  roleFor?: (item: WorkItem) => string | undefined,
+): ExNode<NodeData>[];
 export function toExNodes(
   items: WorkItem[],
   state: WorkflowState<string>,

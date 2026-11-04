@@ -6,6 +6,28 @@ import assert from "node:assert/strict";
 import {
   addEvidence,
   addItem,
+  approversFor,
+  assertPolicies,
+  assignRole,
+  authorOf,
+  canDo,
+  checkGate,
+  estimateTokens,
+  evaluatePolicies,
+  getItem,
+  isTerminalStage,
+  lastDispatchBefore,
+  lastEvent,
+  nextStageOf,
+  openIteration,
+  openQuestions,
+  requireCap,
+  requireCapabilities,
+  resourceCapsFor,
+  rolesWith,
+  separationLost,
+  stageOf,
+  toExNodes,
   appendEvent,
   applyAction,
   applyAgreement,
@@ -54,7 +76,7 @@ import {
   type WorkflowState,
 } from "../src/index.ts";
 import type { CreateStateInput } from "../src/core/state.ts";
-import { scrum } from "../src/methodologies/scrum/index.ts";
+import { scrum, canDo as scrumCanDo } from "../src/methodologies/scrum/index.ts";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -213,6 +235,37 @@ expectType<Equal<Parameters<typeof coreRulesFor>, [methodology: Pick<M, "require
   true,
 );
 expectType<Equal<ReturnType<typeof coreRulesFor>, Rule[]>>(true);
+
+// 1c. The read-only kernel functions take WorkflowState<string>, and repeat their 1.1 signature
+// `(state: WorkflowState, ...)` as their last overload, so Parameters<typeof fn>[0] reads
+// WorkflowState again (spec 26, "Reader overloads (U13)").
+expectType<Equal<Parameters<typeof approversFor>[0], S>>(true);
+expectType<Equal<Parameters<typeof assertPolicies>[0], S>>(true);
+expectType<Equal<Parameters<typeof assignRole>[0], S>>(true);
+expectType<Equal<Parameters<typeof authorOf>[0], S>>(true);
+expectType<Equal<Parameters<typeof canDo>[0], S>>(true);
+expectType<Equal<Parameters<typeof scrumCanDo>[0], S>>(true);
+expectType<Equal<Parameters<typeof checkGate>[0], S>>(true);
+expectType<Equal<Parameters<typeof estimateTokens>[0], S>>(true);
+expectType<Equal<Parameters<typeof evaluatePolicies>[0], S>>(true);
+expectType<Equal<Parameters<typeof getItem>[0], S>>(true);
+expectType<Equal<Parameters<typeof isTerminalStage>[0], S>>(true);
+expectType<Equal<Parameters<typeof lastDispatchBefore>[0], S>>(true);
+expectType<Equal<Parameters<typeof lastEvent>[0], S>>(true);
+expectType<Equal<Parameters<typeof nextStageOf>[0], S>>(true);
+expectType<Equal<Parameters<typeof openIteration>[0], S>>(true);
+expectType<Equal<Parameters<typeof openQuestions>[0], S>>(true);
+expectType<Equal<Parameters<typeof requireCap>[0], S>>(true);
+expectType<Equal<Parameters<typeof requireCapabilities>[0], S>>(true);
+expectType<Equal<Parameters<typeof resourceCapsFor>[0], S>>(true);
+expectType<Equal<Parameters<typeof rolesWith>[0], S>>(true);
+expectType<Equal<Parameters<typeof separationLost>[0], S>>(true);
+expectType<Equal<Parameters<typeof stageOf>[0], S>>(true);
+expectType<Equal<Parameters<typeof toExNodes>[1], S>>(true);
+// ...and a reader still accepts a custom-name state (the first, wider overload).
+declare const triageState: WorkflowState<"triage">;
+const readsCustom = (): unknown => [getItem(triageState, "x"), openIteration(triageState)];
+void readsCustom;
 
 // A wrapper typed through Parameters / ReturnType, as 1.1 consumers write it, still compiles.
 type InitArg = Parameters<typeof init>[0];

@@ -137,6 +137,12 @@ export function synthesizeBrief<N extends string>(
 /** Open questions of finished items: the last completion per item, verdict done/needs-review, with open_questions left unanswered. */
 export function openQuestions(
   state: WorkflowState<string>,
+): Array<{ item: string; role: string; questions: string[]; at: string }>;
+export function openQuestions(
+  state: WorkflowState,
+): Array<{ item: string; role: string; questions: string[]; at: string }>;
+export function openQuestions(
+  state: WorkflowState<string>,
 ): Array<{ item: string; role: string; questions: string[]; at: string }> {
   const last = new Map<string, CompletedPayload & { at: string }>();
   for (const ev of state.events) {

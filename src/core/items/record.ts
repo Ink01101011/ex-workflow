@@ -21,6 +21,8 @@ export function patchItem<N extends string>(
   return putItem(state, fn(getItem(state, id)));
 }
 
+export function getItem(state: WorkflowState<string>, id: string): WorkItem;
+export function getItem(state: WorkflowState, id: string): WorkItem;
 export function getItem(state: WorkflowState<string>, id: string): WorkItem {
   const it = Object.hasOwn(state.items, id) ? state.items[id] : undefined;
   if (!it)
