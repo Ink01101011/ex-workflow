@@ -67,8 +67,8 @@ export function createMethodologyRegistry(
         if (e instanceof WorkflowError) throw e;
         fail(
           "invalid-input",
-          `methodology "${name}" factory threw: ${e instanceof Error ? e.message : String(e)}`,
-          "make the factory return the Methodology without throwing; it is called once at registration",
+          `methodology "${name}" factory threw: ${String(e)}`,
+          "fix the factory: registration calls it once",
         );
       }
       const missing =
