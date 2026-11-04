@@ -1,4 +1,4 @@
-import { assertId, fail } from "../core/errors.ts";
+import { WorkflowError, assertId, fail } from "../core/errors.ts";
 import type { Methodology } from "../core/types.ts";
 
 /** A methodology factory, as the built-in entries export them (`scrum`, `kanban`, ...). */
@@ -60,7 +60,17 @@ export function createMethodologyRegistry(
       );
     // a custom factory runs once here, so a wrong result fails at registration, not at init
     if (!builtIn) {
-      const m = (factory as () => unknown)() as Record<string, unknown> | null;
+      let m: Record<string, unknown> | null;
+      try {
+        m = (factory as () => unknown)() as Record<string, unknown> | null;
+      } catch (e) {
+        if (e instanceof WorkflowError) throw e;
+        fail(
+          "invalid-input",
+          `methodology "${name}" factory threw: ${e instanceof Error ? e.message : String(e)}`,
+          "make the factory return the Methodology without throwing; it is called once at registration",
+        );
+      }
       const missing =
         typeof m !== "object" || m === null
           ? "an object"

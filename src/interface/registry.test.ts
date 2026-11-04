@@ -108,3 +108,26 @@ test("registerMethodology checks the factory's result and refuses prototype-name
   r.registerMethodology("triage", fake("triage"));
   assert.deepEqual(r.registeredMethodologies(), ["triage"]);
 });
+
+test("a factory that throws at registration fails invalid-input keeping its message; nothing is registered (U14 INFO)", () => {
+  const r = createMethodologyRegistry({});
+  assert.throws(
+    () =>
+      r.registerMethodology("boom", () => {
+        throw new TypeError("cannot read config");
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError &&
+      e.code === "invalid-input" &&
+      /"boom"/.test(e.message) &&
+      /cannot read config/.test(e.message),
+  );
+  assert.throws(
+    () =>
+      r.registerMethodology("boom2", () => {
+        throw "not an error";
+      }),
+    (e: unknown) => code(e) === "invalid-input" && /not an error/.test((e as Error).message),
+  );
+  assert.deepEqual(r.registeredMethodologies(), []);
+});
