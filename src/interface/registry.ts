@@ -38,15 +38,14 @@ const MEMBERS = [
  * A registry pre-registered with `initial`. The interface layer cannot import the methodologies,
  * so the outer ring passes the five built-ins in (design spec section 26, "Registry placement").
  */
-// String() throws on a null-prototype value
-function thrown(e: unknown): string {
-  if (e instanceof Error) return `${e.name}: ${e.message}`;
+// String() throws on a null-prototype value; for an Error it reads `Name: message`
+const thrown = (e: unknown): string => {
   try {
     return String(e);
   } catch {
     return "a non-Error value";
   }
-}
+};
 
 export function createMethodologyRegistry(
   // factories of different names share no sound common type (a ceremony is contravariant in
