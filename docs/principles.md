@@ -8,8 +8,8 @@ Paths are relative to the repository root. "Test" names the file and the test ti
 
 `src/core`, `src/common`, `src/interface` and `src/methodologies` perform no I/O and draw no random numbers. The only clock read is `nowOf` in `src/core/state.ts`, used when the caller passes no `now`; pass `now` for byte-identical output. Files are touched only by `src/adapters` (and the CLI built on it), which the layer rule keeps out of reach of every lower layer.
 
-- Enforced by: `src/core/state.ts` (`nowOf`); `scripts/check-layers.mjs` (nothing below the outer layer may import `src/adapters` or `src/cli`).
-- Test: `test/check-layers.test.ts` "the repository itself passes"; `src/core/state.test.ts` "nowOf returns the given time or a valid ISO string".
+- Enforced by, for imports: `scripts/check-layers.mjs`, on every `.ts`, `.mts`, `.cts`, `.tsx`, `.js`, `.mjs` and `.cjs` file in those four directories (tests and declaration files excepted): nothing there may import `src/adapters` or `src/cli`, and the only bare specifiers allowed are the runtime dependencies `ex-flow` and `exsorted` and their real subpaths, so no `node:` built-in or other package is reachable (spec 26, "Bare specifiers"). For globals: the `.oxlintrc.json` overrides for the same four directories (tests excepted) fail `pnpm lint` on `Date.now`, `Math.random`, `fetch`, `process`, `crypto`, `performance`, `setTimeout` and `setInterval`. The clock: `src/core/state.ts` (`nowOf`, the one `new Date()` without an argument). Not checked mechanically: a zero-argument `new Date()` elsewhere and a global reached through `globalThis` or an alias; review catches those.
+- Test: `test/check-layers.test.ts` "the repository itself passes", "inner layers may import only relative paths, ex-flow and exsorted" and "every source extension under src is checked: .mts, .cts, .tsx, .js, .mjs, .cjs (U11 N2)"; `test/purity-lint.test.ts` "inner layers may not read the clock, draw random numbers or reach I/O globals"; `src/core/state.test.ts` "nowOf returns the given time or a valid ISO string".
 
 ## 2. State is plain JSON; every operation is `(state, action) -> state`
 

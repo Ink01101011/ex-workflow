@@ -1,1 +1,26 @@
-{ "$schema": "./node_modules/oxlint/configuration_schema.json", "categories": { "correctness": "error", "suspicious": "warn" } }
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": { "correctness": "error", "suspicious": "warn" },
+  "overrides": [
+    {
+      "files": ["src/core/**", "src/common/**", "src/interface/**", "src/methodologies/**"],
+      "excludeFiles": ["**/*.test.*"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "fetch", "message": "Core is pure (docs/principles.md rule 1): I/O belongs in src/adapters." },
+          { "name": "process", "message": "Core is pure (docs/principles.md rule 1): process access belongs in src/adapters or src/cli." },
+          { "name": "crypto", "message": "Core is pure (docs/principles.md rule 1): no randomness below the outer layer." },
+          { "name": "performance", "message": "Core is pure (docs/principles.md rule 1): the only clock read is nowOf in src/core/state.ts." },
+          { "name": "setTimeout", "message": "Core is pure (docs/principles.md rule 1): no timers below the outer layer." },
+          { "name": "setInterval", "message": "Core is pure (docs/principles.md rule 1): no timers below the outer layer." }
+        ],
+        "no-restricted-properties": [
+          "error",
+          { "object": "Date", "property": "now", "message": "Core is pure (docs/principles.md rule 1): the only clock read is nowOf in src/core/state.ts; take a `now` argument." },
+          { "object": "Math", "property": "random", "message": "Core is pure (docs/principles.md rule 1): no randomness below the outer layer." }
+        ]
+      }
+    }
+  ]
+}
