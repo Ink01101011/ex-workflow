@@ -1081,3 +1081,26 @@ test("complete refuses a --duration-ms that is not a safe integer, and validate 
     );
   }
 });
+
+test("a 1.1 repo whose role manifests have ids QA Lead and aux still loads; role list shows both (U14 F1)", async () => {
+  const { root, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const dir = path.join(root, ".workflow", "roles");
+  await fsp.mkdir(dir, { recursive: true });
+  const role = {
+    name: "Developer",
+    modelTier: "small",
+    capabilities: ["deliver", "review", "verify"],
+    canApprove: [],
+    inputs: ["brief"],
+    outputs: ["code", "test-output"],
+    do_not: [],
+  };
+  await writeFile(path.join(dir, "aux.json"), JSON.stringify({ id: "aux", ...role }));
+  await writeFile(path.join(dir, "QA_Lead.json"), JSON.stringify({ id: "QA Lead", ...role }));
+  const r = await runCommand(["role", "list"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  const roles = out<{ roles: string[] }>(r).roles;
+  assert.ok(roles.includes("aux") && roles.includes("QA Lead"), roles.join(","));
+  assert.equal((await runCommand(["status"], root)).exit, 0);
+});

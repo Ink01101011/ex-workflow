@@ -189,7 +189,14 @@ export async function loadState(root: string): Promise<WorkflowState> {
       );
     }
     assertValid(roleSchema, role, `role manifest ${manifestPath}`);
-    assertId(role.id, `role manifest ${manifestPath}: role id`);
+    // an existing manifest keeps the 1.1 id rules (spec 26, "Role manifests"); only a key that
+    // would set the prototype of roles is refused
+    if (role.id === "__proto__")
+      fail(
+        "invalid-input",
+        `role manifest ${manifestPath}: role id "__proto__" is not a valid id`,
+        "give the role another id, or delete that manifest",
+      );
     if (!Object.hasOwn(roles, role.id)) roles[role.id] = role;
   }
   return withLegacyMirrors({ ...state, roles });
