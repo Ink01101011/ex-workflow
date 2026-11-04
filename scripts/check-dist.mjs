@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
-function verify(label, core, scrum, kanban, waterfall, schema, investigation, experimentation) {
+function verify(label, core, scrum, kanban, waterfall, schema, investigation, experimentation, registry) {
   try {
     let caught;
     try {
@@ -47,6 +47,19 @@ function verify(label, core, scrum, kanban, waterfall, schema, investigation, ex
     if (!(scaught instanceof core.WorkflowError)) throw new Error("schema error is not instanceof core WorkflowError");
     if (scaught.code !== "invalid-input") throw new Error(`unexpected schema code ${scaught.code}`);
     if (schema.workflowStateSchema.$ref !== "#/definitions/WorkflowState") throw new Error("workflowStateSchema root ref");
+    const builtins = ["scrum", "kanban", "waterfall", "investigation", "experimentation"];
+    if (JSON.stringify(registry.registeredMethodologies().slice(0, 5)) !== JSON.stringify(builtins))
+      throw new Error("registry does not pre-register the five built-ins");
+    for (const name of builtins)
+      if (registry.methodologyFactory(name)().name !== name) throw new Error(`registry ${name} factory name`);
+    let rcaught;
+    try {
+      registry.methodologyFactory("not-registered");
+    } catch (e) {
+      rcaught = e;
+    }
+    if (!(rcaught instanceof core.WorkflowError) || rcaught.code !== "invalid-input")
+      throw new Error("registry error identity or code differs from core WorkflowError");
   } catch (e) {
     console.error(`FAIL ${label}: ${e.message}`);
     process.exit(1);
@@ -54,7 +67,7 @@ function verify(label, core, scrum, kanban, waterfall, schema, investigation, ex
 }
 
 const url = (p) => pathToFileURL(resolve(p)).href;
-verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")), await import(url("dist/waterfall/index.mjs")), await import(url("dist/schema/index.mjs")), await import(url("dist/investigation/index.mjs")), await import(url("dist/experimentation/index.mjs")));
+verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")), await import(url("dist/waterfall/index.mjs")), await import(url("dist/schema/index.mjs")), await import(url("dist/investigation/index.mjs")), await import(url("dist/experimentation/index.mjs")), await import(url("dist/registry/index.mjs")));
 const require = createRequire(import.meta.url);
-verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"), require("./../dist/waterfall/index.cjs"), require("./../dist/schema/index.cjs"), require("./../dist/investigation/index.cjs"), require("./../dist/experimentation/index.cjs"));
+verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"), require("./../dist/waterfall/index.cjs"), require("./../dist/schema/index.cjs"), require("./../dist/investigation/index.cjs"), require("./../dist/experimentation/index.cjs"), require("./../dist/registry/index.cjs"));
 console.log("ok");

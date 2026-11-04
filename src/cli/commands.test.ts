@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runCommand, parseArgs } from "./commands.ts";
+import { runCommand, parseArgs, USAGE } from "./commands.ts";
 
 async function project() {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-cli-"));
@@ -38,6 +38,15 @@ test("init refuses twice and unknown commands exit 2", async () => {
   assert.equal(out<{ error: { code: string } }>(r2).error.code, "invalid-input");
   assert.equal((await runCommand(["frobnicate"], root)).exit, 2);
   assert.equal((await runCommand([], root)).exit, 2);
+});
+
+test("init resolves the name through the methodology registry; an unregistered name prints usage", async () => {
+  const { root, cfg } = await project();
+  for (const name of ["triage", "__proto__", "constructor", ""]) {
+    const r = await runCommand(["init", name, "--config", cfg], root);
+    assert.equal(r.exit, 2, name);
+    assert.deepEqual(out<{ usage: string[] }>(r).usage, USAGE);
+  }
 });
 
 test("full loop: add → ceremony plan → next → complete → status → board → metrics", async () => {
@@ -1024,4 +1033,167 @@ test("every command group prints usage and exits 2 when called without its argum
     assert.equal(r.exit, 2, argv.join(" "));
     assert.ok(Array.isArray(out<{ usage: string[] }>(r).usage), argv.join(" "));
   }
+});
+
+test("complete refuses a --duration-ms that Date cannot hold, and validate a non-object action, with invalid-input (U9 P5, U11 O7)", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
+  await runCommand(["next"], root);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  const code = (r: { exit: number; out: unknown }) =>
+    r.exit === 1 ? out<{ error: { code: string } }>(r).error.code : `exit ${r.exit}`;
+  for (const d of ["1e300", "1e17", "9007199254740991"]) {
+    const r = await runCommand(
+      [
+        "complete",
+        "A",
+        h,
+        "--tokens-in",
+        "1",
+        "--tokens-out",
+        "1",
+        "--duration-ms",
+        d,
+        "--model",
+        "m",
+      ],
+      root,
+    );
+    assert.equal(code(r), "invalid-input", `--duration-ms ${d}`);
+  }
+  for (const action of [null, 3, [], { type: 7 }]) {
+    const f = await w("act.json", action);
+    assert.equal(
+      code(await runCommand(["validate", f], root)),
+      "invalid-input",
+      JSON.stringify(action),
+    );
+  }
+});
+
+test("a 1.1 repo whose role manifests have ids QA Lead and aux still loads; role list shows both (U14 F1)", async () => {
+  const { root, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const dir = path.join(root, ".workflow", "roles");
+  await fsp.mkdir(dir, { recursive: true });
+  const role = {
+    name: "Developer",
+    modelTier: "small",
+    capabilities: ["deliver", "review", "verify"],
+    canApprove: [],
+    inputs: ["brief"],
+    outputs: ["code", "test-output"],
+    do_not: [],
+  };
+  await writeFile(path.join(dir, "aux.json"), JSON.stringify({ id: "aux", ...role }));
+  await writeFile(path.join(dir, "QA_Lead.json"), JSON.stringify({ id: "QA Lead", ...role }));
+  const r = await runCommand(["role", "list"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  const roles = out<{ roles: string[] }>(r).roles;
+  assert.ok(roles.includes("aux") && roles.includes("QA Lead"), roles.join(","));
+  assert.equal((await runCommand(["status"], root)).exit, 0);
+});
+
+test("complete accepts a fractional --duration-ms as 1.1.1 did; account takes the same values (U14 F2)", async () => {
+  const { root, w, cfg } = await project();
+  await runCommand(["init", "scrum", "--config", cfg], root);
+  const a = await w("a.json", { id: "A", title: "a", weight: 1, acceptance: ["ok"] });
+  await runCommand(["add", a, "--by", "product-owner"], root);
+  const plan = await w("plan.json", { goal: "g", items: ["A"] });
+  await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], root);
+  await runCommand(["next"], root);
+  const h = await w("h.json", {
+    item: "A",
+    role: "developer",
+    produced: [{ kind: "test-output", ref: "ci" }],
+    notes: "done",
+    do_not: [],
+    open_questions: [],
+  });
+  const args = ["--tokens-in", "1", "--tokens-out", "1", "--model", "m"];
+  const r = await runCommand(["complete", "A", h, ...args, "--duration-ms", "1.5"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  const s = JSON.parse(await readFile(path.join(root, ".workflow", "state.json"), "utf8"));
+  assert.equal(s.accounting[0].durationMs, 1.5);
+  const r2 = await runCommand(["account", "A", "--duration-ms", "2.5"], root);
+  assert.equal(r2.exit, 0, JSON.stringify(r2.out));
+  for (const d of ["1e300", "1e17"]) {
+    const bad = await runCommand(["complete", "A", h, ...args, "--duration-ms", d], root);
+    assert.equal(
+      out<{ error: { code: string; message: string } }>(bad).error.code,
+      "invalid-input",
+      d,
+    );
+    assert.match(
+      out<{ error: { message: string } }>(bad).error.message,
+      /a number of milliseconds/,
+      d,
+    );
+  }
+});
+
+async function plannedProject(ids: string[]) {
+  const p = await project();
+  await runCommand(["init", "scrum", "--config", p.cfg], p.root);
+  for (const id of ids) {
+    const f = await p.w("it.json", { id, title: id, weight: 1, acceptance: ["ok"] });
+    assert.equal((await runCommand(["add", f, "--by", "product-owner"], p.root)).exit, 0, id);
+  }
+  const plan = await p.w("plan.json", { goal: "g", items: ids });
+  assert.equal(
+    (await runCommand(["ceremony", "plan", plan, "--by", "scrum-master"], p.root)).exit,
+    0,
+  );
+  return p;
+}
+
+test("next dispatches items whose ids 1.1.1 accepted but the creation rules now refuse (U14 F3)", async () => {
+  const long = `L${"x".repeat(199)}`;
+  const { root } = await plannedProject(["A-1", "B-1", "C-1"]);
+  // an older release stored these ids; rename them in the file as such a release would have written them
+  const file = path.join(root, ".workflow", "state.json");
+  const raw = await readFile(file, "utf8");
+  await writeFile(file, raw.replaceAll('"B-1"', '"aux.1"').replaceAll('"C-1"', `"${long}"`));
+  const r = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  const files = await readdir(path.join(root, ".workflow", "briefs"));
+  assert.deepEqual(files.sort(), ["A-1.json", `${long}.json`, "aux.1.json"].sort());
+});
+
+test("next dispatches an item id with a space that 1.1.1 wrote a brief for (U16 L1)", async () => {
+  const { root } = await plannedProject(["A-1", "B-1"]);
+  const file = path.join(root, ".workflow", "state.json");
+  await writeFile(file, (await readFile(file, "utf8")).replaceAll('"B-1"', '"my item"'));
+  const r = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  assert.deepEqual((await readdir(path.join(root, ".workflow", "briefs"))).sort(), [
+    "A-1.json",
+    "my item.json",
+  ]);
+});
+
+test("next checks every brief name first: a case clash in one batch writes no brief and names the item (U14 F3)", async () => {
+  const { root } = await plannedProject(["A-1", "Cart-1", "cart-1"]);
+  const before = await readFile(path.join(root, ".workflow", "state.json"), "utf8");
+  const r = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(r.exit, 1, JSON.stringify(r.out));
+  const err = out<{ error: { code: string; message: string; fix: string } }>(r).error;
+  assert.equal(err.code, "invalid-input");
+  assert.match(err.message, /cart-1/);
+  assert.match(err.message, /Cart-1/);
+  assert.match(err.fix, /letter case/);
+  const briefs = await readdir(path.join(root, ".workflow", "briefs")).catch(() => []);
+  assert.deepEqual(briefs, []);
+  assert.equal(await readFile(path.join(root, ".workflow", "state.json"), "utf8"), before);
 });

@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
+  checkBriefNames,
   loadState,
   saveBrief,
   saveHandoff,
@@ -8,15 +9,17 @@ import {
   statePath,
   withStateLock,
 } from "../adapters/file.ts";
-import { next as planNext, openQuestions } from "../brief.ts";
-import { complete } from "../complete.ts";
-import { correctAccounting, type AccountingPatch } from "../accounting.ts";
-import { WorkflowError, fail } from "../errors.ts";
-import { decide } from "../gates.ts";
-import { addItem, clearBlocker, editItem, getItem, type ItemPatch } from "../items.ts";
-import { applyAction, changeConfig, init, validateAction } from "../methodology.ts";
-import { openIteration, type PlanOptions } from "../planner.ts";
-import { registerRole } from "../roles.ts";
+import { next as planNext, openQuestions } from "../core/brief.ts";
+import { complete } from "../core/complete.ts";
+import { correctAccounting, type AccountingPatch } from "../core/accounting.ts";
+import { WorkflowError, fail } from "../core/errors.ts";
+import { decide } from "../core/gates.ts";
+import { addItem, editItem, getItem } from "../core/items/record.ts";
+import { clearBlocker } from "../core/items/blockers.ts";
+import type { ItemPatch } from "../core/types.ts";
+import { applyAction, changeConfig, init, validateAction } from "../core/methodology.ts";
+import { openIteration, type PlanOptions } from "../core/planner.ts";
+import { registerRole } from "../core/roles/registry.ts";
 import {
   assertValid,
   handoffSchema,
@@ -24,12 +27,8 @@ import {
   newItemSchema,
   roleSchema,
 } from "../schema/index.ts";
-import { lastEvent } from "../state.ts";
-import { scrum } from "../scrum/index.ts";
-import { kanban } from "../kanban/index.ts";
-import { waterfall } from "../waterfall/index.ts";
-import { investigation } from "../investigation/index.ts";
-import { experimentation } from "../experimentation/index.ts";
+import { lastEvent } from "../core/state.ts";
+import { methodologyFactory, registeredMethodologies } from "../registry.ts";
 import type {
   Accounting,
   Action,
@@ -39,15 +38,13 @@ import type {
   NewItem,
   Role,
   WorkflowState,
-} from "../types.ts";
+} from "../core/types.ts";
 
-const METHODOLOGIES: Record<string, () => Methodology> = {
-  scrum: scrum as () => Methodology,
-  kanban: kanban as () => Methodology,
-  waterfall: waterfall as () => Methodology,
-  investigation: investigation as () => Methodology,
-  experimentation: experimentation as () => Methodology,
-};
+/** The factory `name` resolves to in the methodology registry (built-ins pre-registered), if any. */
+const factoryOf = (name: string | undefined): (() => Methodology) | undefined =>
+  name !== undefined && registeredMethodologies().includes(name)
+    ? (methodologyFactory(name) as () => Methodology)
+    : undefined;
 
 export const USAGE = [
   "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",
@@ -103,14 +100,12 @@ async function readJson<T>(file: string): Promise<T> {
 }
 
 function methodologyOf(state: WorkflowState): Methodology {
-  const f = Object.hasOwn(METHODOLOGIES, state.methodology)
-    ? METHODOLOGIES[state.methodology]
-    : undefined;
+  const f = factoryOf(state.methodology);
   if (!f)
     fail(
       "config-invalid",
       `methodology "${state.methodology}" is not available in this build`,
-      `available: ${Object.keys(METHODOLOGIES).join(", ")}`,
+      `available: ${registeredMethodologies().join(", ")}`,
     );
   return f();
 }
@@ -167,7 +162,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
   switch (cmd) {
     case "init": {
       const [name] = rest;
-      const f = name && Object.hasOwn(METHODOLOGIES, name) ? METHODOLOGIES[name] : undefined;
+      const f = factoryOf(name);
       if (!f || !flags["config"]) return { exit: 2, out: { ok: false, usage: USAGE } };
       try {
         await stat(statePath(cwd));
@@ -258,6 +253,11 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (flags["fallback-tokens-per-weight"])
         opts.fallbackTokensPerWeight = num(flags, "fallback-tokens-per-weight");
       const res = planNext(state, methodologyOf(state), opts);
+      // every brief name is checked first, so a refusal writes none of the batch
+      await checkBriefNames(
+        cwd,
+        res.briefs.map((b) => b.item.id),
+      );
       // briefs first: a crash then leaves an orphan brief (overwritten next dispatch), never a dispatched item without one
       for (const b of res.briefs) await saveBrief(cwd, b);
       await saveState(cwd, res.state);
@@ -284,6 +284,15 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         );
       const role = flags["role"] ?? handoff.role;
       const durationMs = num(flags, "duration-ms");
+      const startedAt = Date.parse(now) - durationMs;
+      // a negative duration stays accounting-invalid (complete) and a fraction is accepted, as in
+      // 1.1; only refuse what Date cannot hold
+      if (!Number.isFinite(durationMs) || Number.isNaN(new Date(startedAt).getTime()))
+        fail(
+          "invalid-input",
+          `--duration-ms must be a number of milliseconds that dates the start (got ${flags["duration-ms"]})`,
+          "pass the measured wall-clock time in ms, e.g. --duration-ms 42000",
+        );
       const acc: Accounting = {
         item: rest[0],
         role,
@@ -291,7 +300,7 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
         tokensIn: num(flags, "tokens-in"),
         tokensOut: num(flags, "tokens-out"),
         durationMs,
-        startedAt: new Date(Date.parse(now) - durationMs).toISOString(),
+        startedAt: new Date(startedAt).toISOString(),
         endedAt: now,
       };
       if (flags["estimate"] === "true") acc.estimate = true;
@@ -476,6 +485,17 @@ async function execute(argv: string[], cwd: string): Promise<CommandResult> {
       if (!rest[0]) return { exit: 2, out: { ok: false, usage: USAGE } };
       const state = await loadState(cwd);
       const action = await readJson<Action>(path.resolve(cwd, rest[0]));
+      if (
+        typeof action !== "object" ||
+        action === null ||
+        Array.isArray(action) ||
+        typeof action.type !== "string"
+      )
+        fail(
+          "invalid-input",
+          `action file ${rest[0]} must hold an object with a string "type"`,
+          'write the action as { "type": "...", "by": "<role>", "payload": { ... } }',
+        );
       return {
         exit: 0,
         out: {

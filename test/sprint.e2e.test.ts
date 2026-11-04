@@ -10,7 +10,7 @@ import {
   next,
   openIteration,
 } from "../src/index.ts";
-import { scrum, scrumMetrics } from "../src/scrum/index.ts";
+import { scrum, scrumMetrics } from "../src/methodologies/scrum/index.ts";
 import type { Accounting, Handoff, WorkflowState } from "../src/index.ts";
 
 const m = scrum();

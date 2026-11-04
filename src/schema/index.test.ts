@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { init } from "../index.ts";
-import { scrum } from "../scrum/index.ts";
-import { kanban } from "../kanban/index.ts";
-import { waterfall } from "../waterfall/index.ts";
-import { WorkflowError } from "../errors.ts";
-import type { Methodology } from "../types.ts";
+import { scrum } from "../methodologies/scrum/index.ts";
+import { kanban } from "../methodologies/kanban/index.ts";
+import { waterfall } from "../methodologies/waterfall/index.ts";
+import { WorkflowError } from "../core/errors.ts";
+import type { Methodology } from "../core/types.ts";
 import {
   assertValid,
   handoffSchema,
@@ -142,4 +142,13 @@ test("negative fixtures fail at the right path", () => {
       e.code === "invalid-input" &&
       /\/version expected 1/.test(e.message),
   );
+});
+
+test("ext.investigation and ext.experimentation are validated as their records; other ext keys stay open", () => {
+  const state = roundTrip(init({ methodology: scrum(), config: SCRUM_CONFIG, now: T0 }).state);
+  const bad = (ext: unknown) => at({ ...state, ext }).length > 0;
+  assert.equal(bad({ investigation: { phase: "observe", rounds: null } }), true);
+  assert.equal(bad({ experimentation: { candidates: null } }), true);
+  assert.equal(bad({ investigation: null }), true);
+  assert.deepEqual(at({ ...state, ext: { triage: { anything: [1, null] }, x: 3 } }), []);
 });

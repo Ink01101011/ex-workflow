@@ -1,7 +1,7 @@
 /** Synthetic, in-memory SDK demo. No procedure, model or external tool is actually run. */
 import assert from "node:assert/strict";
 import { init, next, complete } from "../src/index.ts";
-import { investigation } from "../src/investigation/index.ts";
+import { investigation } from "../src/methodologies/investigation/index.ts";
 
 const method = investigation();
 let { state } = init({

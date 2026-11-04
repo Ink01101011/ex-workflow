@@ -1,6 +1,6 @@
 {
   "name": "ex-workflow",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Methodology engine for AI teams: Scrum, Kanban, Waterfall, Investigation and Experimentation as data-driven state machines on top of ex-flow",
   "license": "MIT",
   "type": "module",
@@ -132,6 +132,16 @@
         "types": "./dist/experimentation/index.d.cts",
         "default": "./dist/experimentation/index.cjs"
       }
+    },
+    "./registry": {
+      "import": {
+        "types": "./dist/registry/index.d.ts",
+        "default": "./dist/registry/index.mjs"
+      },
+      "require": {
+        "types": "./dist/registry/index.d.cts",
+        "default": "./dist/registry/index.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -162,6 +172,9 @@
       ],
       "experimentation": [
         "dist/experimentation/index.d.ts"
+      ],
+      "registry": [
+        "dist/registry/index.d.ts"
       ]
     }
   },
@@ -177,19 +190,20 @@
     "minify": "tsup --minify",
     "lint": "oxlint src test",
     "format": "oxfmt src test",
+    "check:layers": "node scripts/check-layers.mjs",
     "format:check": "oxfmt --check src test",
     "typecheck": "tsc --noEmit",
     "size": "node scripts/size.mjs",
     "check:dist": "node scripts/check-dist.mjs && node scripts/check-exports.mjs",
     "schema:gen": "node scripts/gen-schema.mjs",
     "schema:check": "node scripts/gen-schema.mjs --check",
-    "ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm schema:check && pnpm test && pnpm minify && pnpm check:dist && pnpm size",
+    "ci": "pnpm format:check && pnpm lint && pnpm check:layers && pnpm typecheck && pnpm schema:check && pnpm test && pnpm minify && pnpm check:dist && pnpm size",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "pnpm run ci",
     "prepare": "husky"
   },
   "dependencies": {
-    "ex-flow": "^1.1.0",
+    "ex-flow": "^1.1.1",
     "exsorted": "^1.2.3"
   },
   "devDependencies": {

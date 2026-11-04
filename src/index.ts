@@ -1,45 +1,34 @@
-export const VERSION = "1.1.1";
-export * from "./types.ts";
-export { WorkflowError, fail } from "./errors.ts";
-export { createState, appendEvent, lastEvent, nowOf } from "./state.ts";
-export {
-  registerRole,
-  retireRole,
-  hasCapability,
-  rolesWith,
-  approversFor,
-  requireCapabilities,
-  separationLost,
-  canDo,
-  requireCap,
-} from "./roles.ts";
-export {
-  assertId,
-  stageOf,
-  nextStageOf,
-  isTerminalStage,
-  getItem,
-  addItem,
-  editItem,
-  moveItem,
-  addEvidence,
-  raiseBlocker,
-  clearBlocker,
-} from "./items.ts";
-export type { ItemPatch } from "./items.ts";
-export { applyAgreement, retireAgreement } from "./agreements.ts";
-export { evaluatePolicies, assertPolicies } from "./policies.ts";
-export { checkGate, authorOf, lastDispatchBefore, raisePending, decide } from "./gates.ts";
-export type { GateResult } from "./gates.ts";
-export { ZERO_SPENT, addSpent, remaining, isExhausted, estimateTokens } from "./budget.ts";
-export type { EstimateMode } from "./budget.ts";
-export { plan, toExNodes, assignRole, resourceCapsFor, openIteration } from "./planner.ts";
-export type { PlanOptions, PlanReason, PlanResult, Skipped } from "./planner.ts";
-export { synthesizeBrief, next, openQuestions } from "./brief.ts";
-export type { NextResult } from "./brief.ts";
-export { complete } from "./complete.ts";
-export { correctAccounting } from "./accounting.ts";
-export type { AccountingPatch } from "./accounting.ts";
-export { coreRulesFor } from "./rules.ts";
-export { applyAction, validateAction, init, changeConfig } from "./methodology.ts";
-export type { InitInput } from "./methodology.ts";
+export const VERSION = "1.2.0";
+export * from "./core/types.ts";
+export { WorkflowError, fail } from "./core/errors.ts";
+export { createState, appendEvent, lastEvent, nowOf } from "./core/state.ts";
+export { registerRole, retireRole } from "./core/roles/registry.ts";
+export { hasCapability, rolesWith, approversFor } from "./core/roles/lookup.ts";
+export { requireCapabilities, separationLost, canDo, requireCap } from "./core/roles/guards.ts";
+export { assertId } from "./core/errors.ts";
+export { stageOf, nextStageOf, isTerminalStage } from "./core/items/stage.ts";
+export { getItem, addItem, editItem } from "./core/items/record.ts";
+export { moveItem } from "./core/items/move.ts";
+export { addEvidence } from "./core/items/evidence.ts";
+export { raiseBlocker, clearBlocker } from "./core/items/blockers.ts";
+export type { ItemPatch } from "./core/types.ts";
+export { applyAgreement, retireAgreement } from "./core/agreements.ts";
+export { evaluatePolicies, assertPolicies } from "./core/policies.ts";
+export { checkGate, authorOf, lastDispatchBefore, raisePending, decide } from "./core/gates.ts";
+export type { GateResult } from "./core/gates.ts";
+export { ZERO_SPENT, addSpent, remaining, isExhausted, estimateTokens } from "./core/budget.ts";
+export type { EstimateMode } from "./core/budget.ts";
+export { plan, toExNodes, assignRole, resourceCapsFor, openIteration } from "./core/planner.ts";
+export type { PlanOptions, PlanReason, PlanResult, Skipped } from "./core/planner.ts";
+export { synthesizeBrief, next, openQuestions } from "./core/brief.ts";
+export type { NextResult } from "./core/brief.ts";
+export { complete } from "./core/complete.ts";
+export { correctAccounting } from "./core/accounting.ts";
+export type { AccountingPatch } from "./core/accounting.ts";
+export { coreRulesFor } from "./core/rules.ts";
+export { applyAction, validateAction, init, changeConfig } from "./core/methodology.ts";
+export type { InitInput } from "./core/methodology.ts";
+export { readExt, writeExt } from "./interface/ext.ts";
+export type { LegacyExtRecords } from "./interface/ext.ts";
+export { independenceConflicts } from "./common/independence.ts";
+export { frozenChanges } from "./common/frozen.ts";

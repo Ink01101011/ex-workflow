@@ -7,7 +7,7 @@ The conventions below are what the 1.0.0 release (Phase 7, design spec §23) est
 - `main` is the release line. Work happens on a branch named `feat/<topic>`, `fix/<topic>` or `docs/<topic>` and lands through a pull request; no direct pushes to `main`.
 - Commits follow Conventional Commits with a scope: `feat(kanban): …`, `fix(waterfall): …`, `docs(spec): …`, `test(api): …`, `chore(size): …`, `chore(release): …`. The subject says what changed and names the issue (`#27`) or backlog id (`B22`) it closes.
 - One concern per commit: a behaviour change, its tests and its spec row travel together; the size-budget re-measure and the CHANGELOG are separate `chore`/`docs` commits so a reviewer can read the diff of each.
-- The pre-commit hook runs `format:check`, `lint`, `typecheck`, `schema:check` and `test`. Do not bypass it.
+- The pre-commit hook runs `format:check`, `lint`, `check:layers`, `typecheck`, `schema:check` and `test`. Do not bypass it.
 - A pull request description lists the issues closed, the behaviour changes, and the sections of the design spec it adds or amends.
 
 ## 2. Spec first
@@ -20,8 +20,8 @@ The conventions below are what the 1.0.0 release (Phase 7, design spec §23) est
 
 ## 3. Code
 
-- Core is pure: no I/O, no clock, no randomness. The file adapter (`src/adapters`) is the only module that touches disk and the CLI is built on it. A new methodology never executes commands, creates workspaces or calls Git; it records what the host did.
-- A methodology is a directory `src/<name>/` with `config.ts`, `state.ts`, `roles.ts`, `stages.ts`, `rules.ts`, `ceremonies.ts`, `metrics.ts` and an `index.ts` that exports the factory `<name>()`, the config validator `validate<Name>Config` and its public types. Rules and ceremonies go through `applyAction` so capability checks and rule hooks see them; a ceremony that bypasses it is a bug.
+- Core is pure: no I/O, no randomness, and one clock read: `nowOf` in `src/core/state.ts` reads the clock only when the caller passes no `now` (`docs/principles.md` rule 1); pass `now` for deterministic output. The file adapter (`src/adapters`) is the only module that touches disk and the CLI is built on it. A new methodology never executes commands, creates workspaces or calls Git; it records what the host did.
+- A methodology is a directory `src/methodologies/<name>/` with `config.ts`, `state.ts`, `roles.ts`, `stages.ts`, `rules.ts`, `ceremonies.ts`, `metrics.ts` and an `index.ts` that exports the factory `<name>()`, the config validator `validate<Name>Config` and its public types. Rules and ceremonies go through `applyAction` so capability checks and rule hooks see them; a ceremony that bypasses it is a bug.
 - Every failure is a `WorkflowError` with a documented `code`, a `message` that names the offending value and a `fix` that says what to change. New codes are added to the README Errors list in the same change. Input validation answers `invalid-input`; config validation answers `config-invalid` naming the key and an example value.
 - Runtime dependencies stay at `ex-flow` and `exsorted`. A new dependency is an owner decision recorded in the spec.
 - Ids pass `assertId`; object lookups use `Object.hasOwn`; nothing written by the adapter leaves `.workflow/`.
@@ -29,17 +29,17 @@ The conventions below are what the 1.0.0 release (Phase 7, design spec §23) est
 
 ## 4. Tests
 
-- Test first: a change starts with a failing test next to the code (`src/<area>/*.test.ts`) or in `test/` for cross-cutting behaviour; `scripts/run-tests.mjs` collects every `*.test.ts`.
+- Test first: a change starts with a failing test next to the code (`<file>.test.ts` beside `<file>.ts`) or in `test/` for cross-cutting behaviour; `scripts/run-tests.mjs` collects every `*.test.ts`.
 - Each methodology keeps one end-to-end scenario (`test/<name>.e2e.test.ts` or the colocated lifecycle test) that walks rework, blockers, escalation, retro or review and metrics in one run. A new methodology ships with such a scenario, a CLI round trip (`init`, ceremonies, `next`, `complete`, `status`, `metrics`, save and load) and an unknown-ceremony case.
 - `test/compat.test.ts` loads `state.json` fixtures written by published releases (`test/fixtures/compat/<version>/<methodology>/`). A fixture that fails to load is a bug in the loader, fixed there, never by editing the fixture. When a release adds state fields, regenerate the fixtures with `scripts/gen-compat-fixtures.mjs` after it is published so the next release replays it.
 - `test/api-surface.test.ts` freezes the public surface in `test/api-surface.json`: the runtime export names of every entry point, the CLI `USAGE` lines, the schema document names and the event kinds. A drift fails the test; an intended addition updates the file in the same commit and is a minor version; a removal is a major version.
-- `pnpm run ci` is the definition of green: format, lint, typecheck, schema drift, tests, minified build, dist checks and the size ratchet. Nothing is reported as done until it has run.
+- `pnpm run ci` is the definition of green: format, lint, layer check, typecheck, schema drift, tests, minified build, dist checks and the size ratchet. Nothing is reported as done until it has run.
 
 ## 5. Public surface and versioning
 
 - Semver from 1.0.0 on the `latest` dist-tag. Additions are minor, removals and behaviour changes that break a documented contract are major, documentation-only releases are patch. Pre-releases use `X.Y.Z-stage` under the `stage` dist-tag; the registry reserves `0.0.0`, so never use it.
 - The frozen surface is: exports of every entry point, CLI commands and flags, the schema documents, the event kinds and their payload keys, the error codes, and the `.workflow/state.json` shape. A state written by any earlier release loads unchanged; every new state field is optional.
-- Types in `src/types.ts` drive the JSON Schema. After a type change run `pnpm schema:gen`; `pnpm schema:check` fails the build when the committed `src/schema/generated.ts` drifts.
+- Types in `src/core/types.ts` drive the JSON Schema. After a type change run `pnpm schema:gen`; `pnpm schema:check` fails the build when the committed `src/schema/generated.ts` drifts.
 - A new entry point gets: an `exports` and `typesVersions` entry in `package.json`, a `tsup.config.ts` entry, a `scripts/measure-<name>-entry.ts`, a check in `scripts/check-dist.mjs` (shared `WorkflowError` identity, factory name, config validator), a row in the API-surface file and a row in the README entry-point table listing its actual exports.
 - Methodology entries expose the same shape: the factory, the config validator and the public types; helper exports (`ceremonies`, `metrics`, `report`, `roles`, `rules`, `stages`) are either exported by all methodologies or documented as the exception in the README table.
 
@@ -64,7 +64,7 @@ The conventions below are what the 1.0.0 release (Phase 7, design spec §23) est
 8. the counts in Compatibility and versioning (schema documents, event kinds);
 9. the accepted limitations as bullets under Known limitations, written as what happens and what to do.
 
-The Install line names the supported `latest` version. The README does not carry roadmaps, status history, publishing notes or the reasoning behind a limitation; the spec and the CHANGELOG do.
+The README has no Install section; the npm page carries the install command and the supported version. The README does not carry roadmaps, status history, publishing notes or the reasoning behind a limitation; the spec and the CHANGELOG do.
 
 **CHANGELOG** has one entry per release, `## X.Y.Z (YYYY-MM-DD)`, newest first:
 
@@ -88,3 +88,16 @@ In this order; every step is a commit on the release branch unless noted.
 8. `npm publish` (moves `latest`), or `npm publish --tag stage` for a pre-release; `npm view ex-workflow dist-tags` confirms.
 9. After publishing a release that adds state fields: regenerate the compatibility fixtures to include it and commit them with the next change.
 10. Downstream (workflowAI) bumps its dependency only after the npm publish is confirmed.
+
+## 9. Layout and layers
+
+Design spec section 26 is the source of these rules; `scripts/check-layers.mjs` enforces what a script can.
+
+- **Layers**, lowest first: `src/core/` (the kernel: types, state, errors, items, policies, gates, planner, brief, complete, budget, accounting, roles, rules, lessons, agreements, `applyAction`, `init`, `changeConfig`) → `src/common/` (building blocks shared by methodologies, opt-in) → `src/interface/` (methodology registry, extension-state accessors, authoring helpers) → `src/methodologies/<name>/`. `src/adapters/`, `src/cli/`, `src/schema/` and the root barrel `src/index.ts` are outer: they may import any layer and nothing below may import them.
+- **Dependency rule**: an import, runtime or `import type`, goes only to the same or a lower layer. A violation fails `pnpm run check:layers` (part of `pnpm run ci` and the pre-commit hook) naming the importing file, the imported file and both layers. A known exception is listed in the `ALLOWLIST` of the script with the unit that removes it; adding an entry is a spec decision, never a shortcut.
+- **Bare specifiers**: a file in `src/core/`, `src/common/`, `src/interface/` or `src/methodologies/` imports only relative paths and the runtime dependencies `ex-flow` and `exsorted` (the exact name or a real subpath, with no empty, `.` or `..` segment); a `node:` built-in or another package is an error. Outer layers may import anything. The check reads every `.ts`, `.mts`, `.cts`, `.tsx`, `.js`, `.mjs` and `.cjs` file under `src/`, except declaration files and tests.
+- **No clock, randomness or I/O globals below the outer layer**: in those four directories (tests excepted) `pnpm lint` fails on `Date.now`, `Math.random`, `fetch`, `process`, `crypto`, `performance`, `setTimeout` and `setInterval` (the `overrides` in `.oxlintrc.json`). Take a `now` argument instead; the one clock read is `nowOf` in `src/core/state.ts`.
+- **Placement**: anything `core` imports stays in `core`. A piece used only by methodologies goes to `common`. The `Methodology` contract type stays in `src/core/types.ts` because the kernel consumes it. A new methodology lives in `src/methodologies/<name>/` and reaches the kernel only through its public modules.
+- **One responsibility per file**: a file has one main public export (a function, a class or one cohesive type group) plus its private helpers and the types only it uses. The check warns above 5 runtime exports in a file that is not an `index.*`, a test, test support (`fixtures.ts`), the generated `src/schema/generated.ts` or type-only; split by responsibility instead of growing a file.
+- **Colocated tests**: the test sits next to the file as `<file>.test.ts`; cross-cutting behaviour goes in `test/`.
+- **Public paths do not move**: package `exports` and `dist/<entry>/index.*` stay as they are; only `tsup.config.ts` source paths and internal imports change when files move.

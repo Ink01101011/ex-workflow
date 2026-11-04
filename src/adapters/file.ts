@@ -1,9 +1,10 @@
 import { mkdir, open, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
-import { fail } from "../errors.ts";
+import { fail } from "../core/errors.ts";
+import { withLegacyMirrors, withoutLegacyMirrors } from "../interface/ext.ts";
 import { assertValid, roleSchema, workflowStateSchema } from "../schema/index.ts";
-import type { Brief, Handoff, Role, WorkflowState } from "../types.ts";
+import type { Brief, Handoff, Role, WorkflowState } from "../core/types.ts";
 
 export const WORKFLOW_DIR = ".workflow";
 
@@ -42,7 +43,13 @@ export async function withStateLock<T>(
 ): Promise<T> {
   const { retries = 40, intervalMs = 50, staleMs = 60_000 } = opts;
   const lock = path.join(root, WORKFLOW_DIR, "state.lock");
-  await mkdir(path.dirname(lock), { recursive: true });
+  const fsFail = (e: unknown): never =>
+    fail(
+      "invalid-input",
+      `cannot create ${lock}: ${(e as Error).message}`,
+      `check that ${path.dirname(lock)} is a writable directory`,
+    );
+  await mkdir(path.dirname(lock), { recursive: true }).catch(fsFail);
   let held = false;
   for (let attempt = 0; !held; attempt++) {
     try {
@@ -51,13 +58,25 @@ export async function withStateLock<T>(
       await fh.close();
       held = true;
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") fsFail(e);
       const snap = await stat(lock).catch(() => undefined);
       if (snap && Date.now() - snap.mtimeMs > staleMs) {
+        // bounded like the wait below: a stale lock that unlink cannot remove must not loop forever
+        if (attempt > retries)
+          fail(
+            "invalid-input",
+            `cannot remove the stale lock ${lock}`,
+            `delete ${lock} by hand (check its permissions) once no exwf process is running`,
+          );
         // re-stat just before unlink: if another recoverer already replaced the lock, leave it alone
         const now = await stat(lock).catch(() => undefined);
-        if (now && now.ino === snap.ino && now.mtimeMs === snap.mtimeMs)
-          await unlink(lock).catch(() => undefined);
+        if (now && now.ino === snap.ino && now.mtimeMs === snap.mtimeMs) {
+          const removed = await unlink(lock).then(
+            () => true,
+            () => false,
+          );
+          if (!removed) await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
         continue;
       }
       if (attempt >= retries)
@@ -76,9 +95,30 @@ export async function withStateLock<T>(
   }
 }
 
+/** Runs `fn`, turning the stack overflow a pathologically deep value causes into a WorkflowError. */
+function notTooDeep<T>(what: string, fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    // only the stack overflow (V8: "Maximum call stack size exceeded"); any other RangeError,
+    // such as "Invalid string length", is not about nesting and is rethrown as it is
+    if (e instanceof RangeError && /maximum call stack size exceeded/i.test(e.message))
+      fail(
+        "invalid-input",
+        `${what} is nested too deeply to process (${e.message})`,
+        "flatten the deeply nested value (an array or object thousands of levels deep)",
+      );
+    throw e;
+  }
+}
+
 export async function saveState(root: string, state: WorkflowState): Promise<void> {
-  const json = JSON.stringify(state, null, 2) + "\n";
-  assertValid(workflowStateSchema, JSON.parse(json), statePath(root));
+  const json = notTooDeep(statePath(root), () => {
+    // on disk only ext.<key>; loadState rebuilds the legacy mirror (spec 26)
+    const out = JSON.stringify(withoutLegacyMirrors(state), null, 2) + "\n";
+    assertValid(workflowStateSchema, JSON.parse(out), statePath(root));
+    return out;
+  });
   await writeAtomic(statePath(root), json);
 }
 
@@ -98,6 +138,10 @@ export async function loadState(root: string): Promise<WorkflowState> {
   try {
     parsed = JSON.parse(raw);
   } catch (e) {
+    if (e instanceof RangeError)
+      notTooDeep(file, () => {
+        throw e;
+      });
     fail(
       "invalid-input",
       `${file} is not valid JSON: ${(e as Error).message}`,
@@ -118,7 +162,14 @@ export async function loadState(root: string): Promise<WorkflowState> {
       `${file} has schema version ${String(state.version)}; this ex-workflow reads version 1`,
       "upgrade ex-workflow, or run the migration this version documents in its changelog",
     );
-  assertValid(workflowStateSchema, parsed, file);
+  notTooDeep(file, () => assertValid(workflowStateSchema, parsed, file));
+  for (const [key, item] of Object.entries(state.items))
+    if (item.id !== key)
+      fail(
+        "invalid-input",
+        `${file}: /items/${key} holds item id ${JSON.stringify(item.id)}`,
+        `make the key and the id the same at /items/${key}, or restore the file from git`,
+      );
   const rolesDir = path.join(root, WORKFLOW_DIR, "roles");
   let manifests: string[] = [];
   try {
@@ -140,9 +191,12 @@ export async function loadState(root: string): Promise<WorkflowState> {
       );
     }
     assertValid(roleSchema, role, `role manifest ${manifestPath}`);
-    if (!roles[role.id]) roles[role.id] = role;
+    // an existing manifest keeps the 1.1 id rules (spec 26, "Role manifests"); as in 1.1.1 the id
+    // "__proto__" is skipped, since assigning it would set the prototype of roles
+    if (role.id === "__proto__") continue;
+    if (!Object.hasOwn(roles, role.id)) roles[role.id] = role;
   }
-  return { ...state, roles };
+  return withLegacyMirrors({ ...state, roles });
 }
 
 function inWorkflowDir(root: string, file: string): string {
@@ -155,16 +209,64 @@ function inWorkflowDir(root: string, file: string): string {
   return file;
 }
 
+// what makes `<id>.json` a safe file name. The creation-time rules of assertId (pattern, length cap,
+// device and prototype names) are not applied to an id that already exists (spec 26)
+function assertFileId(id: unknown, what: string): asserts id is string {
+  if (
+    typeof id !== "string" ||
+    id === "" ||
+    id.startsWith(".") ||
+    id.includes("..") ||
+    /[/\\\0]/.test(id)
+  )
+    fail(
+      "invalid-input",
+      `${what} ${JSON.stringify(id)} cannot be a file name under ${WORKFLOW_DIR}/`,
+      "use an id with no / \\ NUL or .. and no leading . (e.g. CART-12)",
+    );
+}
+
+/**
+ * Checks the brief file names of one dispatch before any is written: each id is a safe file name
+ * and no two names, in the batch or against `.workflow/briefs/`, differ only in letter case.
+ */
+export async function checkBriefNames(root: string, ids: readonly string[]): Promise<void> {
+  const dir = path.join(root, WORKFLOW_DIR, "briefs");
+  const taken = new Map<string, string>();
+  for (const f of await readdir(dir).catch(() => [] as string[])) taken.set(f.toLowerCase(), f);
+  const batch = new Map<string, string>();
+  for (const id of ids) {
+    assertFileId(id, "brief item id");
+    const name = `${id}.json`;
+    inWorkflowDir(root, path.join(dir, name));
+    const key = name.toLowerCase();
+    // on a case-insensitive file system A.json and a.json are one file
+    const clash = [batch.get(key), taken.get(key)].find((f) => f !== undefined && f !== name);
+    if (clash)
+      fail(
+        "invalid-input",
+        `item "${id}": its brief ${name} differs only in letter case from the brief ${clash} of another item`,
+        "give ids that differ by more than letter case (re-add one item under a new id); briefs/<id>.json would overwrite each other on macOS and Windows",
+      );
+    batch.set(key, name);
+  }
+}
+
 export async function saveBrief(root: string, brief: Brief): Promise<string> {
-  const file = inWorkflowDir(
-    root,
-    path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`),
-  );
+  await checkBriefNames(root, [brief.item.id]);
+  const file = path.join(root, WORKFLOW_DIR, "briefs", `${brief.item.id}.json`);
   await writeAtomic(file, JSON.stringify(brief, null, 2) + "\n");
   return file;
 }
 
 export async function saveHandoff(root: string, handoff: Handoff, seq: number): Promise<string> {
+  assertFileId(handoff.item, "handoff item id");
+  if (!Number.isSafeInteger(seq) || seq < 0)
+    fail(
+      "invalid-input",
+      `handoff seq ${String(seq)} is not a non-negative integer`,
+      "pass the state's event count after complete (res.state.events.length)",
+    );
   const file = inWorkflowDir(
     root,
     path.join(root, WORKFLOW_DIR, "handoffs", `${handoff.item}-${seq}.json`),

@@ -8,17 +8,18 @@
 - Every error names the rule, the item and a concrete fix.
 - Two runtime dependencies: [`ex-flow`](https://www.npmjs.com/package/ex-flow) (DAG planner) and [`exsorted`](https://www.npmjs.com/package/exsorted).
 - Works with any LLM host: the engine hands out **briefs**, you run them with your agents and hand back **handoffs**.
+- The invariants the engine enforces, each with the file and the test behind it: [docs/principles.md](docs/principles.md).
 
 ## Contents
 
-1. [Install](#install)
-2. [Pick a methodology](#pick-a-methodology)
-3. [How a run works](#how-a-run-works)
-4. [Quick start: Scrum](#quick-start-scrum)
-5. [Quick start: Kanban](#quick-start-kanban)
-6. [Quick start: Waterfall](#quick-start-waterfall)
-7. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
-8. [Persisting state](#persisting-state)
+1. [Pick a methodology](#pick-a-methodology)
+2. [How a run works](#how-a-run-works)
+3. [Quick start: Scrum](#quick-start-scrum)
+4. [Quick start: Kanban](#quick-start-kanban)
+5. [Quick start: Waterfall](#quick-start-waterfall)
+6. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
+7. [Persisting state](#persisting-state)
+8. [Custom methodologies and extension state](#custom-methodologies-and-extension-state)
 9. [CLI reference (`exwf`)](#cli-reference-exwf)
 10. [Configuration](#configuration)
 11. [Ceremonies](#ceremonies)
@@ -31,29 +32,18 @@
 18. [Contributing](#contributing)
 19. [License](#license)
 
-## Install
-
-```sh
-npm install ex-workflow      # or: pnpm add ex-workflow
-npx exwf                     # prints the CLI usage
-```
-
-`latest` is the supported line (1.1.1). Pre-releases, when any, are published under the `stage` dist-tag.
-
 ## Pick a methodology
 
-| | Scrum (`ex-workflow/scrum`) | Kanban (`ex-workflow/kanban`) | Waterfall (`ex-workflow/waterfall`) |
-|---|---|---|---|
-| Fits | a goal delivered in budgeted sprints | a continuous flow of requests | a phase-gated project with a frozen baseline |
-| Unit of control | sprint budget (tokens, turns, wall-clock) | WIP limits per column, classes of service | human-approved gate per phase |
-| Flow | backlog → sprint → review | options → ready → dev → review → done | work → review → done, inside each phase |
-| Preset roles | product-owner, scrum-master, developer | service-request-manager, service-delivery-manager, worker | project-manager, business-analyst, architect, developer, qa, release-manager |
-| Ceremonies | refine, plan, commit, uncommit, daily, review, retro, cancel | replenishment, delivery-planning, service-delivery-review, operations-review, risk-review, strategy-review | kickoff, gateReview, changeControlBoard, phaseRetrospective |
-| Metrics | velocity, cost per point, budget utilisation | lead and cycle time, throughput, WIP, flow efficiency, aging, CFD, SLE compliance | phase report, requirement coverage, traceability matrix |
+| | Scrum (`ex-workflow/scrum`) | Kanban (`ex-workflow/kanban`) | Waterfall (`ex-workflow/waterfall`) | Investigation (`ex-workflow/investigation`) | Experimentation (`ex-workflow/experimentation`) |
+|---|---|---|---|---|---|
+| Fits | a goal delivered in budgeted sprints | a continuous flow of requests | a phase-gated project with a frozen baseline | one bounded question answered from preregistered experiments | competing candidates compared against a frozen baseline and harness |
+| Unit of control | sprint budget (tokens, turns, wall-clock) | WIP limits per column, classes of service | human-approved gate per phase | round limit and budget, independent replay and conclusion review | concurrency cap, per-candidate and total budgets, independent validation at the exact SHA |
+| Flow | backlog → sprint → review | options → ready → dev → review → done | work → review → done, inside each phase | intake → execute → observed | candidate → building → validation → done |
+| Preset roles | product-owner, scrum-master, developer | service-request-manager, service-delivery-manager, worker | project-manager, business-analyst, architect, developer, qa, release-manager | investigator, replay-worker, conclusion-reviewer | coordinator, builder, validator, integrator |
+| Ceremonies | refine, plan, commit, uncommit, daily, review, retro, cancel | replenishment, delivery-planning, service-delivery-review, operations-review, risk-review, strategy-review | kickoff, gateReview, changeControlBoard, phaseRetrospective | intake, hypotheses, preregister, observe, update-belief, conclude, review-conclusion, stop | freeze, provision, start, submit, validate, compare, integrate, validate-integration, terminate, stop, cleanup |
+| Metrics | velocity, cost per point, budget utilisation | lead and cycle time, throughput, WIP, flow efficiency, aging, CFD, SLE compliance | phase report, requirement coverage, traceability matrix | rounds, valid and invalid runs | candidates by outcome, spent, tokens per candidate |
 
-Scrum, Kanban and Waterfall share one core: the same item model, the same brief and handoff contracts, the same CLI and the same `.workflow/` files. Roles are data (capabilities, not names), so you can replace or extend the presets with `exwf role add`.
-
-Standalone [Investigation and Experimentation](#standalone-investigation-and-experimentation) add evidence-driven inquiry and isolated candidate comparison; each runs in its own state.
+All five share one core: the same item model, the same brief and handoff contracts, the same CLI and the same `.workflow/` files. Roles are data (capabilities, not names), so you can replace or extend the presets with `exwf role add`. [Investigation and Experimentation](#standalone-investigation-and-experimentation) each run alone, in their own `.workflow/`.
 
 ## How a run works
 
@@ -216,6 +206,42 @@ Layout under the project root:
 ```
 
 The lock is created exclusively, retried for about two seconds and taken over when older than 60 s. Read-only commands do not lock. If a crashed process left a lock behind and a command reports that another `exwf` holds it, delete the file.
+
+## Custom methodologies and extension state
+
+`Methodology` and `WorkflowState` take the methodology name as an optional second type parameter. It defaults to the five built-in names, so code written for the built-ins type-checks unchanged; a custom methodology declares its own name and runs on the same core:
+
+```ts
+import { init, next, complete, type Methodology } from "ex-workflow";
+
+function triage(): Methodology<TriageConfig, "triage"> {
+  return { name: "triage", /* vocabulary, stages, roles, ceremonies, rules, metrics, ... */ };
+}
+let { state } = init({ methodology: triage(), config: { queue: "support" } }); // WorkflowState<"triage">
+```
+
+`ex-workflow/registry` maps names to factories, with the five built-ins pre-registered. Use it to resolve a loaded state's `methodology`, or to register your own:
+
+```ts
+import { methodologyFactory, registerMethodology, registeredMethodologies } from "ex-workflow/registry";
+
+const m = methodologyFactory(state.methodology)(); // unknown name: invalid-input, the fix lists the known names
+registerMethodology("triage", triage); // calls triage() once to check it; a taken name or a non-Methodology result: invalid-input
+registeredMethodologies(); // ["scrum", "kanban", "waterfall", "investigation", "experimentation", "triage"]
+```
+
+The registry is its own entry so that importing core plus one methodology does not pull in the other four. Custom methodologies are SDK-only in 1.2: `exwf init <name>` resolves through the same registry, but the `exwf` binary cannot load third-party modules, and the file adapter only accepts the five built-in names (see [Known limitations](#known-limitations)).
+
+A methodology keeps its own record in `state.ext`, keyed by its name, and reads and writes it only through the accessors:
+
+```ts
+import { readExt, writeExt } from "ex-workflow";
+
+const queue = readExt<string[]>(state, "triage") ?? [];
+state = writeExt(state, "triage", [...queue, "T-1"]); // returns a new state; undefined removes the key
+```
+
+Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and mirror it to the deprecated top-level `state.investigation` / `state.experimentation` in memory, so SDK code that reads those fields keeps working. On disk only `ext` is stored: `saveState` leaves the mirror out and `loadState` sets it back to the same record (if a hand-edited `state.json` carries both, `ext` wins). The mirrors are read-only: once `ext.<name>` exists the engine reads only it, and a write to the legacy field is ignored; write through `writeExt`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
 
 ## CLI reference (`exwf`)
 
@@ -403,30 +429,37 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 
 | Import | Contents |
 |---|---|
-| `ex-workflow` | core: `init`, `addItem`, `editItem`, `next`, `complete`, `decide`, `applyAction`, `validateAction`, `changeConfig`, `correctAccounting`, `clearBlocker`, `raiseBlocker`, `registerRole`, `openQuestions`, `WorkflowError`, `VERSION`, … |
+| `ex-workflow` | core: `init`, `addItem`, `editItem`, `next`, `complete`, `decide`, `applyAction`, `validateAction`, `changeConfig`, `correctAccounting`, `clearBlocker`, `raiseBlocker`, `registerRole`, `openQuestions`, `readExt`, `writeExt`, `independenceConflicts`, `frozenChanges`, `WorkflowError`, `VERSION`, … |
 | `ex-workflow/scrum` | `scrum()`, `scrumMetrics`, `dailyReport`, `closeSprint`, presets |
 | `ex-workflow/kanban` | `kanban()`, `board`, `kanbanMetrics`, `opsReport`, `riskReport`, `cadencesDue`, `DEFAULT_COLUMNS`, presets |
 | `ex-workflow/waterfall` | `waterfall()`, `phaseReport`, `traceabilityMatrix`, `waterfallMetrics`, `baselinePhase`, `reopenPhases`, presets |
 | `ex-workflow/investigation` | `investigation()`, `validateInvestigationConfig`; types `InvestigationConfig`, `InvestigationState`, `InvestigationRound`, `InvestigationConclusion`, `Hypothesis`, `Experiment`, `Observation`, `BeliefUpdate` |
 | `ex-workflow/experimentation` | `experimentation()`, `validateExperimentationConfig`, `experimentationCeremonies`, `experimentationMetrics`, `experimentationReport`, `experimentationRoles`, `experimentationRules`, `experimentationStages`; types `ExperimentationConfig`, `ExperimentationState`, `ExperimentCandidate` |
+| `ex-workflow/registry` | `registerMethodology`, `methodologyFactory`, `registeredMethodologies` (five built-ins pre-registered); types `MethodologyFactory`, `MethodologyRegistry` |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
 | `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
 | `ex-workflow/types` | every public type |
 
-Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 51–68 kB minified.
+Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 53–69 kB minified.
 
 ## Compatibility and versioning
 
 - Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
+- **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still set in memory and for SDK readers, as read-only mirrors of `ext.investigation` / `ext.experimentation` (on disk only `ext` is written; `loadState` restores the mirror), so SDK code reading `state.investigation` / `state.experimentation` sees the same record; once `ext.<name>` exists a write to the legacy field is ignored. Read with `readExt` and write with `writeExt` instead. The mirrors do not make a 1.2 state loadable by 1.1.x (see [Known limitations](#known-limitations)). 2.0 removes the mirrors.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
 
 ## Known limitations
 
 Deliberate, documented, and stable within 1.x.
 
-- **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), delete it by hand.
+- **A custom methodology's state cannot go through the file adapter or the CLI.** The state schema accepts only the five built-in names in `methodology`, so `saveState`, `loadState` and every `exwf` command refuse it. Keep such a state through the SDK and persist it yourself.
+- **No downgrade for Investigation and Experimentation.** 1.1.x cannot load a state that 1.2 wrote for those two methodologies: the 1.1 state schema rejects the `ext` field, and the legacy mirrors do not change that. Keep a run on 1.2 once 1.2 has saved it.
+
+- **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), the command gives up after its retries with `invalid-input` naming the lock file; delete it by hand.
+- **Item ids that differ only in letter case cannot both get a brief file.** On macOS and Windows `briefs/A.json` and `briefs/a.json` are one file, so `exwf next` checks every brief name of the batch first and, when an item's id differs from another item's (in the same batch, or with an existing brief) only in case, refuses the whole dispatch with `invalid-input` naming both: no brief is written and the state is unchanged. `saveBrief` refuses such an id the same way. Give ids that differ by more than case (re-add one item under a new id).
+- **An id long enough to hit the OS file-name limit fails at write time.** `exwf next` writes `briefs/<id>.json` per item, so such an id fails `invalid-input` when its brief is written, possibly after earlier briefs of the batch were written. 1.1.1 behaved the same.
 - **Blockers are owned by a human.** Finishing a follow-up does not clear its blocker; `unblock` does.
 - **Direct primitives bypass the baseline.** `addItem` and `editItem` called directly do not check `baseline-immutable`; `applyAction` and the CLI do.
 - **Kanban cadences count turns, not time.** The engine has no clock; wall-clock schedules are the host's job. `wipBypass` is a column total.

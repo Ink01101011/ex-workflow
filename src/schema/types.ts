@@ -16,6 +16,8 @@ export interface JsonSchema {
   minLength?: number;
   pattern?: string;
   description?: string;
+  /** annotation only (from a `@deprecated` TSDoc tag); the validator ignores it */
+  deprecated?: boolean;
 }
 
 /** A self-contained document: the root points into its own definitions. */

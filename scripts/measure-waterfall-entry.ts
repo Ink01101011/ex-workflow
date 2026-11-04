@@ -1,2 +1,2 @@
 export * from "../src/index.ts";
-export * from "../src/waterfall/index.ts";
+export * from "../src/methodologies/waterfall/index.ts";

@@ -28,8 +28,10 @@
       "estimateTokens",
       "evaluatePolicies",
       "fail",
+      "frozenChanges",
       "getItem",
       "hasCapability",
+      "independenceConflicts",
       "init",
       "isExhausted",
       "isTerminalStage",
@@ -44,6 +46,7 @@
       "plan",
       "raiseBlocker",
       "raisePending",
+      "readExt",
       "registerRole",
       "remaining",
       "requireCap",
@@ -56,7 +59,8 @@
       "stageOf",
       "synthesizeBrief",
       "toExNodes",
-      "validateAction"
+      "validateAction",
+      "writeExt"
     ],
     "./scrum": [
       "SCRUM_VOCABULARY",
@@ -177,7 +181,8 @@
       "validate",
       "waterfallConfigSchema",
       "workflowStateSchema"
-    ]
+    ],
+    "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"]
   },
   "usage": [
     "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",

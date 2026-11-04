@@ -14,10 +14,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createState } from "../state.ts";
-import { WorkflowError } from "../errors.ts";
+import { createState } from "../core/state.ts";
+import { addItem } from "../core/items/record.ts";
+import { WorkflowError } from "../core/errors.ts";
 import { loadState, saveBrief, saveHandoff, saveState, statePath, withStateLock } from "./file.ts";
-import type { Role, WorkflowState } from "../types.ts";
+import type { Role, WorkflowState } from "../core/types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const dev: Role = {
@@ -284,4 +285,205 @@ test("writeAtomic failure removes the temp file and throws invalid-input (B15)",
     syncBuiltinESMExports();
   }
   assert.deepEqual(await readdir(path.join(root, ".workflow")), []);
+});
+
+test("loadState refuses a malformed ext.investigation or ext.experimentation record (U9 P1)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveState(root, fresh());
+  for (const ext of [
+    { investigation: { phase: "observe", rounds: null } },
+    { experimentation: { candidates: null } },
+  ]) {
+    await writeFile(statePath(root), JSON.stringify({ ...fresh(), ext }));
+    await assert.rejects(
+      loadState(root),
+      (e: unknown) =>
+        e instanceof WorkflowError && e.code === "invalid-input" && /\/ext\//.test(e.message),
+    );
+  }
+});
+
+test("withStateLock gives up on a stale lock it cannot remove, naming the lock (U9 P2)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await mkdir(path.join(root, ".workflow"));
+  const lock = path.join(root, ".workflow", "state.lock");
+  await writeFile(lock, "123 old\n");
+  const realUnlink = fsp.unlink;
+  let calls = 0;
+  mock.method(fsp, "unlink", async (...args: Parameters<typeof realUnlink>) => {
+    if (String(args[0]) !== lock) return realUnlink(...args);
+    calls++;
+    throw Object.assign(new Error("EPERM simulated"), { code: "EPERM" });
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withStateLock(root, async () => "never", { retries: 3, intervalMs: 1, staleMs: -1 }),
+      (e: unknown) => {
+        assert.ok(e instanceof WorkflowError);
+        assert.equal(e.code, "invalid-input");
+        assert.ok(e.message.includes(lock), e.message);
+        assert.match(e.fix, /delete/);
+        return true;
+      },
+    );
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+  assert.ok(calls >= 1 && calls <= 4, `bounded unlink attempts, got ${calls}`);
+});
+
+test("withStateLock reports fs failures as WorkflowError, not a raw fs error (U9 P5)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  // .workflow is a file, so the lock directory cannot be created
+  await writeFile(path.join(root, ".workflow"), "not a directory");
+  await assert.rejects(
+    withStateLock(root, async () => "never"),
+    (e: unknown) => {
+      assert.ok(e instanceof WorkflowError, String(e));
+      assert.equal(e.code, "invalid-input");
+      assert.match(e.message, /state\.lock/);
+      return true;
+    },
+  );
+  const root2 = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  mock.method(fsp, "open", async () => {
+    throw Object.assign(new Error("EACCES simulated"), { code: "EACCES" });
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      withStateLock(root2, async () => "never"),
+      (e: unknown) => {
+        assert.ok(e instanceof WorkflowError, String(e));
+        assert.equal(e.code, "invalid-input");
+        assert.match(e.message, /EACCES simulated/);
+        return true;
+      },
+    );
+  } finally {
+    mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test("saveState and loadState refuse a deeply nested value with invalid-input, not RangeError (U9 P4)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  let deep: unknown = [];
+  for (let i = 0; i < 100_000; i++) deep = [deep];
+  const tooDeep = (e: unknown) => {
+    assert.ok(e instanceof WorkflowError, String(e));
+    assert.equal(e.code, "invalid-input");
+    assert.match(e.message, /nested too deeply/);
+    return true;
+  };
+  await assert.rejects(saveState(root, { ...fresh(), ext: { x: deep } }), tooDeep);
+  await mkdir(path.join(root, ".workflow"), { recursive: true });
+  const good = JSON.stringify(fresh());
+  const n = 100_000;
+  await writeFile(
+    statePath(root),
+    good.replace("{", `{"ext":{"x":${"[".repeat(n)}${"]".repeat(n)}},`),
+  );
+  // the validator does not descend into an open ext value, so the file loads; saving it back is refused
+  const loaded = await loadState(root);
+  await assert.rejects(saveState(root, loaded), tooDeep);
+});
+
+test("saveState reports only a stack overflow as nested too deeply; another RangeError passes through (U14 INFO)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const odd = {
+    toJSON() {
+      throw new RangeError("Invalid time value");
+    },
+  };
+  await assert.rejects(
+    saveState(root, { ...fresh(), ext: { x: odd } }),
+    (e: unknown) =>
+      e instanceof RangeError &&
+      !(e instanceof WorkflowError) &&
+      e.message === "Invalid time value",
+  );
+  await assert.rejects(readdir(path.join(root, ".workflow")));
+});
+
+test("saveBrief and saveHandoff check the id and the seq; loadState checks each item's key (U9 P8)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
+  // ids inside .workflow but not safe file names: the path check alone let these through
+  for (const id of ["a/b", "a..b", ".x", "", 7])
+    await assert.rejects(saveBrief(root, { item: { id } } as never), invalid, String(id));
+  await assert.rejects(saveHandoff(root, { ...h, item: "a/b" }, 1), invalid);
+  await assert.rejects(saveHandoff(root, { ...h, item: "a..b" }, 1), invalid);
+  for (const seq of [-1, 1.5, Number.NaN, 2 ** 53])
+    await assert.rejects(saveHandoff(root, h, seq), invalid);
+  assert.deepEqual(await readdir(root), []);
+
+  await saveState(root, fresh());
+  const s = addItem(fresh(), { id: "B", title: "b" }, "dev", T0);
+  const item = s.items["B"];
+  await writeFile(statePath(root), JSON.stringify({ ...s, items: { A: item } }));
+  await assert.rejects(
+    loadState(root),
+    (e: unknown) => invalid(e) && /items\/A/.test((e as Error).message),
+  );
+});
+
+test("saveBrief and saveHandoff keep the 1.1 file-name rule for existing ids (U14 F3)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
+  // ids 1.1.1 stored and wrote files for; assertId now refuses them at creation only
+  for (const id of ["aux.1", "toString", `L${"x".repeat(199)}`]) {
+    await saveBrief(root, { item: { id } } as never);
+    await saveHandoff(root, { ...h, item: id }, 1);
+  }
+  assert.equal((await readdir(path.join(root, ".workflow", "briefs"))).length, 3);
+  assert.equal((await readdir(path.join(root, ".workflow", "handoffs"))).length, 3);
+});
+
+test("saveBrief and saveHandoff accept ids 1.1.1 wrote files for and refuse only unsafe ones (U16 L1)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
+  await saveBrief(root, { item: { id: "my item" } } as never);
+  await saveHandoff(root, { ...h, item: "my item" }, 1);
+  for (const id of ["../x", "a/b", "a\\b", "a\u0000b", "..", ".hidden", "", "a..b"]) {
+    await assert.rejects(saveBrief(root, { item: { id } } as never), invalid, JSON.stringify(id));
+    await assert.rejects(saveHandoff(root, { ...h, item: id }, 1), invalid, JSON.stringify(id));
+  }
+  assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["my item.json"]);
+});
+
+test("saveBrief refuses an id that differs from an existing brief's only in case (U9 P6)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveBrief(root, { item: { id: "Cart-1" } } as never);
+  await saveBrief(root, { item: { id: "Cart-1" } } as never); // the same item again is fine
+  await assert.rejects(
+    saveBrief(root, { item: { id: "cart-1" } } as never),
+    (e: unknown) => invalid(e) && /Cart-1/.test((e as Error).message),
+  );
+  assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["Cart-1.json"]);
+});
+
+test("loadState loads 1.1 role manifest ids, merges by own property and skips __proto__ (U11 O8, U14 F1, U16 L2)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  await saveState(root, fresh());
+  const dir = path.join(root, ".workflow", "roles");
+  await mkdir(dir, { recursive: true });
+  // ids 1.1.1 loaded: the creation-time id rules do not apply to an existing manifest
+  for (const id of ["QA Lead", "aux", "toString", "constructor", "x".repeat(200)])
+    await writeFile(
+      path.join(dir, `${id.slice(0, 20).replace(" ", "_")}.json`),
+      JSON.stringify({ ...dev, id }),
+    );
+  const s = await loadState(root);
+  for (const id of ["QA Lead", "aux", "toString", "constructor", "x".repeat(200)])
+    assert.equal(Object.hasOwn(s.roles, id) && s.roles[id]!.id, id, id);
+  assert.equal(Object.getPrototypeOf(s.roles), Object.prototype);
+  // a manifest that would set the prototype of roles is skipped, as in 1.1.1: no pollution, no refusal
+  await writeFile(path.join(dir, "p.json"), JSON.stringify({ ...dev, id: "__proto__" }));
+  const s2 = await loadState(root);
+  assert.equal(Object.getPrototypeOf(s2.roles), Object.prototype);
+  assert.equal(Object.hasOwn(s2.roles, "__proto__"), false);
+  assert.equal(({} as Record<string, unknown>)["capabilities"], undefined);
 });

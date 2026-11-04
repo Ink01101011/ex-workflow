@@ -11,6 +11,14 @@ The examples are proposed walkthroughs; their outcomes are illustrative, not mea
 | P3 — Exploratory | [#37](https://github.com/Ink01101011/ex-workflow/issues/37) | [Hypothesis-driven investigation](hypothesis-driven-investigation.md) | Composable investigation protocol, validated by the host |
 | P3 — Exploratory | [#38](https://github.com/Ink01101011/ex-workflow/issues/38) | [Isolated experimentation](isolated-experimentation.md) | Composable execution adapter and promotion policy |
 
+P2 reports, against `75e2af5` (1.1.1), 2026-11-03. Research only; nothing implemented.
+
+| Priority | Issue | Report | Recommendation |
+| --- | --- | --- | --- |
+| P2 — Strong interest | [#34](https://github.com/Ink01101011/ex-workflow/issues/34) | [Eval-driven improvement](eval-driven-improvement.md) | Reuse Experimentation with methodology variants as candidates; add a scenario suite and `compareRuns` |
+| P2 — Strong interest | [#35](https://github.com/Ink01101011/ex-workflow/issues/35) | [Risk-adaptive autonomy](risk-adaptive-autonomy.md) | Composable gate policy: requirement resolved from a risk assessment, stricter only |
+| P2 — Strong interest | [#36](https://github.com/Ink01101011/ex-workflow/issues/36) | [Context-grounded planning](context-grounded-planning.md) | Composable entry policy plus a stale-context rule driven by host `repo.changed` |
+
 Both reports cover implementation/test/documentation fit, transitions, roles,
 artifacts, stop conditions, an end-to-end example, evaluation criteria and a
 standalone-versus-composition decision. No new methodology name, CLI command,

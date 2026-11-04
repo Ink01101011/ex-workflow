@@ -5,12 +5,13 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as core from "../src/index.ts";
-import * as scrum from "../src/scrum/index.ts";
-import * as kanban from "../src/kanban/index.ts";
-import * as waterfall from "../src/waterfall/index.ts";
-import * as investigation from "../src/investigation/index.ts";
-import * as experimentation from "../src/experimentation/index.ts";
+import * as scrum from "../src/methodologies/scrum/index.ts";
+import * as kanban from "../src/methodologies/kanban/index.ts";
+import * as waterfall from "../src/methodologies/waterfall/index.ts";
+import * as investigation from "../src/methodologies/investigation/index.ts";
+import * as experimentation from "../src/methodologies/experimentation/index.ts";
 import * as schema from "../src/schema/index.ts";
+import * as registry from "../src/registry.ts";
 import { USAGE } from "../src/cli/commands.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -87,6 +88,7 @@ function current() {
       "./investigation": names(investigation),
       "./experimentation": names(experimentation),
       "./schema": names(schema),
+      "./registry": names(registry),
     },
     usage: [...USAGE],
     schemaDocuments: sorted(
