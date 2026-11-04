@@ -453,7 +453,7 @@ test("saveBrief refuses an id that differs from an existing brief's only in case
   assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["Cart-1.json"]);
 });
 
-test("loadState loads 1.1 role manifest ids, merges by own property and refuses __proto__ (U11 O8, U14 F1)", async () => {
+test("loadState loads 1.1 role manifest ids, merges by own property and skips __proto__ (U11 O8, U14 F1, U16 L2)", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
   await saveState(root, fresh());
   const dir = path.join(root, ".workflow", "roles");
@@ -468,11 +468,10 @@ test("loadState loads 1.1 role manifest ids, merges by own property and refuses 
   for (const id of ["QA Lead", "aux", "toString", "constructor", "x".repeat(200)])
     assert.equal(Object.hasOwn(s.roles, id) && s.roles[id]!.id, id, id);
   assert.equal(Object.getPrototypeOf(s.roles), Object.prototype);
-  // a manifest that would set the prototype of roles stays refused
+  // a manifest that would set the prototype of roles is skipped, as in 1.1.1: no pollution, no refusal
   await writeFile(path.join(dir, "p.json"), JSON.stringify({ ...dev, id: "__proto__" }));
-  await assert.rejects(
-    loadState(root),
-    (e: unknown) => invalid(e) && /p\.json/.test((e as Error).message),
-  );
+  const s2 = await loadState(root);
+  assert.equal(Object.getPrototypeOf(s2.roles), Object.prototype);
+  assert.equal(Object.hasOwn(s2.roles, "__proto__"), false);
   assert.equal(({} as Record<string, unknown>)["capabilities"], undefined);
 });

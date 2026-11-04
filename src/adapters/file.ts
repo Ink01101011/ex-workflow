@@ -191,14 +191,9 @@ export async function loadState(root: string): Promise<WorkflowState> {
       );
     }
     assertValid(roleSchema, role, `role manifest ${manifestPath}`);
-    // an existing manifest keeps the 1.1 id rules (spec 26, "Role manifests"); only a key that
-    // would set the prototype of roles is refused
-    if (role.id === "__proto__")
-      fail(
-        "invalid-input",
-        `role manifest ${manifestPath}: role id "__proto__" is not a valid id`,
-        "give the role another id, or delete that manifest",
-      );
+    // an existing manifest keeps the 1.1 id rules (spec 26, "Role manifests"); as in 1.1.1 the id
+    // "__proto__" is skipped, since assigning it would set the prototype of roles
+    if (role.id === "__proto__") continue;
     if (!Object.hasOwn(roles, role.id)) roles[role.id] = role;
   }
   return withLegacyMirrors({ ...state, roles });
