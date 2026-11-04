@@ -877,3 +877,31 @@ test("loaded-state invariants fail invalid-input instead of a TypeError (U11 O3)
     invalidState,
   );
 });
+
+test("candidates reads the investigation record once, not once per item (U10 F2)", () => {
+  const h = harness();
+  preregister(h);
+  const s = h.state;
+  const round = s.investigation!.rounds.at(-1)!.item;
+  const count = (extraItems: number) => {
+    const extra = Object.fromEntries(
+      Array.from({ length: extraItems }, (_, k) => [`x${k}`, { ...s.items["q"]!, id: `x${k}` }]),
+    );
+    let reads = 0;
+    const counted = { ...s, items: { ...s.items, ...extra } };
+    Object.defineProperty(counted, "ext", {
+      enumerable: true,
+      get: () => {
+        reads++;
+        return s.ext;
+      },
+    });
+    const picked = m().candidates(counted);
+    assert.deepEqual(
+      picked.map((i) => i.id),
+      [round],
+    );
+    return reads;
+  };
+  assert.equal(count(50), count(0));
+});

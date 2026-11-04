@@ -70,16 +70,17 @@ export function investigation(): Methodology<InvestigationConfig> {
       estimateMode: "per-call",
       fallbackTokensPerWeight: 1,
     }),
-    candidates: (s) =>
-      readInvestigation(s)?.phase === "observe" &&
-      !isExhausted((s.config as InvestigationConfig).budget, investigationIteration(s).spent)
+    candidates: (s) => {
+      // read the record once, not once per item (U10 F2)
+      const x = readInvestigation(s);
+      const round = x?.rounds.at(-1)?.item;
+      return x?.phase === "observe" &&
+        !isExhausted((s.config as InvestigationConfig).budget, investigationIteration(s).spent)
         ? Object.values(s.items).filter(
-            (i) =>
-              i.id === readInvestigation(s)!.rounds.at(-1)?.item &&
-              i.stage === "execute" &&
-              i.status === "todo",
+            (i) => i.id === round && i.stage === "execute" && i.status === "todo",
           )
-        : [],
+        : [];
+    },
     afterComplete: (state, item, now) => {
       const x = readInvestigation(state);
       const iteration = state.iterations.find((it) => it.id === "investigation");
