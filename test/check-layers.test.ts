@@ -253,3 +253,23 @@ test("declaration files and tests of any source extension are not checked", () =
   });
   assert.equal(r.code, 0, r.err);
 });
+
+test("the generated src/schema/generated.ts is exempt from the export-count warning only", () => {
+  const many = ["a", "b", "c", "d", "e", "f"].map((n) => `export const ${n} = 1;`).join("\n");
+  const r = run({
+    "src/schema/generated.ts": `${many}\n`,
+    "src/schema/other.ts": `${many}\n`,
+    "src/core/generated.ts": `${many}\n`,
+  });
+  assert.equal(r.code, 0, r.err);
+  assert.doesNotMatch(r.err, /src\/schema\/generated\.ts/);
+  assert.match(r.err, /src\/schema\/other\.ts has 6 runtime exports/);
+  assert.match(r.err, /src\/core\/generated\.ts has 6 runtime exports/);
+
+  const bad = run({
+    "src/core/a.ts": 'export { x } from "../schema/generated.ts";\n',
+    "src/schema/generated.ts": "export const x = 1;\n",
+  });
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /src\/core\/a\.ts imports src\/schema\/generated\.ts \(core -> outer\)/);
+});

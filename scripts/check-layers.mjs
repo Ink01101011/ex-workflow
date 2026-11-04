@@ -8,7 +8,7 @@
 // import any layer. An import (runtime or type-only) may only go to the same or a lower layer, and
 // an inner-layer file may import no bare specifier other than the runtime dependencies.
 // Exit 1 on a violation; warn (exit 0) above MAX_RUNTIME_EXPORTS runtime exports in a file
-// that is not an index.ts, a test, test support or type-only.
+// that is not an index.ts, a test, test support, generated or type-only.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, posix, relative, resolve, sep } from "node:path";
 import ts from "typescript";
@@ -19,6 +19,10 @@ const OUTER = LAYERS.length;
 // The only bare specifiers an inner layer may import (package.json dependencies); node: and any
 // other package are outer-layer only (spec 26, "Bare specifiers").
 const RUNTIME_DEPS = ["ex-flow", "exsorted"];
+
+// Generated files, exempt from the export-count warning (not from the layer rule): their shape
+// follows the generator (spec 26, "Generated schema file (U13)").
+const GENERATED = new Set(["src/schema/generated.ts"]);
 
 // Known existing violations, matched on "<importing file> -> <imported file>" (src-relative, "/" separators).
 // Empty since 1.2 U3: the record types moved to src/core/records/ (spec 26, "Record types").
@@ -155,7 +159,7 @@ for (const full of walk(srcDir).sort()) {
     errors.push(`${rel} imports ${to} (${layerName(fromLayer)} -> ${layerName(toLayer)})`);
   }
 
-  if (!isIndex(rel) && !isSupport(rel)) {
+  if (!isIndex(rel) && !isSupport(rel) && !GENERATED.has(rel)) {
     const n = runtimeExports(sf);
     if (n > MAX_RUNTIME_EXPORTS)
       warnings.push(
