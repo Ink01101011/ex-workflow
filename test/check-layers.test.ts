@@ -187,3 +187,28 @@ test("inner layers may import only relative paths, ex-flow and exsorted", () => 
   });
   assert.equal(ok.code, 0, ok.err);
 });
+
+test("a runtime-dependency specifier with . or .. segments is not a dependency subpath", () => {
+  const bad = run({
+    "src/core/a.ts": 'import { x } from "ex-flow/../evil";\nexport const a = x;\n',
+    "src/common/b.ts": 'import { y } from "exsorted/./y";\nexport const b = y;\n',
+    "src/interface/c.ts": 'import { z } from "ex-flow/lib/../../z";\nexport const c = z;\n',
+    "src/methodologies/x/d.ts": 'import { w } from "ex-flow//w";\nexport const d = w;\n',
+    "src/core/e.ts": 'import { v } from "ex-flow-evil";\nexport const e = v;\n',
+  });
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /src\/core\/a\.ts imports bare specifier "ex-flow\/\.\.\/evil"/);
+  assert.match(bad.err, /src\/common\/b\.ts imports bare specifier "exsorted\/\.\/y"/);
+  assert.match(
+    bad.err,
+    /src\/interface\/c\.ts imports bare specifier "ex-flow\/lib\/\.\.\/\.\.\/z"/,
+  );
+  assert.match(bad.err, /src\/methodologies\/x\/d\.ts imports bare specifier "ex-flow\/\/w"/);
+  assert.match(bad.err, /src\/core\/e\.ts imports bare specifier "ex-flow-evil"/);
+
+  const ok = run({
+    "src/core/a.ts":
+      'import { x } from "ex-flow/dist/index.js";\nimport { y } from "exsorted/sub";\nexport const a = [x, y];\n',
+  });
+  assert.equal(ok.code, 0, ok.err);
+});

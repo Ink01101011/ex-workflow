@@ -104,7 +104,18 @@ function resolveSpec(fromFile, spec) {
   return candidates.find((c) => c.endsWith(".ts") && existsSync(c) && statSync(c).isFile()) ?? base;
 }
 
-const isAllowedBare = (spec) => RUNTIME_DEPS.some((d) => spec === d || spec.startsWith(`${d}/`));
+// The exact package name, or a real subpath of it: no empty, "." or ".." segment, so
+// "ex-flow/../evil" does not pass as ex-flow (spec 26, "Bare specifier subpaths (U13)").
+const isAllowedBare = (spec) =>
+  RUNTIME_DEPS.some(
+    (d) =>
+      spec === d ||
+      (spec.startsWith(`${d}/`) &&
+        spec
+          .slice(d.length + 1)
+          .split(/[\\/]/)
+          .every((seg) => seg !== "" && seg !== "." && seg !== "..")),
+  );
 
 const errors = [];
 const warnings = [];
