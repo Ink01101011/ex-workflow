@@ -129,5 +129,13 @@ test("a factory that throws at registration fails invalid-input keeping its mess
       }),
     (e: unknown) => code(e) === "invalid-input" && /not an error/.test((e as Error).message),
   );
+  assert.throws(
+    () =>
+      r.registerMethodology("boom3", () => {
+        throw Object.create(null);
+      }),
+    (e: unknown) =>
+      e instanceof WorkflowError && code(e) === "invalid-input" && /boom3/.test(e.message),
+  );
   assert.deepEqual(r.registeredMethodologies(), []);
 });
