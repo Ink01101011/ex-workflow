@@ -43,7 +43,7 @@ An item leaves a stage only when the stage's exit policies hold, and passes a ga
 
 A capability gate refuses an approval by the role that did the work (`conflict-of-interest`); the author is the role of the last dispatch from a stage before the gated one, so a reviewer dispatched into the gated stage is not the author. The planner gives a review to a reviewer other than the author when one exists.
 
-- Enforced by: `src/core/gates.ts` (`authorOf`, `checkGate`), `src/core/planner.ts` (`assignRole`), `src/core/rules.ts` (`conflict-of-interest`).
+- Enforced by: `src/core/gates.ts` (`checkGate` refuses with `conflict-of-interest`, judging the author with `authorOf`), which `complete()` runs on every gated completion; `src/core/planner.ts` (`assignRole`). The `conflict-of-interest` entry in `src/core/rules.ts` matches action type `complete`, which the engine never dispatches (completions reach the rules as `item.complete`), so it applies only to an action of type `complete` passed to `validateAction` directly.
 - Test: `src/core/gates.test.ts` "checkGate reports conflict of interest when author approves own work" and "a reviewer dispatched into the gated stage is not the author; the earlier-stage worker is"; `src/core/planner.test.ts` "assignRole prefers the item's role, else deliver/review by status, never the author for review".
 
 ## 7. Roles are data; capabilities decide
