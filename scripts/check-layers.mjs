@@ -27,16 +27,22 @@ const ALLOWLIST = [];
 const rootArg = process.argv.indexOf("--root");
 const root = resolve(rootArg > 0 ? process.argv[rootArg + 1] : ".");
 
+// Every TypeScript and JavaScript source extension is checked, declaration files excepted
+// (spec 26, "Layer check extensions (U13)").
+const SOURCE_EXTS = [".ts", ".mts", ".cts", ".tsx", ".js", ".mjs", ".cjs"];
+const EXT = "(?:ts|mts|cts|tsx|js|mjs|cjs)";
+const isSource = (f) => new RegExp(`\\.${EXT}$`).test(f) && !/\.d\.[^./]+$/.test(f);
 const norm = (p) => p.split(sep).join("/");
-const isTest = (f) => f.endsWith(".test.ts");
-const isSupport = (f) => /(^|\/)(fixtures|[^/]+\.fixtures)\.ts$/.test(f);
+const isTest = (f) => new RegExp(`\\.test\\.${EXT}$`).test(f);
+const isSupport = (f) => new RegExp(`(^|/)(fixtures|[^/]+\\.fixtures)\\.${EXT}$`).test(f);
+const isIndex = (f) => new RegExp(`^index\\.${EXT}$`).test(posix.basename(f));
 
 function walk(dir) {
   const out = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, e.name);
     if (e.isDirectory()) out.push(...walk(full));
-    else if (e.name.endsWith(".ts") && !e.name.endsWith(".d.ts")) out.push(full);
+    else if (isSource(e.name)) out.push(full);
   }
   return out;
 }
@@ -97,11 +103,17 @@ function runtimeExports(sf) {
   return n + functions.size;
 }
 
-/** The file a relative specifier names: as written, `.js` mapped to `.ts`, `+ .ts`, or `/index.ts`. */
+/** The file a relative specifier names: `.js` / `.mjs` / `.cjs` mapped to its TypeScript source,
+ * as written, `+ <ext>`, or `/index.<ext>`, trying the source extensions in order. */
 function resolveSpec(fromFile, spec) {
   const base = resolve(dirname(fromFile), spec);
-  const candidates = [base, base.replace(/\.(m|c)?js$/, ".$1ts"), `${base}.ts`, join(base, "index.ts")];
-  return candidates.find((c) => c.endsWith(".ts") && existsSync(c) && statSync(c).isFile()) ?? base;
+  const candidates = [
+    base.replace(/\.(m|c)?js$/, ".$1ts"),
+    base,
+    ...SOURCE_EXTS.map((x) => `${base}${x}`),
+    ...SOURCE_EXTS.map((x) => join(base, `index${x}`)),
+  ];
+  return candidates.find((c) => isSource(c) && existsSync(c) && statSync(c).isFile()) ?? base;
 }
 
 // The exact package name, or a real subpath of it: no empty, "." or ".." segment, so
@@ -143,7 +155,7 @@ for (const full of walk(srcDir).sort()) {
     errors.push(`${rel} imports ${to} (${layerName(fromLayer)} -> ${layerName(toLayer)})`);
   }
 
-  if (posix.basename(rel) !== "index.ts" && !isSupport(rel)) {
+  if (!isIndex(rel) && !isSupport(rel)) {
     const n = runtimeExports(sf);
     if (n > MAX_RUNTIME_EXPORTS)
       warnings.push(

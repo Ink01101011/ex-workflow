@@ -212,3 +212,44 @@ test("a runtime-dependency specifier with . or .. segments is not a dependency s
   });
   assert.equal(ok.code, 0, ok.err);
 });
+
+test("every source extension under src is checked: .mts, .cts, .tsx, .js, .mjs, .cjs (U11 N2)", () => {
+  const bad = run({
+    // the U11 repro: a .mts leak re-exported from a core .ts, and a .js with require()
+    "src/core/leak.mts":
+      'import { readFileSync } from "node:fs";\nexport const x = readFileSync;\n',
+    "src/core/a.ts": 'export { x } from "./leak.mts";\n',
+    "src/core/leak2.js": 'const fs = require("node:fs");\nmodule.exports = fs;\n',
+    "src/common/c.cts": 'import os = require("node:os");\nexport const c = os;\n',
+    "src/interface/d.tsx": 'import { m } from "../methodologies/m.mjs";\nexport const d = m;\n',
+    "src/methodologies/m.mjs": "export const m = 1;\n",
+    "src/core/e.mjs": 'export { m } from "../methodologies/m.mjs";\n',
+    "src/core/f.cjs": 'module.exports = require("../interface/d.tsx");\n',
+  });
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /src\/core\/leak\.mts imports bare specifier "node:fs"/);
+  assert.match(bad.err, /src\/core\/leak2\.js imports bare specifier "node:fs"/);
+  assert.match(bad.err, /src\/common\/c\.cts imports bare specifier "node:os"/);
+  assert.match(
+    bad.err,
+    /src\/interface\/d\.tsx imports src\/methodologies\/m\.mjs \(interface -> methodologies\)/,
+  );
+  assert.match(
+    bad.err,
+    /src\/core\/e\.mjs imports src\/methodologies\/m\.mjs \(core -> methodologies\)/,
+  );
+  assert.match(bad.err, /src\/core\/f\.cjs imports src\/interface\/d\.tsx \(core -> interface\)/);
+  assert.doesNotMatch(bad.err, /src\/core\/a\.ts/);
+});
+
+test("declaration files and tests of any source extension are not checked", () => {
+  const r = run({
+    "src/core/a.d.ts": 'import type { X } from "node:fs";\nexport type A = X;\n',
+    "src/core/b.d.mts": 'import type { X } from "node:fs";\nexport type B = X;\n',
+    "src/core/c.d.cts": 'import type { X } from "node:fs";\nexport type C = X;\n',
+    "src/core/d.test.mjs": 'import { test } from "node:test";\nexport const t = test;\n',
+    "src/core/e.js": 'export { m } from "./m.ts";\n',
+    "src/core/m.ts": "export const m = 1;\n",
+  });
+  assert.equal(r.code, 0, r.err);
+});
