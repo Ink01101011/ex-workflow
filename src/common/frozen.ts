@@ -4,8 +4,10 @@
  * Compares each key of `frozen` (or only `keys`, when given) with the same key of `supplied`
  * and returns the keys whose value differs, in key order; an empty array means the supplied
  * input matches the freeze. Values are compared by identity (`!==`), so freeze primitive
- * fields such as ids, SHAs and refs. A missing `supplied` record or field counts as a change.
- * The caller decides how a change fails, so the check carries no message of its own.
+ * fields such as ids, SHAs and refs. Only own fields of `supplied` are read: a missing record,
+ * a missing field or an inherited one reads as `undefined`, which counts as a change unless the
+ * frozen value is `undefined` too. The caller decides how a change fails, so the check carries
+ * no message of its own.
  *
  * @example
  * // a submission must reuse the frozen harness and base SHA
@@ -16,7 +18,6 @@ export function frozenChanges<K extends string>(
   supplied: object | undefined,
   keys: readonly K[] = Object.keys(frozen) as K[],
 ): K[] {
-  return keys.filter(
-    (key) => frozen[key] !== (supplied as Record<string, unknown> | undefined)?.[key],
-  );
+  const s = supplied as Record<string, unknown> | undefined;
+  return keys.filter((key) => frozen[key] !== (s && Object.hasOwn(s, key) ? s[key] : undefined));
 }

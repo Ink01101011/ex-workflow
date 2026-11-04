@@ -53,3 +53,19 @@ test("frozenChanges compares by identity, so a frozen field holds an id, SHA or 
   assert.deepEqual(frozenChanges({ list }, { list }), []);
   assert.deepEqual(frozenChanges({ list }, { list: ["a"] }), ["list"]);
 });
+
+test("frozenChanges reads only own fields of the supplied record (U11 N5)", () => {
+  // an inherited member is a missing field, even when it equals the frozen value
+  const inherited = Object.create({ harness: "bench" }) as object;
+  assert.deepEqual(frozenChanges({ harness: "bench" }, inherited), ["harness"]);
+  assert.deepEqual(frozenChanges({ toString: Object.prototype.toString }, {}), ["toString"]);
+  assert.deepEqual(frozenChanges({ harness: "bench" }, Object.create(null) as object), ["harness"]);
+});
+
+test("frozenChanges: a missing field reads as undefined, a change unless the frozen value is undefined too", () => {
+  assert.deepEqual(frozenChanges({ note: undefined }, {}), []);
+  assert.deepEqual(frozenChanges({ note: undefined }, undefined), []);
+  assert.deepEqual(frozenChanges({ note: undefined }, { note: undefined }), []);
+  assert.deepEqual(frozenChanges({ note: undefined }, { note: "x" }), ["note"]);
+  assert.deepEqual(frozenChanges({ note: "x" }, { note: undefined }), ["note"]);
+});
