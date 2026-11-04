@@ -391,6 +391,23 @@ test("saveState and loadState refuse a deeply nested value with invalid-input, n
   await assert.rejects(saveState(root, loaded), tooDeep);
 });
 
+test("saveState reports only a stack overflow as nested too deeply; another RangeError passes through (U14 INFO)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const odd = {
+    toJSON() {
+      throw new RangeError("Invalid time value");
+    },
+  };
+  await assert.rejects(
+    saveState(root, { ...fresh(), ext: { x: odd } }),
+    (e: unknown) =>
+      e instanceof RangeError &&
+      !(e instanceof WorkflowError) &&
+      e.message === "Invalid time value",
+  );
+  await assert.rejects(readdir(path.join(root, ".workflow")));
+});
+
 test("saveBrief and saveHandoff check the id and the seq; loadState checks each item's key (U9 P8)", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
   const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };

@@ -100,7 +100,9 @@ function notTooDeep<T>(what: string, fn: () => T): T {
   try {
     return fn();
   } catch (e) {
-    if (e instanceof RangeError)
+    // only the stack overflow (V8: "Maximum call stack size exceeded"); any other RangeError,
+    // such as "Invalid string length", is not about nesting and is rethrown as it is
+    if (e instanceof RangeError && /maximum call stack size exceeded/i.test(e.message))
       fail(
         "invalid-input",
         `${what} is nested too deeply to process (${e.message})`,
