@@ -209,14 +209,20 @@ function inWorkflowDir(root: string, file: string): string {
   return file;
 }
 
-// the 1.1 id rule: what makes `<id>.json` a safe file name. The creation-time rules of assertId
-// (length cap, device and prototype names) are not applied to an id that already exists (spec 26)
+// what makes `<id>.json` a safe file name. The creation-time rules of assertId (pattern, length cap,
+// device and prototype names) are not applied to an id that already exists (spec 26)
 function assertFileId(id: unknown, what: string): asserts id is string {
-  if (typeof id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) || id.includes(".."))
+  if (
+    typeof id !== "string" ||
+    id === "" ||
+    id.startsWith(".") ||
+    id.includes("..") ||
+    /[/\\\0]/.test(id)
+  )
     fail(
       "invalid-input",
       `${what} ${JSON.stringify(id)} cannot be a file name under ${WORKFLOW_DIR}/`,
-      "use letters, digits, - _ . and no .. (e.g. CART-12)",
+      "use an id with no / \\ NUL or .. and no leading . (e.g. CART-12)",
     );
 }
 

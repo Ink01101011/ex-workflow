@@ -1171,6 +1171,18 @@ test("next dispatches items whose ids 1.1.1 accepted but the creation rules now 
   assert.deepEqual(files.sort(), ["A-1.json", `${long}.json`, "aux.1.json"].sort());
 });
 
+test("next dispatches an item id with a space that 1.1.1 wrote a brief for (U16 L1)", async () => {
+  const { root } = await plannedProject(["A-1", "B-1"]);
+  const file = path.join(root, ".workflow", "state.json");
+  await writeFile(file, (await readFile(file, "utf8")).replaceAll('"B-1"', '"my item"'));
+  const r = await runCommand(["next", "--fallback-tokens-per-weight", "10"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  assert.deepEqual((await readdir(path.join(root, ".workflow", "briefs"))).sort(), [
+    "A-1.json",
+    "my item.json",
+  ]);
+});
+
 test("next checks every brief name first: a case clash in one batch writes no brief and names the item (U14 F3)", async () => {
   const { root } = await plannedProject(["A-1", "Cart-1", "cart-1"]);
   const before = await readFile(path.join(root, ".workflow", "state.json"), "utf8");

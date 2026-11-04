@@ -442,6 +442,18 @@ test("saveBrief and saveHandoff keep the 1.1 file-name rule for existing ids (U1
   assert.equal((await readdir(path.join(root, ".workflow", "handoffs"))).length, 3);
 });
 
+test("saveBrief and saveHandoff accept ids 1.1.1 wrote files for and refuse only unsafe ones (U16 L1)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  const h = { item: "A", role: "dev", produced: [], notes: "", do_not: [], open_questions: [] };
+  await saveBrief(root, { item: { id: "my item" } } as never);
+  await saveHandoff(root, { ...h, item: "my item" }, 1);
+  for (const id of ["../x", "a/b", "a\\b", "a\u0000b", "..", ".hidden", "", "a..b"]) {
+    await assert.rejects(saveBrief(root, { item: { id } } as never), invalid, JSON.stringify(id));
+    await assert.rejects(saveHandoff(root, { ...h, item: id }, 1), invalid, JSON.stringify(id));
+  }
+  assert.deepEqual(await readdir(path.join(root, ".workflow", "briefs")), ["my item.json"]);
+});
+
 test("saveBrief refuses an id that differs from an existing brief's only in case (U9 P6)", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
   await saveBrief(root, { item: { id: "Cart-1" } } as never);
