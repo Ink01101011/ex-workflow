@@ -326,14 +326,14 @@ const { briefs } = next(state, m); // brief.context: what was verified, where, w
 // the host reports what each new revision changed
 const changed = recordRepoChange(state, m, {
   revision: "a71b2d9",
-  paths: ["src/cart.ts"], // as `git diff --name-only` lists them
+  paths: ["src/cart.ts"], // as `git diff --name-only -z` lists them
   by: "ci",
 });
 changed.warnings; // context-stale for each in-flight item whose snapshot cites a changed path
 ```
 
 - **The snapshot** is evidence `context-snapshot` with `data: { revision, assumptions }`, recorded through `applyAction` (action `context.snapshot`). An assumption is `{ claim, required?, source?: { path, lines?: [from, to], hash } }`; one without a `source` is unverified. `recordContextSnapshot` refuses `invalid-input` for a snapshot with no sourced assumption and for a `by` that is neither `human` nor a registered role, or that worked on the item (dispatched it since its last rework, is assigned to it, or authored it). The engine compares paths and hashes, it never reads a file.
-- **Paths** are repository-relative POSIX paths as Git lists them, compared exactly (case included): `src/cart.ts`, not `./src/cart.ts`, `/src/cart.ts` or `src\cart.ts`. Both recorders refuse any other spelling with `invalid-input`.
+- **Paths** are repository-relative POSIX paths as Git lists them, compared exactly (case included): `src/cart.ts`, not `./src/cart.ts`, `/src/cart.ts` or `src\cart.ts`. They must also be Unicode NFC (macOS file systems may hand you NFD), at most 4096 characters, with no control or bidirectional formatting character and no leading or trailing whitespace. Read them from `git diff --name-only -z` (NUL-separated and unquoted) or with `git -c core.quotePath=false`: by default Git prints a non-ASCII name quoted and escaped (`"caf\303\251.ts"`), which is refused. Both recorders refuse any other spelling with `invalid-input`.
 - **`repo.changed`**: `recordRepoChange` (action `repo.change`) appends `repo.changed { revision, paths }`. A snapshot is stale when a later `repo.changed` lists a path it cites (event order, not timestamps; the revision alone does not decide). No item status changes: an item in `in_progress`, `review` or `awaiting_human` gets a `context-stale` warning in `ApplyResult.warnings` when this change made its snapshot stale, and a `todo` item is re-checked by its entry policy when the planner reaches it.
 - **The policy** (`contextGroundedViolations`, rule `policy:custom:context-grounded`) fails an item with no qualifying fresh snapshot, with a stale one, or with a `required` assumption that has no source. A snapshot qualifies when its data is valid, it has at least one sourced assumption and `human` or a registered role that does not work on the item recorded it; the latest qualifying one counts, so a snapshot a worker wrote into the state by hand never replaces an independent one, and one recorded by a role that later works on the item stops counting. Rework drops every snapshot. `next` reports such a `todo` item under `skipped` with reason `entry-policy` and the message. A qualifying snapshot whose required claims are all sourced passes; unverified optional claims are listed in `brief.context.unverified`.
 - **`brief.context`** is `contextOf(state, item)`: `{ revision, assumptions, snapshot, by, stale, unverified }`.

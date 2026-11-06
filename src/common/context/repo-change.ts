@@ -47,7 +47,7 @@ export function recordRepoChange<N extends string>(
     if (issue)
       bad(
         `paths[${i}] ${issue}`,
-        'send paths as `git diff --name-only` lists them, e.g. "src/cart.ts"',
+        'send paths as `git diff --name-only -z` lists them (NUL-separated, unquoted; or with `-c core.quotePath=false`), e.g. "src/cart.ts"',
       );
   });
   if (typeof by !== "string" || by === "") bad("by must name the reporter", 'e.g. "by": "ci"');

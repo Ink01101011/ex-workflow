@@ -35,18 +35,48 @@ const nonEmpty = (x: unknown): x is string => typeof x === "string" && x.trim() 
 const extra = (o: Record<string, unknown>, keys: string[]) =>
   Object.keys(o).find((k) => !keys.includes(k));
 
+/** True for a C0 or C1 control character or a bidirectional formatting character. */
+function hidden(c: number): boolean {
+  return (
+    c < 0x20 ||
+    (c >= 0x7f && c <= 0x9f) ||
+    c === 0x61c ||
+    c === 0x200e ||
+    c === 0x200f ||
+    (c >= 0x202a && c <= 0x202e) ||
+    (c >= 0x2066 && c <= 0x2069)
+  );
+}
+
 /**
  * Why `path` is not a repository-relative POSIX path as Git lists it, or `undefined` when it is:
- * no leading `/`, `./` or drive letter, `/` separators only, no empty, `.` or `..` segment. Paths
- * are compared exactly (case included), so the recorders accept one spelling per file.
+ * no leading `/`, `./` or drive letter, `/` separators only, no empty, `.` or `..` segment, at most
+ * 4096 characters, Unicode NFC, no control or bidirectional formatting character and no leading or
+ * trailing whitespace (F1 G2-8, G4-4). Paths are compared exactly (case included), so the recorders
+ * accept one spelling per file.
  */
 export function repoPathIssue(path: unknown): string | undefined {
-  return typeof path === "string" &&
-    !path.includes("\\") &&
-    !/^[A-Za-z]:/.test(path) &&
-    path.split("/").every((seg) => seg !== "" && seg !== "." && seg !== "..")
-    ? undefined
-    : `${JSON.stringify(path)} is not a repository-relative POSIX path`;
+  const why =
+    typeof path !== "string"
+      ? "not a string"
+      : path.length > 4096
+        ? "longer than 4096 characters"
+        : [...path].some((ch) => hidden(ch.codePointAt(0)!))
+          ? "has a control or bidirectional formatting character"
+          : path !== path.trim()
+            ? "has leading or trailing whitespace"
+            : path !== path.normalize("NFC")
+              ? "is not Unicode NFC"
+              : path.includes("\\") ||
+                  /^[A-Za-z]:/.test(path) ||
+                  !path.split("/").every((seg) => seg !== "" && seg !== "." && seg !== "..")
+                ? "is not relative with / separators and no empty, . or .. segment"
+                : undefined;
+  if (!why) return undefined;
+  const shown = JSON.stringify(
+    typeof path === "string" && path.length > 80 ? `${path.slice(0, 80)}…` : path,
+  );
+  return `${shown} is not a repository-relative POSIX path (${why})`;
 }
 
 /** Why `data` is not a well-formed `ContextSnapshotData` (closed objects), or `undefined`. */

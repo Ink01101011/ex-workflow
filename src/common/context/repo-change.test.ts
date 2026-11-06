@@ -126,6 +126,13 @@ test("recordRepoChange refuses malformed input with invalid-input", () => {
   invalid({ ...good, paths: ["a.ts", ""] }, /paths\[1\]/);
   invalid({ ...good, paths: ["./a.ts"] }, /repository-relative POSIX/);
   invalid({ ...good, paths: ["a\\b.ts"] }, /repository-relative POSIX/);
+  // G2-8, G4-4, G4-5: control characters and a non-NFC spelling; the fix names git's -z output
+  invalid({ ...good, paths: ["a.ts\n"] }, /control/);
+  assert.throws(
+    () => recordRepoChange(board(), m, { ...good, paths: ['"caf\\303\\251.ts"'] }),
+    (e) => e instanceof WorkflowError && /git diff --name-only -z/.test(e.fix),
+  );
+  invalid({ ...good, paths: ["cafe\u0301.ts"] }, /NFC/);
   invalid({ ...good, by: "" }, /by/);
   invalid({ ...good, now: 1 }, /now/);
 });

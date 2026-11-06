@@ -259,6 +259,36 @@ test("contextOf counts only a qualifying snapshot: the latest one a worker canno
   assert.equal(contextOf(t, t.items["A"]!), undefined);
 });
 
+test("G2-8, G4-4: paths must be NFC, free of control and bidi characters and outer whitespace, at most 4096 long", () => {
+  for (const p of ["src/caf\u00e9.ts", "a b/c d.ts", "a".repeat(4096), "\u65e5\u672c/\u8a9e.ts"])
+    assert.equal(repoPathIssue(p), undefined, JSON.stringify(p));
+  for (const p of [
+    "src/cafe\u0301.ts", // NFD
+    "a\u0000b",
+    "a\nb",
+    "a\tb",
+    "a\rb",
+    "a\u007fb",
+    "a\u0085b",
+    "a\u009fb",
+    " ",
+    " src/a.ts",
+    "src/a.ts ",
+    "src/\u202eevil.ts",
+    "src/\u2066x.ts",
+    "src/\u200fx.ts",
+    "src/\u061cx.ts",
+    "a".repeat(4097),
+  ])
+    assert.notEqual(repoPathIssue(p), undefined, JSON.stringify(p));
+  // the long path is not echoed in full
+  assert.ok(repoPathIssue("a".repeat(100_000))!.length < 200);
+  invalid(
+    { ...good, assumptions: [{ claim: "c", source: { path: "src/cafe\u0301.ts", hash: "h" } }] },
+    /NFC/,
+  );
+});
+
 // A seeded linear congruential generator: deterministic, no Math.random (principle rule 1).
 const lcg = (seed: number) => () => (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
 const PATHS = ["a.ts", "b.ts", "c/d.ts", "e.md"];
