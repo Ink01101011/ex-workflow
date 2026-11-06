@@ -199,12 +199,8 @@ export function decide<N extends string>(
   let wantsReview = false;
   let done = false;
   let raised = -1;
-  if (item0 && (by !== "human" || decision === "approve"))
-    for (
-      let i = state.events.length - 1;
-      i >= 0 && (!done || (raised < 0 && by !== "human"));
-      i--
-    ) {
+  if (item0)
+    for (let i = state.events.length - 1; i >= 0 && (!done || raised < 0); i--) {
       const e = state.events[i]!;
       const p = e.payload as { id?: string; verdict?: string } | null;
       if (!done && e.type === "item.completed" && p?.id === item0.id) {

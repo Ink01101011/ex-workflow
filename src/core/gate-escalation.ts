@@ -1,7 +1,5 @@
 import type { Gate, GateEscalation, WorkflowState } from "./types.ts";
 
-const str = (x: unknown): string | false => typeof x === "string" && x;
-
 /**
  * `base` followed by the entries of `extra` not yet present. The identity of a requirement
  * (`req`) is 1 for "human", else the capability it names when that is a non-empty string; of an
@@ -9,11 +7,10 @@ const str = (x: unknown): string | false => typeof x === "string" && x;
  */
 function add<T>(base: readonly T[], extra: unknown, req?: 1): T[] {
   const key = (q: unknown): unknown =>
-    req
-      ? q === "human"
-        ? 1
-        : str((q as { capability?: unknown } | null | undefined)?.capability)
-      : str(q);
+    req && q === "human"
+      ? 1
+      : (req && (q = (q as { capability?: unknown } | null | undefined)?.capability),
+        typeof q === "string" && q);
   const out = [...base];
   // a non-array counts as one entry
   for (const x of [extra].flat()) {
@@ -51,13 +48,14 @@ export function resolvedGate(
   gate: Gate,
   at: number,
 ): Gate {
-  const p = (i: number) => state.events[i]?.payload as { id?: unknown; item?: unknown } | null;
-  let i = at - 1;
-  while (i >= 0 && state.events[i]!.type === "item.transition" && p(i)?.id === id) i--;
-  const e = state.events[i];
-  const x = e?.type === "gate.resolved" && p(i) ? (p(i) as { gate?: unknown }) : undefined;
+  let e;
+  do e = state.events[--at];
+  while (e?.type === "item.transition" && (e.payload as { id?: unknown } | null)?.id === id);
+  const p = e?.payload as { item?: unknown; gate?: unknown } | null | undefined;
   return widenGate(
     gate,
-    x?.gate === gate.id && p(i)?.item === id ? (x as GateEscalation) : undefined,
+    e?.type === "gate.resolved" && p?.item === id && p.gate === gate.id
+      ? (p as GateEscalation)
+      : undefined,
   );
 }

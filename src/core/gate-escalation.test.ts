@@ -141,6 +141,14 @@ test("property: a widened gate never answers pass where the static gate does not
   }
 });
 
+const res = (item: string, g: string, requires: unknown[], evidence: string[] = []) => ({
+  item,
+  gate: g,
+  requires,
+  evidence,
+  reason: {},
+});
+
 test("resolvedGate widens by the gate.resolved recorded with the pending only (G2-5)", () => {
   const gate: Gate = {
     id: "g",
@@ -150,13 +158,6 @@ test("resolvedGate widens by the gate.resolved recorded with the pending only (G
   };
   const pend = (s: ReturnType<typeof base>) => appendEvent(s, "pending.raised", "system", {}, T0);
   const at = (s: ReturnType<typeof base>) => s.events.length - 1;
-  const res = (item: string, g: string, requires: unknown[], evidence: string[] = []) => ({
-    item,
-    gate: g,
-    requires,
-    evidence,
-    reason: {},
-  });
   let s = pend(base([]));
   assert.deepEqual(resolvedGate(s, "A", gate, at(s)), gate);
   assert.deepEqual(resolvedGate(s, "A", gate, -1), gate);
