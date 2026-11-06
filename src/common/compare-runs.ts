@@ -80,6 +80,13 @@ const show = (v: unknown): string =>
         : String(v);
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
+/** `o[k]` when `o` has it as an own property: inherited values (a `{ __proto__: … }` literal) are not read. */
+const own = (o: Record<string, unknown>, k: string): unknown =>
+  Object.hasOwn(o, k) ? o[k] : undefined;
+const finite = (v: number, what: string): number =>
+  Number.isFinite(v)
+    ? v
+    : bad(`${what} is not finite (${v})`, "pass the host's measured usage figures");
 const idOf = (v: unknown, what: string): string => {
   if (typeof v !== "string")
     bad(`${what} is ${show(v)}, not an id`, `pass a string id such as "V0"`);
@@ -99,7 +106,7 @@ function metricsOf(state: unknown, where: string): RunMetrics {
       `${where}.state is ${show(state)}, not a workflow state`,
       "pass the finished state.json",
     );
-  const { events, accounting, items } = state;
+  const [events, accounting, items] = ["events", "accounting", "items"].map((k) => own(state, k));
   if (!Array.isArray(events) || !Array.isArray(accounting))
     return bad(
       `${where}.state has no events and accounting arrays`,
@@ -126,7 +133,7 @@ function metricsOf(state: unknown, where: string): RunMetrics {
         "pass accounting lines as recorded by complete",
       );
     for (const k of ["tokensIn", "tokensOut", "durationMs"]) {
-      const v = line[k];
+      const v = own(line, k);
       if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
         bad(
           `${where}.state.accounting[${i}].${k} is ${show(v)}, not a finite non-negative number`,
@@ -136,8 +143,11 @@ function metricsOf(state: unknown, where: string): RunMetrics {
     m.tokens += (line["tokensIn"] as number) + (line["tokensOut"] as number);
     m.durationMs += line["durationMs"] as number;
   });
+  // finite figures can still sum to Infinity (G2-7)
+  finite(m.tokens, `${where}.state token total`);
+  finite(m.durationMs, `${where}.state duration total`);
   events.forEach((ev: unknown, i) => {
-    if (!isObject(ev) || typeof ev["type"] !== "string")
+    if (!isObject(ev) || typeof own(ev, "type") !== "string")
       return bad(
         `${where}.state.events[${i}] is ${show(ev)}, not an event`,
         "pass events as recorded by the engine",
@@ -147,7 +157,8 @@ function metricsOf(state: unknown, where: string): RunMetrics {
     else if (t === "item.rework") m.reworks++;
     else if (t === "item.escalated") m.escalations++;
   });
-  for (const it of Object.values(items)) if (isObject(it) && it["status"] === "done") m.itemsDone++;
+  for (const it of Object.values(items))
+    if (isObject(it) && own(it, "status") === "done") m.itemsDone++;
   return m;
 }
 
@@ -181,12 +192,16 @@ export function compareRuns(
   for (const k of Object.keys(options))
     if (!OPTION_KEYS.includes(k))
       bad(`unknown option "${k}"`, `use only: ${OPTION_KEYS.join(", ")}`);
-  const baseline = idOf(options.baseline, "baseline");
-  if (options.mustPass !== undefined && !Array.isArray(options.mustPass))
-    bad(`mustPass is ${show(options.mustPass)}, not an array`, 'pass e.g. "mustPass": ["s1"]');
-  const mustPass = [...new Set((options.mustPass ?? []).map((s) => idOf(s, "mustPass scenario")))];
-  const passTol = tolerance(options.passTolerance, "passTolerance");
-  const costTol = tolerance(options.costTolerance, "costTolerance");
+  const o = options as unknown as Record<string, unknown>;
+  const baseline = idOf(own(o, "baseline"), "baseline");
+  const must = own(o, "mustPass");
+  if (must !== undefined && !Array.isArray(must))
+    bad(`mustPass is ${show(must)}, not an array`, 'pass e.g. "mustPass": ["s1"]');
+  const mustPass = [
+    ...new Set(((must ?? []) as unknown[]).map((s) => idOf(s, "mustPass scenario"))),
+  ];
+  const passTol = tolerance(own(o, "passTolerance"), "passTolerance");
+  const costTol = tolerance(own(o, "costTolerance"), "costTolerance");
 
   interface Acc {
     metrics: RunMetrics[];
@@ -204,14 +219,15 @@ export function compareRuns(
         `${where} is ${show(r)}, not a run record`,
         "pass { variant, scenario, state, passed }",
       );
-    const variant = idOf(r["variant"], `${where}.variant`);
-    const scenario = idOf(r["scenario"], `${where}.scenario`);
-    if (typeof r["passed"] !== "boolean")
+    const variant = idOf(own(r, "variant"), `${where}.variant`);
+    const scenario = idOf(own(r, "scenario"), `${where}.scenario`);
+    const passed = own(r, "passed");
+    if (typeof passed !== "boolean")
       bad(
-        `${where}.passed is ${show(r["passed"])}, not a boolean`,
+        `${where}.passed is ${show(passed)}, not a boolean`,
         "pass the scorer's verdict as true or false",
       );
-    const metrics = metricsOf(r["state"], where);
+    const metrics = metricsOf(own(r, "state"), where);
     let g = groups.get(variant);
     if (!g)
       groups.set(variant, (g = { metrics: [], passed: 0, ran: new Map(), failed: new Set() }));
@@ -220,7 +236,7 @@ export function compareRuns(
     g.ran.set(scenario, tally);
     tally[1]++;
     named.add(scenario);
-    if (r["passed"]) {
+    if (passed) {
       g.passed++;
       tally[0]++;
     } else g.failed.add(scenario);
@@ -235,7 +251,8 @@ export function compareRuns(
   const results: VariantResult[] = [...groups].map(([variant, g]) => {
     const n = g.metrics.length;
     const mean = {} as RunMetrics;
-    for (const k of METRICS) mean[k] = meanOf(g.metrics.map((m) => m[k]));
+    for (const k of METRICS)
+      mean[k] = finite(meanOf(g.metrics.map((m) => m[k])), `variant ${variant} mean ${k}`);
     const regressions = mustPass.filter((s) => g.failed.has(s)).sort(byId);
     const missing = required.filter((s) => !g.ran.has(s));
     return {

@@ -436,3 +436,44 @@ test("G1-3: passRate is the mean of each scenario's pass fraction, so extra runs
     ],
   );
 });
+
+test("G2-7: token or duration sums that overflow to Infinity fail invalid-input", () => {
+  const huge = (tokensIn: number, tokensOut: number, durationMs = 1): RunRecord => {
+    const s = shaped();
+    return {
+      variant: "V1",
+      scenario: "s",
+      passed: true,
+      state: { ...s, accounting: [{ ...s.accounting[0]!, tokensIn, tokensOut, durationMs }] },
+    };
+  };
+  const v0 = run("V0", "s", true);
+  invalid(() => compareRuns([v0, huge(1.7e308, 1.7e308)], { baseline: "V0" }), /not finite/);
+  // each run finite, their sum is not
+  invalid(
+    () => compareRuns([v0, huge(1.7e308, 0), huge(1.7e308, 0)], { baseline: "V0" }),
+    /not finite/,
+  );
+  invalid(
+    () => compareRuns([v0, huge(1, 1, 1.7e308), huge(1, 1, 1.7e308)], { baseline: "V0" }),
+    /not finite/,
+  );
+});
+
+test("options and run records are read as own properties only (inherited ones are ignored)", () => {
+  const runs = [run("V0", "s", true), run("V1", "s", true, { tokens: 10 })];
+  // an inherited baseline is no baseline
+  invalid(() => compareRuns(runs, Object.create({ baseline: "V0" }) as never), /baseline/);
+  // inherited option values are not read
+  const opts = Object.assign(Object.create({ mustPass: ["nope"], passTolerance: 5 }), {
+    baseline: "V0",
+  });
+  assert.equal(compareRuns(runs, opts).winner, "V1");
+  // an inherited run field is missing
+  const inherited = Object.assign(Object.create({ passed: true }), {
+    variant: "V1",
+    scenario: "s",
+    state: shaped(),
+  });
+  invalid(() => compareRuns([runs[0]!, inherited], { baseline: "V0" }), /passed/);
+});
