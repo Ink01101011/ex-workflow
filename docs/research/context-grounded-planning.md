@@ -1,7 +1,7 @@
 # Context-grounded planning — #36
 
 Issue: [#36](https://github.com/Ink01101011/ex-workflow/issues/36), P2 — Strong interest.
-Status: investigation complete; proposed pilot, nothing implemented.
+Status: adopted in 1.3.0 (spec section 27) for the `context-snapshot` evidence, the `context-grounded` entry policy, the `repo.changed` stale rule and the brief `context` field; not adopted: blocking after three snapshots cite a missing source, the pilot measurements. File links below predate 1.2; the code is under `src/core/`.
 Reference: [arXiv:2604.05278](https://arxiv.org/abs/2604.05278).
 See [shared implementation evidence](README.md#shared-implementation-evidence).
 

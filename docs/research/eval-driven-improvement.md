@@ -1,7 +1,7 @@
 # Eval-driven workflow improvement — #34
 
 Issue: [#34](https://github.com/Ink01101011/ex-workflow/issues/34), P2 — Strong interest.
-Status: investigation complete; proposed pilot, nothing implemented.
+Status: adopted in 1.3.0 (spec section 27) for the pure `compareRuns` helper and "no new methodology"; the scenario suite, variant manifest and scoring stay host-side; the pilot measurements are not adopted. File links below predate 1.2; the code is under `src/core/` and `src/methodologies/`.
 Reference: [doi:10.1007/s10462-026-11571-0](https://doi.org/10.1007/s10462-026-11571-0).
 See [shared implementation evidence](README.md#shared-implementation-evidence).
 
