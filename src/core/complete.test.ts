@@ -774,3 +774,30 @@ test("an escalated gate that fails throws gate-unmet and records nothing", () =>
   );
   assert.deepEqual(s, before);
 });
+
+// ---- #36 custom exit policy through the methodology (design spec section 27) ----
+test("#36: complete() evaluates a custom exit policy through the methodology's customPolicy hook", () => {
+  const custom = { kind: "custom" as const, id: "context-grounded", description: "grounded" };
+  const withExit = (s: WorkflowState): WorkflowState => ({
+    ...s,
+    stages: s.stages.map((st) =>
+      st.id === "todo" ? { ...st, exitPolicy: [...st.exitPolicy, custom] } : st,
+    ),
+  });
+  const s = withExit(started());
+  // the plain methodology falls back to the 1.2 evidence check and refuses
+  assert.throws(
+    () => complete(s, m(), handoff(), acc(), T0),
+    (e) => code(e) === "policy-unmet" && /policy:context-grounded/.test((e as WorkflowError).fix),
+  );
+  const seen: string[] = [];
+  const pass: Methodology = {
+    ...m(),
+    customPolicy: (_s, item, p) => {
+      seen.push(`${item.id}:${p.id}`);
+      return [];
+    },
+  };
+  assert.notEqual(getItem(complete(s, pass, handoff(), acc(), T0).state, "A").stage, "todo");
+  assert.deepEqual(seen, ["A:context-grounded"]);
+});

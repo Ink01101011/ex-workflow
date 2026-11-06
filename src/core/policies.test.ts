@@ -6,7 +6,7 @@ import { addItem } from "./items/record.ts";
 import { moveItem } from "./items/move.ts";
 import { assertPolicies, evaluatePolicies } from "./policies.ts";
 import { WorkflowError } from "./errors.ts";
-import type { Policy, Stage } from "./types.ts";
+import type { Policy, Stage, Violation } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const stages: Stage[] = [
@@ -131,4 +131,63 @@ test("B10: a hand-built state with more item.evidence events than entries keeps 
   s = addEvidence(s, "A", { kind: "code", ref: "y", by: "dev" }, T0);
   for (let i = 0; i < 3; i++) s = appendEvent(s, "item.evidence", "dev", { id: "A" }, T0);
   assert.deepEqual(evaluatePolicies(s, s.items["A"]!, evPolicy.slice(0, 1)), []);
+});
+
+// ---- #36 custom-policy hook (design spec section 27) -------------------
+const grounded: Policy = { kind: "custom", id: "context-grounded", description: "grounded" };
+const hooked = (answer: Violation[] | undefined, seen: Policy[] = []) => ({
+  customPolicy: (_s: unknown, _i: unknown, p: Policy) => {
+    seen.push(p);
+    return answer;
+  },
+});
+const ungrounded: Violation = {
+  rule: "policy:custom:context-grounded",
+  severity: "error",
+  item: "A",
+  message: "no snapshot",
+  fix: "record one",
+};
+
+test("#36: a methodology's customPolicy answers a custom policy instead of the evidence check", () => {
+  const s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  const seen: Policy[] = [];
+  // the hook passes it although no policy:context-grounded evidence exists
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, [grounded], hooked([], seen)), []);
+  assert.deepEqual(seen, [grounded]);
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, [grounded], hooked([ungrounded])), [
+    ungrounded,
+  ]);
+  // non-custom policies never reach the hook
+  const none: Policy[] = [];
+  evaluatePolicies(s, s.items["A"]!, all.slice(0, 5), hooked([], none));
+  assert.deepEqual(none, []);
+});
+
+test("#36: without a hook, or when it returns undefined, the 1.2 evidence check applies", () => {
+  let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  const rules = (m?: ReturnType<typeof hooked>) =>
+    evaluatePolicies(s, s.items["A"]!, [grounded], m).map((v) => v.rule);
+  assert.deepEqual(rules(), ["policy:custom:context-grounded"]);
+  assert.deepEqual(rules(hooked(undefined)), ["policy:custom:context-grounded"]);
+  assert.deepEqual(rules({} as ReturnType<typeof hooked>), ["policy:custom:context-grounded"]);
+  // the 3-argument call (the CLI and ceremony path) keeps the 1.2 behaviour
+  assert.equal(evaluatePolicies(s, s.items["A"]!, [grounded]).length, 1);
+  s = addEvidence(s, "A", { kind: "policy:context-grounded", ref: "x", by: "dev" }, T0);
+  assert.deepEqual(rules(), []);
+  assert.deepEqual(rules(hooked(undefined)), []);
+});
+
+test("#36: assertPolicies takes the methodology as an optional trailing argument", () => {
+  const s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  assert.doesNotThrow(() => assertPolicies(s, s.items["A"]!, [grounded], "enter dev", hooked([])));
+  assert.throws(
+    () => assertPolicies(s, s.items["A"]!, [grounded], "enter dev", hooked([ungrounded])),
+    (e: unknown) =>
+      e instanceof WorkflowError && e.code === "policy-unmet" && e.fix === "record one",
+  );
+  assert.throws(
+    () => assertPolicies(s, s.items["A"]!, [grounded], "enter dev"),
+    (e: unknown) => e instanceof WorkflowError && e.code === "policy-unmet",
+  );
 });

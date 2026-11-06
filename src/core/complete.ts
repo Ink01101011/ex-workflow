@@ -239,7 +239,7 @@ function completeBody<N extends string>(
   } else if (verdict === "done" || verdict === "needs-review") {
     const item = getItem(s, id);
     const stage = stageOf(s, item.stage);
-    assertPolicies(s, item, stage.exitPolicy, `leave "${stage.id}"`);
+    assertPolicies(s, item, stage.exitPolicy, `leave "${stage.id}"`, methodology);
     if (stage.gate) {
       // a methodology's escalation hook can only widen the static gate (spec 27, #35)
       const x = methodology.escalateGate?.(s, item, stage.gate);

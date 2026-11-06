@@ -119,6 +119,35 @@ export interface GateEscalation {
   reason: Record<string, string | null>;
 }
 
+/**
+ * One claim of a context snapshot (design spec section 27, #36). With no `source` it is
+ * unverified. `source.path` is repository-relative POSIX (as Git lists it); the engine compares
+ * paths and hashes only, it never reads a file.
+ */
+export interface ContextAssumption {
+  claim: string;
+  /** A required claim must be verified (carry a `source`) for the context-grounded policy to pass. */
+  required?: boolean;
+  source?: { path: string; lines?: [number, number]; hash: string };
+}
+/** `data` of a `context-snapshot` evidence entry. */
+export interface ContextSnapshotData {
+  /** The repository revision the snapshot was taken at. */
+  revision: string;
+  assumptions: ContextAssumption[];
+}
+/** An item's current context snapshot as a worker's brief carries it. */
+export interface BriefContext extends ContextSnapshotData {
+  /** The snapshot artifact (the evidence `ref`). */
+  snapshot: string;
+  /** Who recorded it. */
+  by: string;
+  /** Cited paths a later `repo.changed` event listed; empty while the snapshot is fresh. */
+  stale: string[];
+  /** Claims with no `source`. */
+  unverified: string[];
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -383,6 +412,8 @@ export interface Brief {
   relatedBugs: Array<{ id: string; title: string; affects: string[] }>;
   budgetRemaining: Budget;
   gateAhead?: Gate;
+  /** the item's context snapshot, from the methodology's `briefContext` hook (spec 27, #36) */
+  context?: BriefContext;
   /** for a question item: the escalating item's last handoff */
   parent?: {
     item: string;
@@ -476,6 +507,17 @@ export interface Methodology<C = unknown, N extends string = MethodologyName> {
    * static gate (escalation only) and the widened gate is recorded as `gate.resolved`.
    */
   escalateGate?(state: WorkflowState<N>, item: WorkItem, gate: Gate): GateEscalation | undefined;
+  /**
+   * Answers a `custom` stage policy (spec 27, #36) for `plan()` and `complete()`: an array is the
+   * policy's violations (empty passes); `undefined` keeps the 1.2 check (`policy:<id>` evidence).
+   */
+  customPolicy?(
+    state: WorkflowState<N>,
+    item: WorkItem,
+    policy: Extract<Policy, { kind: "custom" }>,
+  ): Violation[] | undefined;
+  /** What `synthesizeBrief` puts in `Brief.context` (spec 27, #36); `undefined` leaves it out. */
+  briefContext?(state: WorkflowState<N>, item: WorkItem): BriefContext | undefined;
 }
 
 // ---- errors ----------------------------------------------------------

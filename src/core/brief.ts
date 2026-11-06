@@ -117,6 +117,8 @@ export function synthesizeBrief<N extends string>(
     budgetRemaining: it ? remaining(it.budget, it.spent) : {},
   };
   if (gate) brief.gateAhead = gate;
+  const context = methodology.briefContext?.(state, item);
+  if (context) brief.context = context;
   if (item.type === "question" && item.parent) {
     const p = lastCompletion(state, item.parent);
     if (p) {
