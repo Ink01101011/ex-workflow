@@ -22,6 +22,7 @@ const VERSIONS = {
   "1.0.0": ["scrum", "kanban", "waterfall"],
   "1.1.0": ["scrum", "kanban", "waterfall", "investigation", "experimentation"],
   "1.1.1": ["scrum", "kanban", "waterfall", "investigation", "experimentation"],
+  "1.2.0": ["scrum", "kanban", "waterfall", "investigation", "experimentation"],
 };
 const MIN = 60_000;
 const CONFIGS = {
