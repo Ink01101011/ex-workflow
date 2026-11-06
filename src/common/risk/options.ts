@@ -16,6 +16,9 @@ export const RISK_LEVELS: readonly RiskLevel[] = /* @__PURE__ */ deepFreeze([
 
 const isObj = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
+/** `o[k]` only when `o` has it as an own property (G5-5, as `compareRuns` reads its input). */
+const own = (o: Record<string, unknown>, k: string): unknown =>
+  Object.hasOwn(o, k) ? o[k] : undefined;
 const validated = new WeakSet<object>();
 
 /**
@@ -25,6 +28,7 @@ const validated = new WeakSet<object>();
  * an unknown key, a requirement that is neither `"human"` nor `{ capability: <non-empty string> }`,
  * an evidence kind that is not a non-empty string; and a row that does not include every
  * requirement and evidence kind of the level below it (a stricter level only adds, G1-4).
+ * Every key is read as an own property: an inherited one counts as absent (G5-5).
  */
 export function riskOptions(options: unknown, who: string): Required<RiskGateOptions> {
   if (typeof options === "object" && options !== null && validated.has(options))
@@ -37,28 +41,25 @@ export function riskOptions(options: unknown, who: string): Required<RiskGateOpt
   };
   const requirement = (q: unknown, at: string): GateRequirement => {
     if (q === "human") return q;
-    if (
-      !isObj(q) ||
-      typeof q["capability"] !== "string" ||
-      q["capability"].trim() === "" ||
-      Object.keys(q).length !== 1
-    )
+    const c = isObj(q) ? own(q, "capability") : undefined;
+    if (typeof c !== "string" || c.trim() === "" || Object.keys(q as object).length !== 1)
       bad(
         `${at} must be "human" or { capability: <name> }`,
         'e.g. ["human"] or [{ "capability": "review" }]',
       );
-    return { capability: (q as { capability: string }).capability };
+    return { capability: c as string };
   };
   if (!isObj(options)) bad("must be an object", 'pass { "gates": ["code-review"] }');
   const o = options as Record<string, unknown>;
   closed(o, ["gates", "table"], "options");
-  if (!Array.isArray(o["gates"]))
+  const gs = own(o, "gates");
+  if (!Array.isArray(gs))
     bad("gates must be an array of gate ids", 'e.g. "gates": ["code-review"]');
-  const gates = (o["gates"] as unknown[]).map((g) => {
+  const gates = (gs as unknown[]).map((g) => {
     assertId(g, "risk gate id");
     return g as string;
   });
-  const raw = o["table"];
+  const raw = own(o, "table");
   let table: RiskTable | undefined;
   if (raw !== undefined) {
     if (!isObj(raw))
@@ -68,7 +69,7 @@ export function riskOptions(options: unknown, who: string): Required<RiskGateOpt
     table = {} as RiskTable;
     let below: string[] = [];
     for (const level of RISK_LEVELS) {
-      const row = t[level];
+      const row = own(t, level);
       if (!isObj(row))
         bad(
           `table is missing level "${level}"`,
@@ -76,9 +77,10 @@ export function riskOptions(options: unknown, who: string): Required<RiskGateOpt
         );
       const rw = row as Record<string, unknown>;
       closed(rw, ["requires", "evidence"], `table.${level}`);
-      if (!Array.isArray(rw["requires"]))
+      const rq = own(rw, "requires");
+      if (!Array.isArray(rq))
         bad(`table.${level}.requires must be an array`, 'e.g. "requires": ["human"]');
-      const ev = rw["evidence"];
+      const ev = own(rw, "evidence");
       if (
         ev !== undefined &&
         (!Array.isArray(ev) || !ev.every((k) => typeof k === "string" && k.trim() !== ""))
@@ -87,7 +89,7 @@ export function riskOptions(options: unknown, who: string): Required<RiskGateOpt
           `table.${level}.evidence must be an array of evidence kinds`,
           'e.g. "evidence": ["sbom"]',
         );
-      const requires = (rw["requires"] as unknown[]).map((q, i) =>
+      const requires = (rq as unknown[]).map((q, i) =>
         requirement(q, `table.${level}.requires[${i}]`),
       );
       const evidence = ev === undefined ? undefined : [...(ev as string[])];

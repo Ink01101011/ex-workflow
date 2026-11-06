@@ -131,6 +131,13 @@ test("options are validated once and copied", () => {
       { gates: ["g"], table: { low: lo, medium: hi, high: hi, critical: hi } },
       /table\.medium must include .*"human"/,
     );
+  // G5-5: options, the table and its rows are read as own properties only
+  invalid(Object.create({ gates: ["g"] }), /gates must be an array/);
+  invalid({ gates: ["g"], table: Object.create(DEFAULT_RISK_TABLE) }, /missing level "low"/);
+  invalid(
+    { gates: ["g"], table: { ...DEFAULT_RISK_TABLE, low: Object.create({ requires: [] }) } },
+    /table\.low\.requires must be an array/,
+  );
   // a superset in another order, or with more, is fine
   withRiskGate(kanban(), {
     gates: ["g"],
