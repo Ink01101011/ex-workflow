@@ -339,6 +339,33 @@ changed.warnings; // context-stale for each in-flight item whose snapshot cites 
 - **`brief.context`** is `contextOf(state, item)`: `{ revision, assumptions, snapshot, by, stale, unverified }`.
 - **Any methodology** may answer custom policies itself: `Methodology.customPolicy(state, item, policy)` returns the violations, or `undefined` for the default check (evidence `policy:<id>`); `Methodology.briefContext(state, item)` fills `brief.context`. `withContextGrounding` keeps existing hooks for every other policy id and composes with `withRiskGate` in either order.
 
+### Comparing runs
+
+`compareRuns` compares finished runs of two or more variants (a variant is whatever the host changed: a role's model tier, a config, a methodology). It is a pure function over `WorkflowState` values; the scenario suite, running each variant and scoring stay with the host.
+
+```ts
+import { loadState } from "ex-workflow/adapters";
+import { compareRuns } from "ex-workflow/policies";
+
+const result = compareRuns(
+  [
+    { variant: "V0", scenario: "bug-fix-1", passed: true, state: await loadState(dirV0Bug1) },
+    { variant: "V1", scenario: "bug-fix-1", passed: true, state: await loadState(dirV1Bug1) },
+    // ... one record per variant and scenario run; a scenario may run more than once
+  ],
+  { baseline: "V0", mustPass: ["bug-fix-1"], passTolerance: 0.1, costTolerance: 0.05 },
+);
+result.winner; // "V1", or null when no eligible variant beats the baseline beyond the tolerances
+result.reason; // why
+result.variants; // ranked VariantResult[]: { variant, runs, passed, passRate, mean, regressions, missing, eligible }
+```
+
+- **`passed`** is your scorer's verdict for that run. The engine derives the rest from the state: `mean` holds, per variant, the mean of `tokens` (accounting `tokensIn + tokensOut`, after corrections), `durationMs`, `turns` (accounting lines), `humanInterventions` (`pending.raised` plus `blocker.cleared` events), `reworks`, `escalations` and `itemsDone`.
+- **Eligible** means no `mustPass` scenario has a failing run (`regressions`) and the variant ran every scenario the baseline ran and every `mustPass` one (`missing`).
+- **Ranking**: eligible first, then `passRate` descending, then mean tokens, mean duration and mean human interventions ascending, then the variant id in code-unit order. The input order of `runs` never changes the result.
+- **Winner**: the first ranked eligible variant other than the baseline whose `passRate` is at least the baseline's minus `passTolerance` and that is better, by a `passRate` above the baseline's plus `passTolerance` or by mean tokens below the baseline's times `1 - costTolerance`. Tolerances are fractions in `[0, 1]`, default `0`.
+- **Refused with `invalid-input`**: no runs, a non-array `runs`, an id that is not a valid id (`__proto__`, `toString` and the like included), a baseline or `mustPass` scenario no run names, a tolerance outside `[0, 1]`, a non-boolean `passed`, a state without `events`, `accounting` and `items`, and a non-finite or negative token or duration figure. Variants of different methodologies compare on the same metrics.
+
 ## CLI reference (`exwf`)
 
 Run from the directory that holds `.workflow/`. Every command prints JSON on stdout. Exit 0 = ok, exit 1 = `{ ok: false, error }`, exit 2 = usage. `--by` defaults to `human`. Flags take `--flag value` (not `--flag=value`); a value that starts with `--` must come through a JSON input file.
@@ -533,7 +560,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/investigation` | `investigation()`, `validateInvestigationConfig`; types `InvestigationConfig`, `InvestigationState`, `InvestigationRound`, `InvestigationConclusion`, `Hypothesis`, `Experiment`, `Observation`, `BeliefUpdate` |
 | `ex-workflow/experimentation` | `experimentation()`, `validateExperimentationConfig`, `experimentationCeremonies`, `experimentationMetrics`, `experimentationReport`, `experimentationRoles`, `experimentationRules`, `experimentationStages`; types `ExperimentationConfig`, `ExperimentationState`, `ExperimentCandidate` |
 | `ex-workflow/registry` | `registerMethodology`, `methodologyFactory`, `registeredMethodologies` (five built-ins pre-registered); types `MethodologyFactory`, `MethodologyRegistry` |
-| `ex-workflow/policies` | `withRiskGate`, `recordRiskAssessment`, `riskEscalation`, `DEFAULT_RISK_TABLE`, `withContextGrounding`, `recordContextSnapshot`, `recordRepoChange`, `contextOf`, `contextGroundedViolations`; types `RiskLevel`, `RiskTable`, `RiskAssessmentData`, `RiskAssessmentInput`, `RiskGateOptions`, `ContextGroundingOptions`, `ContextSnapshotInput`, `RepoChangeInput` (`ContextAssumption`, `ContextSnapshotData` and `BriefContext` come from the root entry) |
+| `ex-workflow/policies` | `withRiskGate`, `recordRiskAssessment`, `riskEscalation`, `DEFAULT_RISK_TABLE`, `withContextGrounding`, `recordContextSnapshot`, `recordRepoChange`, `contextOf`, `contextGroundedViolations`, `compareRuns`; types `RiskLevel`, `RiskTable`, `RiskAssessmentData`, `RiskAssessmentInput`, `RiskGateOptions`, `ContextGroundingOptions`, `ContextSnapshotInput`, `RepoChangeInput`, `CompareRunsOptions`, `RunRecord`, `RunMetrics`, `VariantResult`, `RunComparison` (`ContextAssumption`, `ContextSnapshotData` and `BriefContext` come from the root entry) |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
 | `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
