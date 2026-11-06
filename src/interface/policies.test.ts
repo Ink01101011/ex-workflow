@@ -4,11 +4,11 @@ import { createState } from "../core/state.ts";
 import { addItem, getItem } from "../core/items/record.ts";
 import { moveItem } from "../core/items/move.ts";
 import { WorkflowError } from "../core/errors.ts";
-import type { Gate, GateEscalation, Methodology, WorkflowState } from "../core/types.ts";
+import type { Gate, GateEscalation, Methodology, Policy, WorkflowState } from "../core/types.ts";
 import { DEFAULT_RISK_TABLE } from "../common/risk/escalation.ts";
 import { kanban } from "../methodologies/kanban/index.ts";
 import { createMethodologyRegistry } from "./registry.ts";
-import { withRiskGate } from "./policies.ts";
+import { withContextGrounding, withRiskGate } from "./policies.ts";
 
 const T0 = "2026-11-06T00:00:00.000Z";
 const gate: Gate = { id: "code-review", requires: [], evidence: [], onFail: { action: "block" } };
@@ -111,4 +111,96 @@ test("options are validated once and copied", () => {
   const s = state();
   assert.deepEqual(m.escalateGate!(s, getItem(s, "A"), gate)!.requires, ["human"]);
   assert.equal(m.escalateGate!(s, getItem(s, "A"), { ...gate, id: "other" }), undefined);
+});
+
+// ---- #36 withContextGrounding (design spec section 27) -----------------
+const GROUNDED = "context-grounded";
+const groundingInvalid = (options: unknown, re: RegExp) =>
+  assert.throws(
+    () => withContextGrounding(kanban(), options as never),
+    (e) => e instanceof WorkflowError && e.code === "invalid-input" && re.test(e.message),
+    JSON.stringify(options),
+  );
+const custom = (list: Policy[]) =>
+  list.filter((p) => p.kind === "custom" && p.id === GROUNDED).length;
+
+test("withContextGrounding keeps every other member and the name; a registry accepts it", () => {
+  const plain = kanban();
+  const m = withContextGrounding(plain, { entry: ["dev"] });
+  assert.equal(m.name, "kanban");
+  const own = ["defaultStages", "customPolicy", "briefContext"];
+  for (const k of Object.keys(plain) as (keyof Methodology)[])
+    if (!own.includes(k)) assert.equal(m[k], plain[k], k);
+  const reg = createMethodologyRegistry({});
+  reg.registerMethodology("kanban", () => withContextGrounding(kanban(), { entry: ["dev"] }));
+  assert.equal(reg.methodologyFactory("kanban")().name, "kanban");
+});
+
+test("defaultStages appends the custom policy to the entry and exit stages named, once", () => {
+  const plain = kanban();
+  const config = plain.validateConfig({});
+  const before = plain.defaultStages(config);
+  const m = withContextGrounding(plain, { entry: ["dev"], exit: ["dev", "review"] });
+  const stages = m.defaultStages(config);
+  for (const st of stages) {
+    const was = before.find((b) => b.id === st.id)!;
+    assert.equal(custom(st.entryPolicy), st.id === "dev" ? 1 : 0, `${st.id} entry`);
+    assert.equal(custom(st.exitPolicy), ["dev", "review"].includes(st.id) ? 1 : 0, `${st.id} exit`);
+    // the original policies are kept, in order, before the new one
+    assert.deepEqual(st.entryPolicy.slice(0, was.entryPolicy.length), was.entryPolicy);
+    assert.deepEqual(st.exitPolicy.slice(0, was.exitPolicy.length), was.exitPolicy);
+  }
+  // the wrapped methodology's stages are not mutated, and wrapping twice adds nothing more
+  assert.deepEqual(plain.defaultStages(config), before);
+  const twice = withContextGrounding(m, { entry: ["dev"] }).defaultStages(config);
+  assert.equal(custom(twice.find((st) => st.id === "dev")!.entryPolicy), 1);
+  assert.throws(
+    () => withContextGrounding(plain, { entry: ["nope"] }).defaultStages(config),
+    (e) => e instanceof WorkflowError && e.code === "invalid-input" && /"nope"/.test(e.message),
+  );
+});
+
+test("customPolicy answers context-grounded and delegates any other id to the wrapped hook", () => {
+  const s = state();
+  const item = getItem(s, "A");
+  const grounded = { kind: "custom" as const, id: GROUNDED, description: "d" };
+  const lint = { kind: "custom" as const, id: "lint", description: "d" };
+  const m = withContextGrounding(kanban(), { entry: ["dev"] });
+  assert.deepEqual(
+    m.customPolicy!(s, item, grounded)!.map((v) => v.rule),
+    ["policy:custom:context-grounded"],
+  );
+  assert.equal(m.customPolicy!(s, item, lint), undefined);
+  const inner = withContextGrounding({ ...kanban(), customPolicy: () => [] }, { entry: [] });
+  assert.deepEqual(inner.customPolicy!(s, item, lint), []);
+  assert.equal(inner.briefContext!(s, item), undefined);
+  const withBrief = withContextGrounding(
+    {
+      ...kanban(),
+      briefContext: () => ({
+        revision: "x",
+        assumptions: [],
+        snapshot: "s",
+        by: "b",
+        stale: [],
+        unverified: [],
+      }),
+    },
+    { entry: [] },
+  );
+  assert.equal(withBrief.briefContext!(s, item)!.snapshot, "s");
+});
+
+test("withContextGrounding options are validated once and copied", () => {
+  groundingInvalid(null, /must be an object/);
+  groundingInvalid({}, /entry must be an array/);
+  groundingInvalid({ entry: [""] }, /not a valid id/);
+  groundingInvalid({ entry: ["dev"], exit: "dev" }, /exit must be an array/);
+  groundingInvalid({ entry: ["dev"], extra: 1 }, /unknown key "extra"/);
+  const entry = ["dev"];
+  const m = withContextGrounding(kanban(), { entry });
+  entry.push("review");
+  const config = kanban().validateConfig({});
+  const review = m.defaultStages(config).find((st) => st.id === "review")!;
+  assert.equal(custom(review.entryPolicy), 0);
 });

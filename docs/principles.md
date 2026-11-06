@@ -34,10 +34,10 @@ Every failure is a `WorkflowError` with a `code`, a `message` and a non-empty `f
 
 ## 5. Evidence before transition; freshness after rework
 
-An item leaves a stage only when the stage's exit policies hold, and passes a gate only with the evidence kinds the gate names. Only evidence recorded after the item's last `item.rework` event counts (event order, not timestamps); older evidence stays stored but no longer satisfies a policy or a gate.
+An item leaves a stage only when the stage's exit policies hold, and passes a gate only with the evidence kinds the gate names. Only evidence recorded after the item's last `item.rework` event counts (event order, not timestamps); older evidence stays stored but no longer satisfies a policy or a gate. A context snapshot (evidence `context-snapshot`, `ex-workflow/policies`) also goes stale when a later `repo.changed` event lists a path it cites, again by event order.
 
-- Enforced by: `src/core/policies.ts` (`evaluatePolicies`, `assertPolicies`), `src/core/gates.ts` (`checkGate`), `src/core/items/evidence.ts` (`freshEvidence`), `src/core/complete.ts` (exit policies on `done` and `needs-review`).
-- Test: `src/core/complete.test.ts` "complete done fails when exit policy is unmet"; `src/core/policies.test.ts` "B10: freshness follows event order, not timestamps: evidence before the rework event is stale even at the same instant, evidence after it counts"; `src/core/gates.test.ts` "B10: gate evidence recorded before the last rework no longer counts; fresh evidence does; second rework resets".
+- Enforced by: `src/core/policies.ts` (`evaluatePolicies`, `assertPolicies`), `src/core/gates.ts` (`checkGate`), `src/core/items/evidence.ts` (`freshEvidence`), `src/core/complete.ts` (exit policies on `done` and `needs-review`), `src/common/context/snapshot.ts` (`contextOf`).
+- Test: `src/core/complete.test.ts` "complete done fails when exit policy is unmet"; `src/core/policies.test.ts` "B10: freshness follows event order, not timestamps: evidence before the rework event is stale even at the same instant, evidence after it counts"; `src/core/gates.test.ts` "B10: gate evidence recorded before the last rework no longer counts; fresh evidence does; second rework resets"; `src/common/context/snapshot.test.ts` "property: staleness follows event order and is deterministic (300 seeded runs)".
 
 ## 6. The author does not approve its own work
 

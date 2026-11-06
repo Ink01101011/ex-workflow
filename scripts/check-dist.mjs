@@ -62,6 +62,8 @@ function verify(label, core, scrum, kanban, waterfall, schema, investigation, ex
       throw new Error("registry error identity or code differs from core WorkflowError");
     if (policies.withRiskGate(scrum.scrum(), { gates: ["review"] }).name !== "scrum")
       throw new Error("withRiskGate(scrum()).name is not scrum");
+    if (policies.withContextGrounding(kanban.kanban(), { entry: ["dev"] }).name !== "kanban")
+      throw new Error("withContextGrounding(kanban()).name is not kanban");
     let pcaught;
     try {
       const m = scrum.scrum();
