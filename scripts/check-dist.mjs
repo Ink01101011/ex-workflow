@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
-function verify(label, core, scrum, kanban, waterfall, schema, investigation, experimentation, registry) {
+function verify(label, core, scrum, kanban, waterfall, schema, investigation, experimentation, registry, policies) {
   try {
     let caught;
     try {
@@ -60,6 +60,18 @@ function verify(label, core, scrum, kanban, waterfall, schema, investigation, ex
     }
     if (!(rcaught instanceof core.WorkflowError) || rcaught.code !== "invalid-input")
       throw new Error("registry error identity or code differs from core WorkflowError");
+    if (policies.withRiskGate(scrum.scrum(), { gates: ["review"] }).name !== "scrum")
+      throw new Error("withRiskGate(scrum()).name is not scrum");
+    let pcaught;
+    try {
+      const m = scrum.scrum();
+      const st = core.createState({ methodology: "scrum", config: {}, stages: [], roles: [], now: "2026-11-06T00:00:00.000Z" });
+      policies.recordRiskAssessment(st, m, { item: "A", level: "high", factors: [], ref: "r", by: "human", bogus: 1 });
+    } catch (e) {
+      pcaught = e;
+    }
+    if (!(pcaught instanceof core.WorkflowError) || pcaught.code !== "invalid-input")
+      throw new Error("policies error identity or code differs from core WorkflowError");
   } catch (e) {
     console.error(`FAIL ${label}: ${e.message}`);
     process.exit(1);
@@ -67,7 +79,7 @@ function verify(label, core, scrum, kanban, waterfall, schema, investigation, ex
 }
 
 const url = (p) => pathToFileURL(resolve(p)).href;
-verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")), await import(url("dist/waterfall/index.mjs")), await import(url("dist/schema/index.mjs")), await import(url("dist/investigation/index.mjs")), await import(url("dist/experimentation/index.mjs")), await import(url("dist/registry/index.mjs")));
+verify("esm", await import(url("dist/index.mjs")), await import(url("dist/scrum/index.mjs")), await import(url("dist/kanban/index.mjs")), await import(url("dist/waterfall/index.mjs")), await import(url("dist/schema/index.mjs")), await import(url("dist/investigation/index.mjs")), await import(url("dist/experimentation/index.mjs")), await import(url("dist/registry/index.mjs")), await import(url("dist/policies/index.mjs")));
 const require = createRequire(import.meta.url);
-verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"), require("./../dist/waterfall/index.cjs"), require("./../dist/schema/index.cjs"), require("./../dist/investigation/index.cjs"), require("./../dist/experimentation/index.cjs"), require("./../dist/registry/index.cjs"));
+verify("cjs", require("./../dist/index.cjs"), require("./../dist/scrum/index.cjs"), require("./../dist/kanban/index.cjs"), require("./../dist/waterfall/index.cjs"), require("./../dist/schema/index.cjs"), require("./../dist/investigation/index.cjs"), require("./../dist/experimentation/index.cjs"), require("./../dist/registry/index.cjs"), require("./../dist/policies/index.cjs"));
 console.log("ok");

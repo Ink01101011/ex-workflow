@@ -12,6 +12,7 @@ import * as investigation from "../src/methodologies/investigation/index.ts";
 import * as experimentation from "../src/methodologies/experimentation/index.ts";
 import * as schema from "../src/schema/index.ts";
 import * as registry from "../src/registry.ts";
+import * as policies from "../src/policies.ts";
 import { USAGE } from "../src/cli/commands.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -89,6 +90,7 @@ function current() {
       "./experimentation": names(experimentation),
       "./schema": names(schema),
       "./registry": names(registry),
+      "./policies": names(policies),
     },
     usage: [...USAGE],
     schemaDocuments: sorted(

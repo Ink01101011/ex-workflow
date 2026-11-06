@@ -142,6 +142,16 @@
         "types": "./dist/registry/index.d.cts",
         "default": "./dist/registry/index.cjs"
       }
+    },
+    "./policies": {
+      "import": {
+        "types": "./dist/policies/index.d.ts",
+        "default": "./dist/policies/index.mjs"
+      },
+      "require": {
+        "types": "./dist/policies/index.d.cts",
+        "default": "./dist/policies/index.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -175,6 +185,9 @@
       ],
       "registry": [
         "dist/registry/index.d.ts"
+      ],
+      "policies": [
+        "dist/policies/index.d.ts"
       ]
     }
   },

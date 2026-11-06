@@ -182,7 +182,8 @@
       "waterfallConfigSchema",
       "workflowStateSchema"
     ],
-    "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"]
+    "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"],
+    "./policies": ["DEFAULT_RISK_TABLE", "recordRiskAssessment", "riskEscalation", "withRiskGate"]
   },
   "usage": [
     "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",

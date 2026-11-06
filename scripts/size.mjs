@@ -12,6 +12,7 @@ for (const [name, entry] of [
   ["measure-experimentation", "scripts/measure-experimentation-entry.ts"],
   ["measure-schema", "scripts/measure-schema-entry.ts"],
   ["measure-registry", "scripts/measure-registry-entry.ts"],
+  ["measure-policies", "scripts/measure-policies-entry.ts"],
 ]) {
   await build({
     entry: { [name]: entry },
@@ -47,6 +48,8 @@ const measured = {
   schema: statSync(".size-measure/measure-schema.mjs").size,
   "dist/registry/index.mjs": statSync("dist/registry/index.mjs").size,
   "core+registry": statSync(".size-measure/measure-registry.mjs").size,
+  "dist/policies/index.mjs": statSync("dist/policies/index.mjs").size,
+  "core+policies": statSync(".size-measure/measure-policies.mjs").size,
 };
 const current = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
 // the note lives in size-budget.json (hand-edited per phase); --write keeps it instead of overwriting it
