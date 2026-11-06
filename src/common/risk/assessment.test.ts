@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createState } from "../../core/state.ts";
+import { appendEvent, createState } from "../../core/state.ts";
 import { addItem, getItem } from "../../core/items/record.ts";
 import { moveItem } from "../../core/items/move.ts";
+import { clearBlocker, raiseBlocker } from "../../core/items/blockers.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import type { Action, Methodology, Role, Rule, WorkflowState } from "../../core/types.ts";
 import { recordRiskAssessment, type RiskAssessmentInput } from "./assessment.ts";
@@ -186,5 +187,36 @@ test("G1-1: refuses a worker of an earlier stage, not only the last author", () 
         e instanceof WorkflowError && e.code === "invalid-input" && /did the work/.test(e.message),
       by,
     );
+  assert.equal(recordRiskAssessment(s, m(), input()).state.items["A"]!.evidence.length, 1);
+});
+
+test("G5-1: a blocker raised and cleared after a rework does not let the post-rework developer assess", () => {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: ["dev", "test", "review"].map((id) => ({
+      id,
+      name: id,
+      entryPolicy: [],
+      exitPolicy: [],
+    })),
+    roles: [...roles, r("tester", ["verify"]), r("rev", ["verify"])],
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  const go = (st: WorkflowState, stage: string, by: string) =>
+    moveItem(st, "A", { stage, status: "in_progress" }, by, T0);
+  s = go(go(s, "dev", "dev"), "test", "tester");
+  s = moveItem(s, "A", { stage: "dev", status: "todo" }, "tester", T0);
+  s = appendEvent(s, "item.rework", "tester", { id: "A", by: "tester", notes: "n" }, T0);
+  s = go(go(s, "dev", "dev"), "test", "tester");
+  // blocked and cleared after the rework: two transitions no item.transition event records
+  s = raiseBlocker(s, "A", "env down", "pm", "tester", T0);
+  s = clearBlocker(s, "A", "A-b1", "pm", T0);
+  s = go(go(s, "test", "tester"), "review", "rev");
+  assert.throws(
+    () => recordRiskAssessment(s, m(), input({ by: "dev", level: "low" })),
+    (e) => e instanceof WorkflowError && /did the work/.test(e.message),
+  );
   assert.equal(recordRiskAssessment(s, m(), input()).state.items["A"]!.evidence.length, 1);
 });

@@ -40,6 +40,21 @@ test("eventIndex: positions per item, the last rework, and each path's repo.chan
   assert.equal(sinceRework(ix, "A", undefined), 0);
 });
 
+test("G5-1: transition positions include blocker events that appended a transition", () => {
+  const t = { from: { stage: "d", status: "todo" }, to: { stage: "d", status: "blocked" } };
+  const ix = eventIndex(
+    state([
+      ev("item.transition", { id: "A" }),
+      ev("blocker.raised", { id: "A", blocker: "A-b1", transition: t }),
+      ev("blocker.raised", { id: "A", blocker: "A-b2", transition: null }),
+      ev("blocker.cleared", { id: "A", blocker: "A-b1", transition: null }),
+      ev("blocker.cleared", { id: "A", blocker: "A-b2", transition: t }),
+      ev("item.rework", { id: "A" }),
+    ]),
+  );
+  assert.deepEqual(ix.transitions.get("A"), [0, 1, 4]);
+});
+
 test("eventIndex is cached per events array and rebuilt when the array changed in place", () => {
   const events = [ev("item.evidence", { id: "A" })];
   const s = state(events);

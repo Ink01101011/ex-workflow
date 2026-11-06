@@ -4,6 +4,7 @@ import { appendEvent, createState } from "../../core/state.ts";
 import { addEvidence } from "../../core/items/evidence.ts";
 import { addItem } from "../../core/items/record.ts";
 import { moveItem } from "../../core/items/move.ts";
+import { clearBlocker, raiseBlocker } from "../../core/items/blockers.ts";
 import type { ContextAssumption, Role, WorkflowState } from "../../core/types.ts";
 import { kanban } from "../../methodologies/kanban/index.ts";
 import { recordContextSnapshot } from "./snapshot.ts";
@@ -180,4 +181,44 @@ test("G1-2, G2-1: a worker cannot ground its own item, nor replace a stale indep
   const v = check(own(s, [{ ...sourced, required: false }]));
   assert.equal(v.length, 1);
   assert.match(v[0]!.message, /stale/);
+});
+
+test("G5-1: a blocker raised and cleared after a rework does not let the post-rework developer ground", () => {
+  let s = createState({
+    methodology: "kanban",
+    config: m.validateConfig({}),
+    stages: ["dev", "test", "review"].map((id) => ({
+      id,
+      name: id,
+      entryPolicy: [],
+      exitPolicy: [],
+    })),
+    roles: ["dev", "tester", "rev", "scout"].map(role),
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  const go = (st: WorkflowState, stage: string, by: string) =>
+    moveItem(st, "A", { stage, status: "in_progress" }, by, T0);
+  s = go(go(s, "dev", "dev"), "test", "tester");
+  s = moveItem(s, "A", { stage: "dev", status: "todo" }, "tester", T0);
+  s = appendEvent(s, "item.rework", "tester", { id: "A", by: "tester", notes: "n" }, T0);
+  s = go(go(s, "dev", "dev"), "test", "tester");
+  // blocked and cleared after the rework: two transitions no item.transition event records
+  s = raiseBlocker(s, "A", "env down", "pm", "tester", T0);
+  s = clearBlocker(s, "A", "A-b1", "pm", T0);
+  s = go(go(s, "test", "tester"), "review", "rev");
+  assert.throws(() => snap(s, [sourced], "dev"), /worked on/);
+  const own = addEvidence(
+    s,
+    "A",
+    {
+      kind: "context-snapshot",
+      ref: "ctx/own",
+      by: "dev",
+      data: { revision: "r", assumptions: [sourced] } as never,
+    },
+    T0,
+  );
+  assert.match(check(own)[0]!.message, /no qualifying/);
+  assert.deepEqual(check(snap(s, [sourced], "scout")), []);
 });

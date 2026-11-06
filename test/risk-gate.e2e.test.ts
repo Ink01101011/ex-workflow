@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
-import { addItem, complete, decide, getItem, init, next } from "../src/index.ts";
+import { addItem, clearBlocker, complete, decide, getItem, init, next } from "../src/index.ts";
 import { kanban } from "../src/methodologies/kanban/index.ts";
 import { recordRiskAssessment, withRiskGate } from "../src/policies/index.ts";
 import type { Accounting, Handoff, Role, WorkflowError, WorkflowState } from "../src/index.ts";
@@ -152,4 +152,78 @@ test("kanban: low passes on review, high raises a human pending, rework makes it
   p = work(p, "H", {}, plain);
   assert.equal(getItem(p, "H").status, "done");
   assert.equal(resolutions(p, "H").length, 0);
+});
+
+test("G5-1: a human rejection (onFail block) and its cleared blocker after a rework keep the developer a worker", () => {
+  const roleFor = (it: { stage: string; status: string }) =>
+    it.status === "review" ? "reviewer" : it.stage === "test" ? "tester" : "worker";
+  const k = withRiskGate(
+    { ...plain, plannerOptions: (st) => ({ ...plain.plannerOptions(st), roleFor }) },
+    { gates: ["code-review"] },
+  );
+  const columns = ["options", "ready", "dev", "test", "review", "done"].map((id) => ({
+    id,
+    name: id,
+    ...(id === "ready" ? { commitmentPoint: true } : {}),
+    ...(id === "review" ? { review: true } : {}),
+    ...(id === "done" ? { deliveryPoint: true } : {}),
+    policies: [{ kind: "acceptance-written" as const }],
+  }));
+  const config = k.validateConfig({ columns });
+  const stages = k.defaultStages(config).map((st) =>
+    st.id === "review"
+      ? {
+          ...st,
+          gate: {
+            id: "code-review",
+            requires: [{ capability: "review" as const }],
+            evidence: [],
+            onFail: { action: "block" as const },
+          },
+        }
+      : st,
+  );
+  const roles = [
+    role(srm, ["order-backlog", "define-acceptance", "manage-flow", "escalate"]),
+    role("worker", ["deliver", "verify"]),
+    role("tester", ["deliver", "verify"]),
+    role("reviewer", ["review"], ["code-review"]),
+    role("assessor", ["verify"]),
+  ];
+  let s = init({ methodology: k, config: { columns }, stages, roles, now: tick() }).state;
+  s = addItem(s, { id: "X", title: "x", acceptance: ["works"] }, srm, tick());
+  s = k.ceremonies["replenishment"]!(s, { by: srm, now: tick(), items: ["X"] }).state;
+  s = work(s, "X", {}, k); // worker: dev -> test
+  s = work(s, "X", { verdict: "rework", notes: "redo" }, k); // tester sends it back
+  s = work(s, "X", {}, k); // worker again, after the rework
+  s = work(s, "X", {}, k); // tester -> review
+  s = recordRiskAssessment(s, k, {
+    item: "X",
+    level: "high",
+    factors: ["prod-infra"],
+    ref: "risk/X.md",
+    by: "assessor",
+    now: tick(),
+  }).state;
+  s = work(s, "X", {}, k); // reviewer -> awaiting_human
+  assert.equal(getItem(s, "X").status, "awaiting_human");
+  const pending = s.pending.find((p) => p.item === "X")!;
+  s = decide(s, pending.id, "reject", "human", "no", tick(), k);
+  assert.equal(getItem(s, "X").status, "blocked");
+  s = clearBlocker(s, "X", getItem(s, "X").blockers[0]!.id, srm, tick());
+  assert.equal(getItem(s, "X").status, "review");
+  const low = (by: string) =>
+    recordRiskAssessment(s, k, {
+      item: "X",
+      level: "low",
+      factors: ["docs"],
+      ref: `risk/X-${by}.md`,
+      by,
+      now: tick(),
+    });
+  assert.throws(
+    () => low("worker"),
+    (e) => code(e) === "invalid-input",
+  );
+  assert.equal(low("assessor").state.items["X"]!.evidence.length > 0, true);
 });

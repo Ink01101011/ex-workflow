@@ -8,7 +8,12 @@ import type { WorkflowState } from "../core/types.ts";
 export interface EventIndex {
   /** Item id -> positions of its `item.evidence` events, ascending. */
   evidence: Map<unknown, number[]>;
-  /** Item id -> positions of its `item.transition` events, ascending. */
+  /**
+   * Item id -> positions of the events that appended a transition to the item, ascending: its
+   * `item.transition` events and the `blocker.raised` / `blocker.cleared` events whose payload
+   * carries a non-null `transition` (spec 27, F2 G5-1). `workersOf` uses them only when they are
+   * exactly as many as `item.transitions`.
+   */
   transitions: Map<unknown, number[]>;
   /** Item id -> position of its last `item.rework` event. */
   rework: Map<unknown, number>;
@@ -33,9 +38,9 @@ function build(events: WorkflowState<string>["events"]): EventIndex {
   };
   for (let i = 0; i < events.length; i++) {
     const ev = events[i]!;
-    const p = ev.payload as { id?: unknown; paths?: unknown } | null;
+    const p = ev.payload as { id?: unknown; paths?: unknown; transition?: unknown } | null;
     if (ev.type === "item.evidence") push(index.evidence, p?.id, i);
-    else if (ev.type === "item.transition") push(index.transitions, p?.id, i);
+    else if (ev.type === "item.transition" || p?.transition) push(index.transitions, p?.id, i);
     else if (ev.type === "item.rework") index.rework.set(p?.id, i);
     else if (ev.type === "repo.changed" && Array.isArray(p?.paths)) {
       // a path listed twice in one event keeps both entries; readers take the first after a position

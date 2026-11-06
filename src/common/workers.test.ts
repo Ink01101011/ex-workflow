@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { appendEvent, createState } from "../core/state.ts";
 import { addItem, getItem } from "../core/items/record.ts";
 import { moveItem } from "../core/items/move.ts";
+import { clearBlocker, raiseBlocker } from "../core/items/blockers.ts";
 import type { Role, Stage, WorkflowState } from "../core/types.ts";
 import { workersOf } from "./workers.ts";
 
@@ -63,4 +64,40 @@ test("workersOf: only dispatches since the item's last rework count, plus the 1.
   assert.deepEqual(of(s), ["tester"]);
   s = walk(s, [["dev", "rev"]]);
   assert.deepEqual(of(s), ["rev"]);
+});
+
+test("G5-1: a blocker raised and cleared after the rework does not drop post-rework dispatches", () => {
+  let s = walk(base(), [
+    ["dev", "dev"],
+    ["test", "tester"],
+  ]);
+  s = moveItem(s, "A", { stage: "dev", status: "todo" }, "tester", T0);
+  s = appendEvent(s, "item.rework", "tester", { id: "A", by: "tester", notes: "n" }, T0);
+  s = walk(s, [
+    ["dev", "dev"],
+    ["test", "tester"],
+  ]);
+  // two blocked/cleared pairs: each appends transitions through blocker.* events, not item.transition
+  for (const n of [1, 2]) {
+    s = raiseBlocker(s, "A", "env down", "pm", "tester", T0);
+    s = clearBlocker(s, "A", `A-b${n}`, "pm", T0);
+    s = walk(s, [["test", "tester"]]);
+  }
+  s = walk(s, [["review", "rev"]]);
+  assert.deepEqual(of(s), ["dev", "tester", "rev"]);
+});
+
+test("G5-1: a log that does not account for every transition counts all of them (fail closed)", () => {
+  let s = walk(base(), [
+    ["dev", "dev"],
+    ["test", "tester"],
+  ]);
+  s = moveItem(s, "A", { stage: "dev", status: "todo" }, "tester", T0);
+  s = appendEvent(s, "item.rework", "tester", { id: "A", by: "tester", notes: "n" }, T0);
+  s = walk(s, [["dev", "rev"]]);
+  // a transition no event records (a hand-edited state): the rework boundary is unknown
+  const A = getItem(s, "A");
+  const extra = { ...A.transitions.at(-1)!, by: "ops" };
+  s = { ...s, items: { ...s.items, A: { ...A, transitions: [...A.transitions, extra] } } };
+  assert.deepEqual(of(s), ["dev", "tester", "rev", "ops"]);
 });
