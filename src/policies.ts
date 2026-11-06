@@ -19,3 +19,11 @@ export type { ContextSnapshotInput } from "./common/context/snapshot.ts";
 export { recordRepoChange } from "./common/context/repo-change.ts";
 export type { RepoChangeInput } from "./common/context/repo-change.ts";
 export { contextGroundedViolations } from "./common/context/policy.ts";
+export { compareRuns } from "./common/compare-runs.ts";
+export type {
+  CompareRunsOptions,
+  RunComparison,
+  RunMetrics,
+  RunRecord,
+  VariantResult,
+} from "./common/compare-runs.ts";

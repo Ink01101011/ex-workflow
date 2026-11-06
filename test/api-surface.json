@@ -185,6 +185,7 @@
     "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"],
     "./policies": [
       "DEFAULT_RISK_TABLE",
+      "compareRuns",
       "contextGroundedViolations",
       "contextOf",
       "recordContextSnapshot",
