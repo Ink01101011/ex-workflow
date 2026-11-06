@@ -262,7 +262,7 @@ export function plan<N extends string>(
     const stage = stageOf(state, target);
     // questions are answered, not delivered: like exit policies and gates, entry policies do not apply
     const violations =
-      item.type === "question" ? [] : evaluatePolicies(state, item, stage.entryPolicy);
+      item.type === "question" ? [] : evaluatePolicies(state, item, stage.entryPolicy, methodology);
     if (violations.length > 0) {
       skipped.push({
         id: item.id,

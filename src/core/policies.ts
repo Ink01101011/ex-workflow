@@ -1,11 +1,17 @@
 import { fail } from "./errors.ts";
 import { freshEvidence } from "./items/evidence.ts";
-import type { Policy, Violation, WorkItem, WorkflowState } from "./types.ts";
+import type { Methodology, Policy, Violation, WorkItem, WorkflowState } from "./types.ts";
 
-export function evaluatePolicies(
-  state: WorkflowState<string>,
+/** The part of a methodology policy evaluation reads: its `customPolicy` hook (spec 27, #36). */
+type PolicyHook<N extends string> = Pick<Methodology<unknown, N>, "customPolicy">;
+
+// The optional trailing methodology is on the wide first overload only; the 1.1 signature stays
+// last so Parameters<typeof evaluatePolicies> reads the 1.1 shape (spec 27, #36).
+export function evaluatePolicies<N extends string>(
+  state: WorkflowState<N>,
   item: WorkItem,
   policies: Policy[],
+  methodology?: PolicyHook<N>,
 ): Violation[];
 export function evaluatePolicies(
   state: WorkflowState,
@@ -16,6 +22,7 @@ export function evaluatePolicies(
   state: WorkflowState<string>,
   item: WorkItem,
   policies: Policy[],
+  methodology?: PolicyHook<string>,
 ): Violation[] {
   const out: Violation[] = [];
   const fresh = freshEvidence(state, item);
@@ -67,24 +74,29 @@ export function evaluatePolicies(
           );
         break;
       }
-      case "custom":
-        if (!fresh.some((e) => e.kind === `policy:${p.id}`))
+      case "custom": {
+        // a methodology's hook answers when it returns an array; otherwise the 1.2 evidence check
+        const own = methodology?.customPolicy?.(state, item, p);
+        if (Array.isArray(own)) out.push(...own);
+        else if (!fresh.some((e) => e.kind === `policy:${p.id}`))
           v(
             `policy:custom:${p.id}`,
             `item "${item.id}" has not satisfied "${p.description}"`,
             `attach evidence { kind: "policy:${p.id}" } when it is satisfied`,
           );
         break;
+      }
     }
   }
   return out;
 }
 
-export function assertPolicies(
-  state: WorkflowState<string>,
+export function assertPolicies<N extends string>(
+  state: WorkflowState<N>,
   item: WorkItem,
   policies: Policy[],
   context: string,
+  methodology?: PolicyHook<N>,
 ): void;
 export function assertPolicies(
   state: WorkflowState,
@@ -97,8 +109,9 @@ export function assertPolicies(
   item: WorkItem,
   policies: Policy[],
   context: string,
+  methodology?: PolicyHook<string>,
 ): void {
-  const unmet = evaluatePolicies(state, item, policies);
+  const unmet = evaluatePolicies(state, item, policies, methodology);
   if (unmet.length) {
     fail(
       "policy-unmet",

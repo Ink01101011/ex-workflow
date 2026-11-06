@@ -182,7 +182,19 @@
       "waterfallConfigSchema",
       "workflowStateSchema"
     ],
-    "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"]
+    "./registry": ["methodologyFactory", "registerMethodology", "registeredMethodologies"],
+    "./policies": [
+      "DEFAULT_RISK_TABLE",
+      "compareRuns",
+      "contextGroundedViolations",
+      "contextOf",
+      "recordContextSnapshot",
+      "recordRepoChange",
+      "recordRiskAssessment",
+      "riskEscalation",
+      "withContextGrounding",
+      "withRiskGate"
+    ]
   },
   "usage": [
     "exwf init <scrum|kanban|waterfall|investigation|experimentation> --config <file> [--roles <file>]",
@@ -238,6 +250,7 @@
     "experimentation.validated",
     "gate.failed",
     "gate.passed",
+    "gate.resolved",
     "increment",
     "investigation.belief-updated",
     "investigation.conclusion",
@@ -267,6 +280,7 @@
     "phase.retrospective",
     "phase.suspended",
     "planner.resolved",
+    "repo.changed",
     "retro",
     "role.registered",
     "role.retired",

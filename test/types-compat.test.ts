@@ -55,6 +55,7 @@ import {
   type Action,
   type ApplyResult,
   type Brief,
+  type BriefContext,
   type Ceremony,
   type Evidence,
   type Handoff,
@@ -68,6 +69,7 @@ import {
   type PendingHuman,
   type PlanOptions,
   type PlanResult,
+  type Policy,
   type Role,
   type Rule,
   type Stage,
@@ -416,4 +418,36 @@ test("generic name: a custom Methodology<Cfg, 'triage'> initialises and runs nex
   assert.equal(done.state.methodology, "triage");
   assert.equal(done.state.items["t1"]!.stage, "done");
   assert.deepEqual(m.metrics(done.state), { tickets: 1 });
+});
+
+// 1.3 (design spec section 27, #35): the escalation hook and Evidence.data are optional, so a 1.2
+// Methodology literal without the hook (triage() above declares none) and 1.2 evidence still compile.
+expectType<Equal<undefined extends Methodology["escalateGate"] ? true : false, true>>(true);
+expectType<Equal<undefined extends Evidence["data"] ? true : false, true>>(true);
+test("1.3: a 1.2 methodology without escalateGate still type-checks and has no hook", () => {
+  const m12: Methodology<TriageConfig, "triage"> = triage();
+  assert.equal(m12.escalateGate, undefined);
+  const e12: Evidence = { kind: "k", ref: "r", by: "b", at: "2026-11-06T00:00:00.000Z" };
+  assert.equal(e12.data, undefined);
+});
+
+// 1.3 (spec 27, #36): customPolicy, briefContext and Brief.context are optional, and the policy
+// readers keep their 1.1 signature last, so Parameters<typeof fn> still reads three/four arguments.
+expectType<Equal<undefined extends Methodology["customPolicy"] ? true : false, true>>(true);
+expectType<Equal<undefined extends Methodology["briefContext"] ? true : false, true>>(true);
+expectType<Equal<undefined extends Brief["context"] ? true : false, true>>(true);
+expectType<Equal<BriefContext["stale"], string[]>>(true);
+expectType<
+  Equal<Parameters<typeof evaluatePolicies>, [state: S, item: WorkItem, policies: Policy[]]>
+>(true);
+expectType<
+  Equal<
+    Parameters<typeof assertPolicies>,
+    [state: S, item: WorkItem, policies: Policy[], context: string]
+  >
+>(true);
+test("1.3: a 1.2 methodology without customPolicy or briefContext has neither hook", () => {
+  const m12: Methodology<TriageConfig, "triage"> = triage();
+  assert.equal(m12.customPolicy, undefined);
+  assert.equal(m12.briefContext, undefined);
 });

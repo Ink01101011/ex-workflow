@@ -1,7 +1,7 @@
 # Risk-adaptive agent autonomy — #35
 
 Issue: [#35](https://github.com/Ink01101011/ex-workflow/issues/35), P2 — Strong interest.
-Status: investigation complete; proposed pilot, nothing implemented.
+Status: adopted in 1.3.0 (spec section 27) for the `risk-assessment` evidence, the escalation-only gate resolver (opt-in per gate, via `withRiskGate`) and the `gate.resolved` event; not adopted: a second human for `critical`, a dedicated `risk-assessor` capability (a role with `verify` assesses), the pilot measurements. File links below predate 1.2; the code is under `src/core/`.
 Reference: [PMLR v306, pan26a](https://proceedings.mlr.press/v306/pan26a.html).
 See [shared implementation evidence](README.md#shared-implementation-evidence).
 

@@ -180,3 +180,79 @@ test("B10: gate evidence recorded before the last rework no longer counts; fresh
   s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "m" }, T3);
   assert.equal(checkGate(s, getItem(s, "A"), gate, "qa").outcome, "fail");
 });
+
+test("decide judges an escalated pending against the recorded gate.resolved (spec 27, #35)", () => {
+  // the static gate lets qa approve; complete() recorded an escalation to human before the pending
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r", by: "dev" }, T0);
+  s = appendEvent(
+    s,
+    "gate.resolved",
+    "qa",
+    {
+      item: "A",
+      gate: "qa-gate",
+      requires: [{ capability: "approve-gate" }, "human"],
+      evidence: ["test-report"],
+      reason: { level: "high", why: "assessed", assessment: "risk/A.md", by: "human" },
+    },
+    T0,
+  );
+  s = raisePending(s, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
+  // no methodology passed: what `exwf decide` does
+  assert.throws(
+    () => decide(s, "p1", "approve", "qa", "", T0),
+    (e) => e instanceof WorkflowError && e.code === "gate-unmet",
+  );
+  assert.equal(getItem(decide(s, "p1", "approve", "human", "", T0), "A").status, "done");
+  // a resolution for another gate or item leaves the static gate in force
+  let t = addEvidence(base(), "A", { kind: "test-report", ref: "r", by: "dev" }, T0);
+  t = appendEvent(
+    t,
+    "gate.resolved",
+    "qa",
+    { item: "B", gate: "qa-gate", requires: ["human"], evidence: [], reason: {} },
+    T0,
+  );
+  t = raisePending(t, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
+  assert.equal(getItem(decide(t, "p1", "approve", "qa", "", T0), "A").status, "done");
+});
+
+test("decide on a crafted gate.resolved with a non-string capability answers, never a TypeError (G2-4)", () => {
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r", by: "dev" }, T0);
+  s = appendEvent(
+    s,
+    "gate.resolved",
+    "qa",
+    {
+      item: "A",
+      gate: "qa-gate",
+      requires: [{ capability: "approve-gate" }, { capability: { toString: 1 } }],
+      evidence: [],
+      reason: {},
+    },
+    T0,
+  );
+  s = raisePending(s, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
+  // the malformed entry has no identity and is skipped; the static gate lets qa approve
+  assert.equal(getItem(decide(s, "p1", "approve", "qa", "", T0), "A").status, "done");
+});
+
+test("decide uses the gate.resolved recorded with the pending, not a later one (G2-5, G3-1)", () => {
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r", by: "dev" }, T0);
+  const human = { item: "A", gate: "qa-gate", requires: ["human"], evidence: [], reason: {} };
+  s = appendEvent(s, "gate.resolved", "qa", human, T0);
+  s = raisePending(s, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
+  // a crafted resolution appended after the pending cannot relax the one it was raised under
+  const crafted = appendEvent(s, "gate.resolved", "qa", { ...human, requires: [] }, T0);
+  assert.throws(
+    () => decide(crafted, "p1", "approve", "qa", "", T0),
+    (e) => e instanceof WorkflowError && e.code === "gate-unmet",
+  );
+  // a resolution not recorded with this pending (an earlier round, another event in between) does
+  // not apply: the static gate lets qa approve
+  let t = addEvidence(base(), "A", { kind: "test-report", ref: "r", by: "dev" }, T0);
+  t = appendEvent(t, "gate.resolved", "qa", human, T0);
+  t = addEvidence(t, "A", { kind: "note", ref: "n", by: "dev" }, T0);
+  t = raisePending(t, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
+  assert.equal(getItem(decide(t, "p1", "approve", "qa", "", T0), "A").status, "done");
+});

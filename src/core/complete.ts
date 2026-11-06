@@ -1,6 +1,7 @@
 import { addSpent } from "./budget.ts";
 import { fail } from "./errors.ts";
 import { checkGate, lastDispatchBefore, raisePending } from "./gates.ts";
+import { widenGate } from "./gate-escalation.ts";
 import { addEvidence } from "./items/evidence.ts";
 import { addItem, getItem, patchItem } from "./items/record.ts";
 import { advanceItem, clearRole, moveItem } from "./items/move.ts";
@@ -238,15 +239,32 @@ function completeBody<N extends string>(
   } else if (verdict === "done" || verdict === "needs-review") {
     const item = getItem(s, id);
     const stage = stageOf(s, item.stage);
-    assertPolicies(s, item, stage.exitPolicy, `leave "${stage.id}"`);
+    assertPolicies(s, item, stage.exitPolicy, `leave "${stage.id}"`, methodology);
     if (stage.gate) {
-      const res = checkGate(s, item, stage.gate, role);
+      // a methodology's escalation hook can only widen the static gate (spec 27, #35)
+      const x = methodology.escalateGate?.(s, item, stage.gate);
+      const gate = widenGate(stage.gate, x);
+      const res = checkGate(s, item, gate, role);
       if (res.outcome === "fail")
         fail(
           "gate-unmet",
-          `gate "${stage.gate.id}" blocks "${id}": ${res.violations.map((v) => v.message).join("; ")}`,
+          `gate "${gate.id}" blocks "${id}": ${res.violations.map((v) => v.message).join("; ")}`,
           res.violations.map((v) => v.fix).join("; "),
           { items: [id], rule: res.violations[0]!.rule },
+        );
+      if (methodology.escalateGate)
+        s = appendEvent(
+          s,
+          "gate.resolved",
+          role,
+          {
+            item: id,
+            gate: gate.id,
+            requires: gate.requires,
+            evidence: gate.evidence,
+            reason: x?.reason ?? {},
+          },
+          at,
         );
       if (res.outcome === "human") {
         s = raisePending(

@@ -25,6 +25,8 @@ export interface Evidence {
   ref: string;
   by: string;
   at: string;
+  /** Structured content a policy reads (e.g. a risk level); the policy that owns the kind validates it. */
+  data?: Record<string, unknown>;
 }
 export interface Blocker {
   id: string;
@@ -104,6 +106,46 @@ export interface Gate {
   requires: GateRequirement[];
   evidence: string[];
   onFail: { action: "block" } | { action: "return-to"; stage: string };
+}
+
+/**
+ * What a methodology's `escalateGate` hook adds to a static gate (design spec section 27, #35).
+ * Core only appends these to the gate (`widenGate`); it never removes or replaces a requirement.
+ */
+export interface GateEscalation {
+  requires: GateRequirement[];
+  evidence: string[];
+  /** Why the gate was widened; recorded in the `gate.resolved` event (e.g. the risk level and its assessment). */
+  reason: Record<string, string | null>;
+}
+
+/**
+ * One claim of a context snapshot (design spec section 27, #36). With no `source` it is
+ * unverified. `source.path` is repository-relative POSIX (as Git lists it); the engine compares
+ * paths and hashes only, it never reads a file.
+ */
+export interface ContextAssumption {
+  claim: string;
+  /** A required claim must be verified (carry a `source`) for the context-grounded policy to pass. */
+  required?: boolean;
+  source?: { path: string; lines?: [number, number]; hash: string };
+}
+/** `data` of a `context-snapshot` evidence entry. */
+export interface ContextSnapshotData {
+  /** The repository revision the snapshot was taken at. */
+  revision: string;
+  assumptions: ContextAssumption[];
+}
+/** An item's current context snapshot as a worker's brief carries it. */
+export interface BriefContext extends ContextSnapshotData {
+  /** The snapshot artifact (the evidence `ref`). */
+  snapshot: string;
+  /** Who recorded it. */
+  by: string;
+  /** Cited paths a later `repo.changed` event listed; empty while the snapshot is fresh. */
+  stale: string[];
+  /** Claims with no `source`. */
+  unverified: string[];
 }
 
 export interface Stage {
@@ -370,6 +412,8 @@ export interface Brief {
   relatedBugs: Array<{ id: string; title: string; affects: string[] }>;
   budgetRemaining: Budget;
   gateAhead?: Gate;
+  /** the item's context snapshot, from the methodology's `briefContext` hook (spec 27, #36) */
+  context?: BriefContext;
   /** for a question item: the escalating item's last handoff */
   parent?: {
     item: string;
@@ -458,6 +502,22 @@ export interface Methodology<C = unknown, N extends string = MethodologyName> {
     note: string,
     now: string,
   ): WorkflowState<N>;
+  /**
+   * Called by complete() before a gated completion is checked; what it returns is appended to the
+   * static gate (escalation only) and the widened gate is recorded as `gate.resolved`.
+   */
+  escalateGate?(state: WorkflowState<N>, item: WorkItem, gate: Gate): GateEscalation | undefined;
+  /**
+   * Answers a `custom` stage policy (spec 27, #36) for `plan()` and `complete()`: an array is the
+   * policy's violations (empty passes); `undefined` keeps the 1.2 check (`policy:<id>` evidence).
+   */
+  customPolicy?(
+    state: WorkflowState<N>,
+    item: WorkItem,
+    policy: Extract<Policy, { kind: "custom" }>,
+  ): Violation[] | undefined;
+  /** What `synthesizeBrief` puts in `Brief.context` (spec 27, #36); `undefined` leaves it out. */
+  briefContext?(state: WorkflowState<N>, item: WorkItem): BriefContext | undefined;
 }
 
 // ---- errors ----------------------------------------------------------

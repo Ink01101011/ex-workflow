@@ -20,17 +20,18 @@
 6. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
 7. [Persisting state](#persisting-state)
 8. [Custom methodologies and extension state](#custom-methodologies-and-extension-state)
-9. [CLI reference (`exwf`)](#cli-reference-exwf)
-10. [Configuration](#configuration)
-11. [Ceremonies](#ceremonies)
-12. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
-13. [Errors](#errors)
-14. [JSON Schema](#json-schema)
-15. [Package entry points](#package-entry-points)
-16. [Compatibility and versioning](#compatibility-and-versioning)
-17. [Known limitations](#known-limitations)
-18. [Contributing](#contributing)
-19. [License](#license)
+9. [Composable policies](#composable-policies)
+10. [CLI reference (`exwf`)](#cli-reference-exwf)
+11. [Configuration](#configuration)
+12. [Ceremonies](#ceremonies)
+13. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
+14. [Errors](#errors)
+15. [JSON Schema](#json-schema)
+16. [Package entry points](#package-entry-points)
+17. [Compatibility and versioning](#compatibility-and-versioning)
+18. [Known limitations](#known-limitations)
+19. [Contributing](#contributing)
+20. [License](#license)
 
 ## Pick a methodology
 
@@ -243,6 +244,129 @@ state = writeExt(state, "triage", [...queue, "T-1"]); // returns a new state; un
 
 Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and mirror it to the deprecated top-level `state.investigation` / `state.experimentation` in memory, so SDK code that reads those fields keeps working. On disk only `ext` is stored: `saveState` leaves the mirror out and `loadState` sets it back to the same record (if a hand-edited `state.json` carries both, `ext` wins). The mirrors are read-only: once `ext.<name>` exists the engine reads only it, and a write to the legacy field is ignored; write through `writeExt`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
 
+## Composable policies
+
+`ex-workflow/policies` holds policies you opt into per run by wrapping a methodology. A wrapped methodology keeps every other member, its `name` included, so it runs on the same core and its state persists through the file adapter like the plain one's. The policies are SDK-only: `exwf` runs the plain built-in factory (see [Known limitations](#known-limitations)).
+
+### Risk-adaptive gates
+
+A gate's requirements are static: the same approval for a typo fix and a production change. `withRiskGate` lets the item's recorded risk add to them, never take away:
+
+```ts
+import { addItem, complete, decide, init, next } from "ex-workflow";
+import { kanban } from "ex-workflow/kanban";
+import { recordRiskAssessment, withRiskGate } from "ex-workflow/policies";
+
+const m = withRiskGate(kanban(), { gates: ["code-review"] }); // only these gate ids escalate
+// ... init with a review stage carrying gate { id: "code-review", requires: [{ capability: "review" }], ... }
+
+// after the work, an independent role with capability verify (or "human") assesses the item
+state = recordRiskAssessment(state, m, {
+  item: "CART-12",
+  level: "high", // "low" | "medium" | "high" | "critical"
+  factors: ["prod-infra", "secrets"], // free strings
+  ref: "risk/CART-12.md", // the host's assessment artifact
+  subject: "3f2c1e0", // optional: the SHA or ref assessed
+  by: "risk-reviewer",
+}).state;
+
+// the reviewer completes as usual: low passes on the static gate, high raises a human pending
+const done = complete(state, m, handoff, accounting);
+```
+
+- **The assessment** is evidence `risk-assessment` with `data: { level, factors, subject? }`, recorded through `applyAction` (action `risk.assess`, so your rules see it). `recordRiskAssessment` refuses `invalid-input` for an unknown key or level, a non-string factor, an empty `ref`, an assessor that is neither `human` nor a role with capability `verify`, and an assessor that worked on the item: any role that dispatched it since its last rework (every stage, not only the last), its assigned role, or its author.
+- **Which assessment counts:** only fresh ones (recorded after the item's last rework), with well-formed `data`, by a qualified and independent assessor (re-checked when the gate is resolved). The strictest one wins, so a later, lower assessment does not relax an earlier one; only rework does. With none, the level is `critical`.
+- **The table** says what each level adds to the static gate. `DEFAULT_RISK_TABLE`:
+
+  | Level | Adds |
+  |---|---|
+  | `low`, `medium` | nothing |
+  | `high`, `critical` | `"human"` |
+
+  Pass your own as `withRiskGate(m, { gates, table })`: every level needs a row `{ requires: GateRequirement[]; evidence?: string[] }`, and a stricter level must include everything the level below it adds, so a missing or rejected assessment (`critical`) never asks for less than a `low` one. E.g. `medium: { requires: [{ capability: "security-review" }], evidence: ["sbom"] }` with `high` and `critical` both `{ requires: [{ capability: "security-review" }, "human"], evidence: ["sbom"] }`. Invalid options fail `invalid-input` when you wrap.
+- **`gate.resolved`**: on a gated completion, `complete()` appends `gate.resolved { item, gate, requires, evidence, reason }` before `gate.passed` or `pending.raised`, with the requirements actually checked and `reason: { level, why, assessment, by }` (`why` is `assessed`, `missing`, `invalid` or `not-independent`). A gate the policy does not name records the static gate with `reason: {}`.
+- **`decide`** judges a pending gate against the `gate.resolved` that `complete()` recorded with that pending (a resolution appended later does not apply; with none, the static gate applies), so a role cannot approve an escalation to a human, also through `exwf decide`.
+- **Any methodology** may implement the hook itself: `Methodology.escalateGate(state, item, gate)` returns `{ requires, evidence, reason }` or `undefined`. Core only appends what it returns to the static gate, so a hook can tighten a gate but never loosen it. `withRiskGate` keeps an existing hook and widens with both.
+- `riskEscalation(state, item, gate, options)` is the resolver on its own, for hosts that want the answer without wrapping; it validates `options` the same way (`invalid-input`).
+
+### Context-grounded entry
+
+A worker that starts from a stale picture of the repository builds on assumptions nobody checked. `withContextGrounding` lets an item enter a stage only with a fresh context snapshot that cites at least one source and that `human` or a registered role other than the item's workers recorded:
+
+```ts
+import { next } from "ex-workflow";
+import { kanban } from "ex-workflow/kanban";
+import {
+  recordContextSnapshot,
+  recordRepoChange,
+  withContextGrounding,
+} from "ex-workflow/policies";
+
+const m = withContextGrounding(kanban(), { entry: ["dev"] }); // optional: exit: ["dev"]
+// init with m: the dev column's entry policies gain { kind: "custom", id: "context-grounded" }
+
+// a scout (a registered role that does not work on the item, or "human") records what it verified
+state = recordContextSnapshot(state, m, {
+  item: "CART-12",
+  revision: "4f2c1e0",
+  assumptions: [
+    {
+      claim: "cart totals are integer cents",
+      required: true,
+      source: { path: "src/cart.ts", lines: [10, 24], hash: "9b1d…" },
+    },
+    { claim: "no caching layer in front of the cart" }, // no source: unverified
+  ],
+  ref: "ctx/CART-12.json", // the host's snapshot artifact
+  by: "scout", // a role registered in the state
+}).state;
+
+const { briefs } = next(state, m); // brief.context: what was verified, where, what went stale
+
+// the host reports what each new revision changed
+const changed = recordRepoChange(state, m, {
+  revision: "a71b2d9",
+  paths: ["src/cart.ts"], // as `git diff --name-only -z` lists them
+  by: "ci",
+});
+changed.warnings; // context-stale for each in-flight item whose snapshot cites a changed path
+```
+
+- **The snapshot** is evidence `context-snapshot` with `data: { revision, assumptions }`, recorded through `applyAction` (action `context.snapshot`). An assumption is `{ claim, required?, source?: { path, lines?: [from, to], hash } }`; one without a `source` is unverified. `recordContextSnapshot` refuses `invalid-input` for a snapshot with no sourced assumption and for a `by` that is neither `human` nor a registered role, or that worked on the item (dispatched it since its last rework, is assigned to it, or authored it). The engine compares paths and hashes, it never reads a file.
+- **Paths** are repository-relative POSIX paths as Git lists them, compared exactly (case included): `src/cart.ts`, not `./src/cart.ts`, `/src/cart.ts` or `src\cart.ts`. They must also be Unicode NFC (macOS file systems may hand you NFD), at most 4096 characters, with no control or bidirectional formatting character and no leading or trailing whitespace. Read them from `git diff --name-only -z` (NUL-separated and unquoted) or with `git -c core.quotePath=false`: by default Git prints a non-ASCII name quoted and escaped (`"caf\303\251.ts"`), which is refused. Both recorders refuse any other spelling with `invalid-input`.
+- **`repo.changed`**: `recordRepoChange` (action `repo.change`) appends `repo.changed { revision, paths }`. A snapshot is stale when a later `repo.changed` lists a path it cites (event order, not timestamps; the revision alone does not decide). No item status changes: an item in `in_progress`, `review` or `awaiting_human` gets a `context-stale` warning in `ApplyResult.warnings` when this change made its snapshot stale, and a `todo` item is re-checked by its entry policy when the planner reaches it.
+- **The policy** (`contextGroundedViolations`, rule `policy:custom:context-grounded`) fails an item with no qualifying fresh snapshot, with a stale one, or with a `required` assumption that has no source. A snapshot qualifies when its data is valid, it has at least one sourced assumption and `human` or a registered role that does not work on the item recorded it; the latest qualifying one counts, so a snapshot a worker wrote into the state by hand never replaces an independent one, and one recorded by a role that later works on the item stops counting. Rework drops every snapshot. `next` reports such a `todo` item under `skipped` with reason `entry-policy` and the message. A qualifying snapshot whose required claims are all sourced passes; unverified optional claims are listed in `brief.context.unverified`.
+- **`brief.context`** is `contextOf(state, item)`: `{ revision, assumptions, snapshot, by, stale, unverified }`.
+- **Any methodology** may answer custom policies itself: `Methodology.customPolicy(state, item, policy)` returns the violations, or `undefined` for the default check (evidence `policy:<id>`); `Methodology.briefContext(state, item)` fills `brief.context`. `withContextGrounding` keeps existing hooks for every other policy id and composes with `withRiskGate` in either order.
+
+### Comparing runs
+
+`compareRuns` compares finished runs of two or more variants (a variant is whatever the host changed: a role's model tier, a config, a methodology). It is a pure function over `WorkflowState` values; the scenario suite, running each variant and scoring stay with the host.
+
+```ts
+import { loadState } from "ex-workflow/adapters";
+import { compareRuns } from "ex-workflow/policies";
+
+const result = compareRuns(
+  [
+    { variant: "V0", scenario: "bug-fix-1", passed: true, state: await loadState(dirV0Bug1) },
+    { variant: "V1", scenario: "bug-fix-1", passed: true, state: await loadState(dirV1Bug1) },
+    // ... one record per variant and scenario run; a scenario may run more than once
+  ],
+  { baseline: "V0", mustPass: ["bug-fix-1"], passTolerance: 0.1, costTolerance: 0.05 },
+);
+result.winner; // "V1", or null when no eligible variant beats the baseline beyond the tolerances
+result.reason; // why
+result.variants; // ranked VariantResult[]: { variant, runs, passed, passRate, mean, regressions, missing, eligible }
+```
+
+- **`passed`** is your scorer's verdict for that run. The engine derives the rest from the state: `mean` holds, per variant, the mean of `tokens` (accounting `tokensIn + tokensOut`, after corrections), `durationMs`, `turns` (accounting lines), `humanInterventions` (`pending.raised` plus `blocker.cleared` events), `reworks`, `escalations` and `itemsDone`.
+- **`passRate`** weighs each scenario once: the mean over the scenarios the variant ran of the share of that scenario's runs that passed, so more runs of an easy scenario do not raise it; `runs` and `passed` count runs.
+- **Eligible** means no `mustPass` scenario has a failing run (`regressions`) and the variant ran every scenario the baseline ran and every `mustPass` one (`missing`).
+- **Ranking**: eligible first, then `passRate` descending, then mean tokens, mean duration and mean human interventions ascending, then the variant id in code-unit order. The input order of `runs` never changes the result.
+- **Winner**: the first ranked eligible variant other than the baseline whose `passRate` is at least the baseline's minus `passTolerance` and that is better, by a `passRate` above the baseline's plus `passTolerance` or by mean tokens below the baseline's times `1 - costTolerance`. Tolerances are fractions in `[0, 1]`, default `0`.
+- **Refused with `invalid-input`**: no runs, a non-array `runs`, an id that is not a valid id (`__proto__`, `toString` and the like included), a baseline or `mustPass` scenario no run names, a tolerance outside `[0, 1]`, a non-boolean `passed`, a state without `events`, `accounting` and `items`, a non-finite or negative token or duration figure, and token or duration totals or means that overflow to infinity. Only own properties of the options, run records and states are read (an inherited `{ __proto__: … }` value counts as absent). Variants of different methodologies compare on the same metrics.
+
 ## CLI reference (`exwf`)
 
 Run from the directory that holds `.workflow/`. Every command prints JSON on stdout. Exit 0 = ok, exit 1 = `{ ok: false, error }`, exit 2 = usage. `--by` defaults to `human`. Flags take `--flag value` (not `--flag=value`); a value that starts with `--` must come through a JSON input file.
@@ -382,7 +506,8 @@ Every config is validated at `init` (`config-invalid` names the key and an examp
 { item, role, modelTier, invariants, do_not, acceptance,
   upstream,        // results of the items this one depends on
   priorHandoffs,   // earlier attempts at this item (rework feedback)
-  relatedBugs, budgetRemaining, gateAhead }
+  relatedBugs, budgetRemaining, gateAhead,
+  context }        // with withContextGrounding: the item's context snapshot
 ```
 
 **Handoff** (what your agent gives back):
@@ -436,6 +561,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/investigation` | `investigation()`, `validateInvestigationConfig`; types `InvestigationConfig`, `InvestigationState`, `InvestigationRound`, `InvestigationConclusion`, `Hypothesis`, `Experiment`, `Observation`, `BeliefUpdate` |
 | `ex-workflow/experimentation` | `experimentation()`, `validateExperimentationConfig`, `experimentationCeremonies`, `experimentationMetrics`, `experimentationReport`, `experimentationRoles`, `experimentationRules`, `experimentationStages`; types `ExperimentationConfig`, `ExperimentationState`, `ExperimentCandidate` |
 | `ex-workflow/registry` | `registerMethodology`, `methodologyFactory`, `registeredMethodologies` (five built-ins pre-registered); types `MethodologyFactory`, `MethodologyRegistry` |
+| `ex-workflow/policies` | `withRiskGate`, `recordRiskAssessment`, `riskEscalation`, `DEFAULT_RISK_TABLE`, `withContextGrounding`, `recordContextSnapshot`, `recordRepoChange`, `contextOf`, `contextGroundedViolations`, `compareRuns`; types `RiskLevel`, `RiskTable`, `RiskAssessmentData`, `RiskAssessmentInput`, `RiskGateOptions`, `ContextGroundingOptions`, `ContextSnapshotInput`, `RepoChangeInput`, `CompareRunsOptions`, `RunRecord`, `RunMetrics`, `VariantResult`, `RunComparison` (`ContextAssumption`, `ContextSnapshotData` and `BriefContext` come from the root entry) |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
 | `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
@@ -445,7 +571,7 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 5
 
 ## Compatibility and versioning
 
-- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
+- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 71 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
 - **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still set in memory and for SDK readers, as read-only mirrors of `ext.investigation` / `ext.experimentation` (on disk only `ext` is written; `loadState` restores the mirror), so SDK code reading `state.investigation` / `state.experimentation` sees the same record; once `ext.<name>` exists a write to the legacy field is ignored. Read with `readExt` and write with `writeExt` instead. The mirrors do not make a 1.2 state loadable by 1.1.x (see [Known limitations](#known-limitations)). 2.0 removes the mirrors.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
@@ -456,6 +582,12 @@ Deliberate, documented, and stable within 1.x.
 
 - **A custom methodology's state cannot go through the file adapter or the CLI.** The state schema accepts only the five built-in names in `methodology`, so `saveState`, `loadState` and every `exwf` command refuse it. Keep such a state through the SDK and persist it yourself.
 - **No downgrade for Investigation and Experimentation.** 1.1.x cannot load a state that 1.2 wrote for those two methodologies: the 1.1 state schema rejects the `ext` field, and the legacy mirrors do not change that. Keep a run on 1.2 once 1.2 has saved it.
+- **No downgrade for a state with evidence `data`.** 1.2.x cannot load a state carrying `Evidence.data` (a risk assessment or context snapshot recorded by `ex-workflow/policies`): its schema closes `Evidence`. Keep such a run on 1.3.
+- **Policies are SDK-only.** `exwf` runs the plain built-in methodology, so `exwf complete` checks a gate's static requirements only. `exwf decide` does honour an escalation the SDK recorded (`gate.resolved`). Run completions of a risk-gated run through the SDK. There is no CLI command for snapshots or repository changes.
+- **Without the wrapper, `context-grounded` is only as strong as the 1.2 custom-policy check.** On a stage carrying the policy, `exwf next` and `exwf complete` (and any SDK call with the plain methodology) fall back to the default check: the item passes when it carries fresh evidence of kind `policy:context-grounded`. That evidence is not tied to a snapshot, and `complete()` records every `handoff.produced` entry as evidence, so a worker can attest the policy for its own item by listing `{ kind: "policy:context-grounded", ref }` in a handoff. An item without that evidence is skipped. Plan and complete a grounded run through the SDK with `withContextGrounding`, which ignores such evidence and checks the snapshot.
+- **Context grounding on an existing state, and Kanban policy changes.** `withContextGrounding` adds its policy through `defaultStages`, so it reaches a state at `init`; for a state created before wrapping, add `{ kind: "custom", id: "context-grounded", description }` to the stage's `entryPolicy` yourself. A Kanban `operations-review` that changes the commitment column's policies rewrites the next column's entry policies and drops it; add it back the same way.
+- **Independence at entry needs a known worker.** The policy compares the snapshot's recorder with the roles that worked on the item. A `todo` item never dispatched and without a `role` has no worker yet (the planner picks one after the entry check), so a snapshot by the role the planner then picks passes the entry check. Once that role is dispatched its snapshot stops counting: `contextOf` falls back to the latest earlier qualifying snapshot, which may be stale (the brief carries it with its `stale` paths, and an `exit` policy fails on it), or, with none, the brief has no `context` and an `exit` policy fails. For the same reason, before dispatch that future worker can record a weaker sourced snapshot (its `required` claims dropped) that supersedes a stale independent one, and the item is then dispatched to it. Set `role` on the item, or also pass `exit`, to have the check apply before the work.
+- **`checkGate` alone sees the static gate.** The risk escalation is applied by `complete()` and `decide()`; a host calling `checkGate` directly gets the 1.2 answer.
 
 - **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), the command gives up after its retries with `invalid-input` naming the lock file; delete it by hand.
 - **Item ids that differ only in letter case cannot both get a brief file.** On macOS and Windows `briefs/A.json` and `briefs/a.json` are one file, so `exwf next` checks every brief name of the batch first and, when an item's id differs from another item's (in the same batch, or with an existing brief) only in case, refuses the whole dispatch with `invalid-input` naming both: no brief is written and the state is unchanged. `saveBrief` refuses such an id the same way. Give ids that differ by more than case (re-add one item under a new id).

@@ -395,6 +395,49 @@ test("an entry policy does not apply to a question item", () => {
   );
 });
 
+test("#36: plan() evaluates a custom entry policy through the methodology's customPolicy hook", () => {
+  const custom = { kind: "custom" as const, id: "context-grounded", description: "grounded" };
+  const stages = hookStages.map((st) => (st.id === "work" ? { ...st, entryPolicy: [custom] } : st));
+  let s = createState({ methodology: "kanban", config: {}, stages, roles: [devRole], now: H0 });
+  s = addItem(s, { id: "A", title: "a" }, "h", H0);
+  s = addItem(s, { id: "B", title: "b" }, "h", H0);
+  const pull = hooked({ dispatchStage: (i) => (i.stage === "queue" ? "work" : undefined) });
+  // without the hook: the 1.2 fallback (no policy:context-grounded evidence) skips both
+  assert.deepEqual(
+    plan(s, pull, { now: H0 })
+      .skipped.map((x) => [x.id, x.reason])
+      .sort(),
+    [
+      ["A", "entry-policy"],
+      ["B", "entry-policy"],
+    ],
+  );
+  // with it: the hook decides per item, and its message is the skip detail
+  const m: Methodology = {
+    ...pull,
+    customPolicy: (_s, item, p) =>
+      item.id === "A"
+        ? []
+        : [
+            {
+              rule: `policy:custom:${p.id}`,
+              severity: "error",
+              item: item.id,
+              message: `"${item.id}" snapshot is stale`,
+              fix: "record a fresh snapshot",
+            },
+          ],
+  };
+  const res = plan(s, m, { now: H0 });
+  assert.deepEqual(
+    res.dispatched.map((d) => d.id),
+    ["A"],
+  );
+  assert.deepEqual(res.skipped, [
+    { id: "B", reason: "entry-policy", detail: '"B" snapshot is stale' },
+  ]);
+});
+
 test("priorityOf overrides item.priority and tieBreaker orders equal priorities", () => {
   const byC = hooked({ priorityOf: (i) => (i.id === "C" ? 100 : i.priority) });
   assert.deepEqual(

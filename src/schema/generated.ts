@@ -195,6 +195,10 @@ export const CORE_DEFINITIONS: Record<string, JsonSchema> = {
       at: {
         type: "string",
       },
+      data: {
+        type: "object",
+        additionalProperties: {},
+      },
     },
     required: ["kind", "ref", "by", "at"],
     additionalProperties: false,

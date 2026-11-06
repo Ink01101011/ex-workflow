@@ -5,7 +5,7 @@ import { addItem } from "./items/record.ts";
 import { moveItem } from "./items/move.ts";
 import { synthesizeBrief, next } from "./brief.ts";
 import { complete } from "./complete.ts";
-import type { Gate, Methodology, Role, Stage } from "./types.ts";
+import type { BriefContext, Gate, Methodology, Role, Stage } from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const gate: Gate = { id: "g", requires: ["human"], evidence: [], onFail: { action: "block" } };
@@ -187,4 +187,39 @@ test("a question brief carries its parent's handoff and do_not; other briefs hav
     do_not: ["touch b"],
   });
   assert.ok(q.do_not.includes("touch b"));
+});
+
+// ---- #36 brief context (design spec section 27) ------------------------
+test("#36: synthesizeBrief carries the methodology's briefContext; without one the brief has no context", () => {
+  let s = createState({ methodology: "kanban", config: {}, stages, roles: [dev], now: T0 });
+  s = addItem(s, { id: "A", title: "a", role: "dev" }, "po", T0);
+  assert.equal("context" in synthesizeBrief(s, m(), s.items["A"]!), false);
+  const context: BriefContext = {
+    revision: "abc123",
+    assumptions: [
+      {
+        claim: "cart totals in cents",
+        required: true,
+        source: { path: "src/cart.ts", hash: "h1" },
+      },
+      { claim: "no caching" },
+    ],
+    snapshot: "ctx/A.json",
+    by: "scout",
+    stale: [],
+    unverified: ["no caching"],
+  };
+  const seen: string[] = [];
+  const withContext: Methodology = {
+    ...m(),
+    briefContext: (_s, item) => {
+      seen.push(item.id);
+      return context;
+    },
+  };
+  assert.deepEqual(synthesizeBrief(s, withContext, s.items["A"]!).context, context);
+  assert.deepEqual(seen, ["A"]);
+  // a hook answering undefined leaves the key out
+  const none: Methodology = { ...m(), briefContext: () => undefined };
+  assert.equal("context" in synthesizeBrief(s, none, s.items["A"]!), false);
 });
