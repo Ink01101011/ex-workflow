@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appendEvent, createState } from "../../core/state.ts";
+import { addEvidence } from "../../core/items/evidence.ts";
 import { addItem } from "../../core/items/record.ts";
 import { moveItem } from "../../core/items/move.ts";
 import type { ContextAssumption, Role, WorkflowState } from "../../core/types.ts";
@@ -35,14 +36,22 @@ test("no valid fresh snapshot is a violation with a fix", () => {
   const v = check(base());
   assert.equal(v.length, 1);
   assert.deepEqual([v[0]!.rule, v[0]!.severity, v[0]!.item], [RULE, "error", "A"]);
-  assert.match(v[0]!.message, /no context snapshot/);
+  assert.match(v[0]!.message, /no qualifying context snapshot/);
   assert.match(v[0]!.fix, /recordContextSnapshot/);
 });
 
 test("a snapshot with zero unverified required assumptions passes, unverified optional ones included", () => {
   assert.deepEqual(check(snap(base(), [sourced, { claim: "no cache" }])), []);
-  assert.deepEqual(check(snap(base(), [])), []);
-  assert.deepEqual(check(snap(base(), [{ claim: "no cache", required: false }])), []);
+  assert.deepEqual(check(snap(base(), [{ ...sourced, required: false }])), []);
+  assert.deepEqual(
+    check(
+      snap(base(), [
+        { ...sourced, required: false },
+        { claim: "no cache", required: false },
+      ]),
+    ),
+    [],
+  );
 });
 
 test("an unverified required assumption is a violation naming the claims", () => {
@@ -67,28 +76,38 @@ test("a stale snapshot is a violation naming the changed paths", () => {
   assert.deepEqual(check(snap(s, [sourced])), []);
 });
 
-test("the worker may not author its own snapshot for required claims", () => {
+test("the worker may not ground its own item: the recorder refuses it and a hand-written one is ignored", () => {
+  const own = (st: WorkflowState) =>
+    addEvidence(
+      st,
+      "A",
+      {
+        kind: "context-snapshot",
+        ref: "ctx/own",
+        by: "worker",
+        data: { revision: "r", assumptions: [sourced] } as never,
+      },
+      T0,
+    );
   // assigned role
-  const v = check(snap(base("worker"), [sourced], "worker"));
-  assert.equal(v.length, 1);
-  assert.match(v[0]!.message, /"worker"/);
-  assert.match(v[0]!.fix, /independent/);
+  assert.throws(() => snap(base("worker"), [sourced], "worker"), /worked on/);
+  assert.match(check(own(base("worker")))[0]!.message, /no qualifying/);
   // author (dispatched by the worker, role cleared later)
-  let s = moveItem(base(), "A", { stage: "dev", status: "in_progress" }, "worker", T0);
-  assert.equal(check(snap(s, [sourced], "worker")).length, 1);
+  const s = moveItem(base(), "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  assert.throws(() => snap(s, [sourced], "worker"), /worked on/);
+  assert.match(check(own(s))[0]!.message, /no qualifying/);
+  // with or without required claims
+  assert.throws(() => snap(s, [{ ...sourced, required: false }], "worker"), /worked on/);
   // an independent role or a human may
   assert.deepEqual(check(snap(s, [sourced], "service-delivery-manager")), []);
   assert.deepEqual(check(snap(s, [sourced], "human")), []);
-  // without required claims, the worker's own snapshot is accepted
-  s = snap(base("worker"), [{ ...sourced, required: false }], "worker");
-  assert.deepEqual(check(s), []);
 });
 
 test("several problems are reported together, and the answer is deterministic", () => {
-  let s = snap(base("worker"), [sourced, { claim: "unsourced", required: true }], "worker");
+  let s = snap(base("worker"), [sourced, { claim: "unsourced", required: true }]);
   s = appendEvent(s, "repo.changed", "ci", { revision: "r2", paths: ["src/cart.ts"] }, T0);
   const v = check(s);
-  assert.equal(v.length, 3);
+  assert.equal(v.length, 2);
   assert.deepEqual(check(structuredClone(s)), v);
 });
 
@@ -119,6 +138,45 @@ test("G1-1: a worker of an earlier stage may not ground the item, not only the l
   s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "dev", T0);
   s = moveItem(s, "A", { stage: "test", status: "in_progress" }, "tester", T0);
   s = moveItem(s, "A", { stage: "review", status: "todo" }, "tester", T0);
-  for (const by of ["dev", "tester"]) assert.notDeepEqual(check(snap(s, [sourced], by)), [], by);
+  for (const by of ["dev", "tester"]) {
+    assert.throws(() => snap(s, [sourced], by), /worked on/, by);
+    const own = addEvidence(
+      s,
+      "A",
+      {
+        kind: "context-snapshot",
+        ref: "ctx/own",
+        by,
+        data: { revision: "r", assumptions: [sourced] } as never,
+      },
+      T0,
+    );
+    assert.match(check(own)[0]!.message, /no qualifying/, by);
+  }
   assert.deepEqual(check(snap(s, [sourced], "scout")), []);
+});
+
+test("G1-2, G2-1: a worker cannot ground its own item, nor replace a stale independent snapshot", () => {
+  let s = moveItem(base(), "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  // a worker-written snapshot (hand-built: the recorder refuses it) never counts, empty or not
+  const own = (st: WorkflowState, assumptions: ContextAssumption[]) =>
+    addEvidence(
+      st,
+      "A",
+      {
+        kind: "context-snapshot",
+        ref: "ctx/own",
+        by: "worker",
+        data: { revision: "r", assumptions } as never,
+      },
+      T0,
+    );
+  assert.match(check(own(s, []))[0]!.message, /no qualifying context snapshot/);
+  assert.match(check(own(s, [{ ...sourced, required: false }]))[0]!.message, /no qualifying/);
+  // an independent snapshot gone stale stays the one that counts
+  s = snap(s, [sourced], "service-delivery-manager");
+  s = appendEvent(s, "repo.changed", "ci", { revision: "r2", paths: ["src/cart.ts"] }, T0);
+  const v = check(own(s, [{ ...sourced, required: false }]));
+  assert.equal(v.length, 1);
+  assert.match(v[0]!.message, /stale/);
 });

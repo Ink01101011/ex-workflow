@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { appendEvent, createState } from "../../core/state.ts";
 import { addEvidence } from "../../core/items/evidence.ts";
 import { addItem } from "../../core/items/record.ts";
+import { moveItem } from "../../core/items/move.ts";
 import { WorkflowError } from "../../core/errors.ts";
 import type { ContextAssumption, Methodology, Rule, WorkflowState } from "../../core/types.ts";
 import { kanban } from "../../methodologies/kanban/index.ts";
@@ -152,7 +153,7 @@ test("repository paths are canonical repository-relative POSIX paths, compared e
 test("contextOf: none without a snapshot; the latest valid fresh snapshot with its unverified claims", () => {
   let s = base();
   assert.equal(contextOf(s, s.items["A"]!), undefined);
-  s = snap(s, "A", [loose], "ctx/old");
+  s = snap(s, "A", [cart], "ctx/old");
   s = snap(s, "A");
   // a malformed newer entry (hand-written) does not count; the latest valid one does
   s = addEvidence(
@@ -211,6 +212,51 @@ test("contextOf: a hand-built state with fewer item.evidence events than entries
   s = { ...s, items: { ...s.items, A: { ...item, evidence: [extra, ...item.evidence] } } };
   assert.equal(contextOf(s, s.items["A"]!)!.snapshot, "ctx/1");
   assert.deepEqual(contextOf(s, s.items["A"]!)!.stale, ["src/cart.ts"]);
+});
+
+const raw = (s: WorkflowState, by: string, assumptions: ContextAssumption[], ref: string) =>
+  addEvidence(
+    s,
+    "A",
+    { kind: "context-snapshot", ref, by, data: { revision: "r1", assumptions } as never },
+    T0,
+  );
+
+test("recordContextSnapshot refuses a recorder that cannot ground the item (G1-2, G2-2)", () => {
+  // not human and not a registered role, prototype names included
+  for (const by of ["nobody", "__proto__", "toString"])
+    invalid({ ...good, by }, /may not record|registered role/);
+  // a role that worked on the item
+  const s = moveItem(base(), "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  assert.throws(
+    () => recordContextSnapshot(s, m, { ...good, by: "worker" }),
+    (e) => e instanceof WorkflowError && e.code === "invalid-input" && /worked on/.test(e.message),
+  );
+  // no sourced assumption: nothing was verified
+  invalid({ ...good, assumptions: [] }, /at least one assumption with a source/);
+  invalid({ ...good, assumptions: [loose] }, /at least one assumption with a source/);
+  // a registered independent role and a human may
+  const ok = recordContextSnapshot(s, m, { ...good, by: "service-delivery-manager" }).state;
+  assert.equal(contextOf(ok, ok.items["A"]!)!.by, "service-delivery-manager");
+});
+
+test("contextOf counts only a qualifying snapshot: the latest one a worker cannot supersede (G2-1)", () => {
+  let s = snap(base(), "A", [cart], "ctx/scout");
+  s = change(s, ["src/cart.ts"]);
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  // later hand-written snapshots that do not qualify are ignored, so the stale one still counts
+  s = raw(s, "worker", [{ ...cart, required: false }], "ctx/worker");
+  s = raw(s, "nobody", [cart], "ctx/nobody");
+  s = raw(s, "__proto__", [cart], "ctx/proto");
+  s = raw(s, "human", [loose], "ctx/unsourced");
+  const ctx = contextOf(s, s.items["A"]!)!;
+  assert.equal(ctx.snapshot, "ctx/scout");
+  assert.deepEqual(ctx.stale, ["src/cart.ts"]);
+  // a snapshot recorded by a role that later works on the item stops counting
+  let t = recordContextSnapshot(base(), m, { ...good, by: "worker" }).state;
+  assert.equal(contextOf(t, t.items["A"]!)!.by, "worker");
+  t = moveItem(t, "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  assert.equal(contextOf(t, t.items["A"]!), undefined);
 });
 
 // A seeded linear congruential generator: deterministic, no Math.random (principle rule 1).

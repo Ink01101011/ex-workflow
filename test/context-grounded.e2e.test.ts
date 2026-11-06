@@ -5,7 +5,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
-import { addItem, complete, getItem, init, next, synthesizeBrief } from "../src/index.ts";
+import {
+  addEvidence,
+  addItem,
+  complete,
+  getItem,
+  init,
+  next,
+  synthesizeBrief,
+} from "../src/index.ts";
 import { kanban } from "../src/methodologies/kanban/index.ts";
 import {
   recordContextSnapshot,
@@ -77,8 +85,20 @@ test("kanban: only grounded cards are dispatched; repo.changed stales snapshots;
   s = snapshot(s, "C", [
     { claim: "prices come from the catalog", required: true, source: src("src/catalog.ts") },
   ]);
-  // W's assigned worker scouts its own card: not independent for required claims
-  s = snapshot(s, "W", [cents], "worker");
+  // W's assigned worker may not scout its own card: the recorder refuses it, and a hand-written
+  // snapshot by the worker does not count
+  assert.throws(() => snapshot(s, "W", [cents], "worker"), /worked on the item/);
+  s = addEvidence(
+    s,
+    "W",
+    {
+      kind: "context-snapshot",
+      ref: "ctx/W.json",
+      by: "worker",
+      data: { revision: "r1", assumptions: [cents] } as never,
+    },
+    tick(),
+  );
   // the catalog changes before C is dispatched: C's snapshot is stale
   const early = recordRepoChange(s, m, {
     revision: "r2",
@@ -101,7 +121,7 @@ test("kanban: only grounded cards are dispatched; repo.changed stales snapshots;
   const detail = Object.fromEntries(r.skipped.map((x) => [x.id, x.detail]));
   assert.match(detail["B"]!, /unverified required assumption\(s\): tax is applied once/);
   assert.match(detail["C"]!, /stale: src\/catalog\.ts/);
-  assert.match(detail["W"]!, /recorded by "worker"/);
+  assert.match(detail["W"]!, /no qualifying context snapshot/);
   // the worker's brief carries what was verified, where, and what was not
   assert.deepEqual(r.briefs[0]!.context, {
     revision: "r1",

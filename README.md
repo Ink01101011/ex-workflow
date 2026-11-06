@@ -291,7 +291,7 @@ const done = complete(state, m, handoff, accounting);
 
 ### Context-grounded entry
 
-A worker that starts from a stale picture of the repository builds on assumptions nobody checked. `withContextGrounding` lets an item enter a stage only with a fresh, verified context snapshot that someone other than its worker recorded:
+A worker that starts from a stale picture of the repository builds on assumptions nobody checked. `withContextGrounding` lets an item enter a stage only with a fresh context snapshot that cites at least one source and that `human` or a registered role other than the item's workers recorded:
 
 ```ts
 import { next } from "ex-workflow";
@@ -305,7 +305,7 @@ import {
 const m = withContextGrounding(kanban(), { entry: ["dev"] }); // optional: exit: ["dev"]
 // init with m: the dev column's entry policies gain { kind: "custom", id: "context-grounded" }
 
-// a scout (any role but the item's worker, or "human") records what it verified
+// a scout (a registered role that does not work on the item, or "human") records what it verified
 state = recordContextSnapshot(state, m, {
   item: "CART-12",
   revision: "4f2c1e0",
@@ -318,7 +318,7 @@ state = recordContextSnapshot(state, m, {
     { claim: "no caching layer in front of the cart" }, // no source: unverified
   ],
   ref: "ctx/CART-12.json", // the host's snapshot artifact
-  by: "scout",
+  by: "scout", // a role registered in the state
 }).state;
 
 const { briefs } = next(state, m); // brief.context: what was verified, where, what went stale
@@ -332,10 +332,10 @@ const changed = recordRepoChange(state, m, {
 changed.warnings; // context-stale for each in-flight item whose snapshot cites a changed path
 ```
 
-- **The snapshot** is evidence `context-snapshot` with `data: { revision, assumptions }`, recorded through `applyAction` (action `context.snapshot`). An assumption is `{ claim, required?, source?: { path, lines?: [from, to], hash } }`; one without a `source` is unverified. The engine compares paths and hashes, it never reads a file.
+- **The snapshot** is evidence `context-snapshot` with `data: { revision, assumptions }`, recorded through `applyAction` (action `context.snapshot`). An assumption is `{ claim, required?, source?: { path, lines?: [from, to], hash } }`; one without a `source` is unverified. `recordContextSnapshot` refuses `invalid-input` for a snapshot with no sourced assumption and for a `by` that is neither `human` nor a registered role, or that worked on the item (dispatched it since its last rework, is assigned to it, or authored it). The engine compares paths and hashes, it never reads a file.
 - **Paths** are repository-relative POSIX paths as Git lists them, compared exactly (case included): `src/cart.ts`, not `./src/cart.ts`, `/src/cart.ts` or `src\cart.ts`. Both recorders refuse any other spelling with `invalid-input`.
 - **`repo.changed`**: `recordRepoChange` (action `repo.change`) appends `repo.changed { revision, paths }`. A snapshot is stale when a later `repo.changed` lists a path it cites (event order, not timestamps; the revision alone does not decide). No item status changes: an item in `in_progress`, `review` or `awaiting_human` gets a `context-stale` warning in `ApplyResult.warnings` when this change made its snapshot stale, and a `todo` item is re-checked by its entry policy when the planner reaches it.
-- **The policy** (`contextGroundedViolations`, rule `policy:custom:context-grounded`) fails an item with no fresh snapshot (rework drops it), with a stale one, with a `required` assumption that has no source, or whose snapshot with `required` assumptions was recorded by a role that worked on the item (dispatched it since its last rework, is assigned to it, or authored it). `next` reports such a `todo` item under `skipped` with reason `entry-policy` and the message. A snapshot whose required claims are all sourced passes; unverified optional claims are listed in `brief.context.unverified`.
+- **The policy** (`contextGroundedViolations`, rule `policy:custom:context-grounded`) fails an item with no qualifying fresh snapshot, with a stale one, or with a `required` assumption that has no source. A snapshot qualifies when its data is valid, it has at least one sourced assumption and `human` or a registered role that does not work on the item recorded it; the latest qualifying one counts, so a snapshot a worker wrote into the state by hand never replaces an independent one, and one recorded by a role that later works on the item stops counting. Rework drops every snapshot. `next` reports such a `todo` item under `skipped` with reason `entry-policy` and the message. A qualifying snapshot whose required claims are all sourced passes; unverified optional claims are listed in `brief.context.unverified`.
 - **`brief.context`** is `contextOf(state, item)`: `{ revision, assumptions, snapshot, by, stale, unverified }`.
 - **Any methodology** may answer custom policies itself: `Methodology.customPolicy(state, item, policy)` returns the violations, or `undefined` for the default check (evidence `policy:<id>`); `Methodology.briefContext(state, item)` fills `brief.context`. `withContextGrounding` keeps existing hooks for every other policy id and composes with `withRiskGate` in either order.
 
@@ -584,7 +584,7 @@ Deliberate, documented, and stable within 1.x.
 - **No downgrade for a state with evidence `data`.** 1.2.x cannot load a state carrying `Evidence.data` (a risk assessment or context snapshot recorded by `ex-workflow/policies`): its schema closes `Evidence`. Keep such a run on 1.3.
 - **Policies are SDK-only.** `exwf` runs the plain built-in methodology, so `exwf complete` checks a gate's static requirements only. `exwf decide` does honour an escalation the SDK recorded (`gate.resolved`). Run completions of a risk-gated run through the SDK. On a stage carrying the `context-grounded` policy, `exwf next` falls back to the default custom-policy check (evidence `policy:context-grounded`) and so skips the item rather than dispatching it ungrounded; dispatch such a run through the SDK. There is no CLI command for snapshots or repository changes.
 - **Context grounding on an existing state, and Kanban policy changes.** `withContextGrounding` adds its policy through `defaultStages`, so it reaches a state at `init`; for a state created before wrapping, add `{ kind: "custom", id: "context-grounded", description }` to the stage's `entryPolicy` yourself. A Kanban `operations-review` that changes the commitment column's policies rewrites the next column's entry policies and drops it; add it back the same way.
-- **Independence at entry needs a known worker.** The policy compares the snapshot's recorder with the roles that worked on the item. A `todo` item never dispatched and without a `role` has no worker yet (the planner picks one after the entry check); set `role` on the item, or also pass `exit`, to have the check apply.
+- **Independence at entry needs a known worker.** The policy compares the snapshot's recorder with the roles that worked on the item. A `todo` item never dispatched and without a `role` has no worker yet (the planner picks one after the entry check), so a snapshot by the role the planner then picks passes the entry check; once that role is dispatched the snapshot stops counting (the brief has no `context`, an `exit` policy fails). Set `role` on the item, or also pass `exit`, to have the check apply before the work.
 - **`checkGate` alone sees the static gate.** The risk escalation is applied by `complete()` and `decide()`; a host calling `checkGate` directly gets the 1.2 answer.
 
 - **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), the command gives up after its retries with `invalid-input` naming the lock file; delete it by hand.

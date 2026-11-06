@@ -1,8 +1,7 @@
 // The context-grounded entry policy (design spec section 27, #36): an item may enter a stage only
-// with a fresh, verified context snapshot that someone other than its worker recorded.
+// with a fresh, verified context snapshot that a human or a registered role other than its workers
+// recorded (contextOf counts only such a snapshot).
 import type { Violation, WorkItem, WorkflowState } from "../../core/types.ts";
-import { independenceConflicts } from "../independence.ts";
-import { workersOf } from "../workers.ts";
 import { contextOf } from "./snapshot.ts";
 
 const RULE = "policy:custom:context-grounded";
@@ -10,10 +9,11 @@ const RECORD = "record a fresh one with recordContextSnapshot";
 
 /**
  * Violations of the custom policy `context-grounded` for `item` (rule
- * `policy:custom:context-grounded`, the 1.2 rule id of a custom policy): no valid fresh context
- * snapshot; a stale one (names the changed paths); a `required` assumption without a source (names
- * the claims); a snapshot with `required` assumptions recorded by the item's assigned role or
- * author. Empty when the item is grounded. Pure: the same state gives the same answer.
+ * `policy:custom:context-grounded`, the 1.2 rule id of a custom policy): no qualifying fresh
+ * context snapshot (`contextOf`: valid, at least one sourced assumption, recorded by `human` or a
+ * registered role that did not work on the item); a stale one (names the changed paths); a
+ * `required` assumption without a source (names the claims). Empty when the item is grounded.
+ * Pure: the same state gives the same answer.
  */
 export function contextGroundedViolations(
   state: WorkflowState<string>,
@@ -25,7 +25,7 @@ export function contextGroundedViolations(
   const ctx = contextOf(state, item);
   if (!ctx) {
     v(
-      `item "${item.id}" has no context snapshot (none valid since its last rework)`,
+      `item "${item.id}" has no qualifying context snapshot (none since its last rework is valid, cites a source and was recorded by human or a registered role that did not work on it)`,
       `have an independent role or a human verify the context and ${RECORD}`,
     );
     return out;
@@ -42,11 +42,6 @@ export function contextGroundedViolations(
     v(
       `${of} has unverified required assumption(s): ${unverified.join(" | ")}`,
       `cite a source { path, hash } for each and ${RECORD}`,
-    );
-  if (required.length && independenceConflicts(ctx.by, workersOf(state, item)).length)
-    v(
-      `${of} with required assumptions was recorded by "${ctx.by}", who works on the item`,
-      `have an independent role or a human verify the context and ${RECORD}`,
     );
   return out;
 }

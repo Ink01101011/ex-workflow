@@ -14,6 +14,7 @@ import type {
   WorkItem,
   WorkflowState,
 } from "../../core/types.ts";
+import { workersOf } from "../workers.ts";
 
 export interface ContextSnapshotInput {
   item: string;
@@ -22,7 +23,7 @@ export interface ContextSnapshotInput {
   assumptions: ContextAssumption[];
   /** The host's snapshot artifact. */
   ref: string;
-  /** Who recorded it; for required claims, not the item's author or assigned role. */
+  /** Who recorded it: `human` or a registered role that did not work on the item. */
   by: string;
   now?: string;
 }
@@ -89,8 +90,24 @@ function snapshotIssue(data: unknown): string | undefined {
 }
 
 /**
- * The item's current context (design spec section 27, #36): its latest fresh (post-rework) valid
- * `context-snapshot` evidence, with `stale` the cited source paths a later `repo.changed` event
+ * Why `by` may not ground an item whose workers are `workers` (design spec section 27, F1 G1-2,
+ * G2-2): it is neither `human` nor a registered role, or it worked on the item; else `undefined`.
+ */
+function recorderIssue(
+  state: WorkflowState<string>,
+  by: unknown,
+  workers: readonly string[],
+): string | undefined {
+  if (typeof by !== "string" || (by !== "human" && !Object.hasOwn(state.roles, by)))
+    return `${JSON.stringify(by)} is neither human nor a registered role`;
+  return workers.includes(by) ? `"${by}" worked on the item` : undefined;
+}
+const sourced = (d: ContextSnapshotData): boolean => d.assumptions.some((a) => a.source);
+
+/**
+ * The item's current context (design spec section 27, #36): its latest fresh (post-rework)
+ * qualifying `context-snapshot` evidence (valid data with at least one sourced assumption,
+ * recorded by `human` or a registered role that did not work on the item, `workersOf`), with `stale` the cited source paths a later `repo.changed` event
  * listed (exact match, in event order) and `unverified` the claims with no source; `undefined`
  * when there is none. Each evidence entry is located at its own `item.evidence` event, matched from
  * the end as `freshEvidence` does; an entry with no event counts as older than every event.
@@ -103,10 +120,13 @@ export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefCo
   });
   const all = item.evidence;
   const fresh = freshEvidence(state, item).length;
+  const workers = workersOf(state, item);
   for (let k = all.length - 1; k >= all.length - fresh; k--) {
     const e = all[k]!;
     if (e.kind !== "context-snapshot" || snapshotIssue(e.data) !== undefined) continue;
     const data = e.data as unknown as ContextSnapshotData;
+    // a snapshot that does not qualify is ignored, so it cannot supersede one that does (G2-1)
+    if (!sourced(data) || recorderIssue(state, e.by, workers)) continue;
     const cited = data.assumptions.map((a) => a.source?.path);
     const stale: string[] = [];
     for (const ev of state.events.slice((at[k + at.length - all.length] ?? -1) + 1)) {
@@ -134,8 +154,9 @@ const bad = (what: string, fix: string): never =>
  * Records a context snapshot of an item as evidence `context-snapshot` with `data: { revision,
  * assumptions }` (design spec section 27, #36), through `applyAction` (action `context.snapshot`)
  * so the methodology's rules see it. Refuses `invalid-input` for an unknown key, an empty revision,
- * claim or ref, a source with a path that is not repository-relative POSIX or an empty hash, and
- * `lines` that are not two integers `1 <= from <= to`. The input is copied.
+ * claim or ref, a source with a path that is not repository-relative POSIX or an empty hash,
+ * `lines` that are not two integers `1 <= from <= to`, no assumption with a source, and a `by`
+ * that is neither `human` nor a registered role or that worked on the item. The input is copied.
  */
 export function recordContextSnapshot<N extends string>(
   state: WorkflowState<N>,
@@ -147,7 +168,7 @@ export function recordContextSnapshot<N extends string>(
   if (k) bad(`unknown key "${k}"`, `use only: ${KEYS.join(", ")}`);
   const { item: id, revision, assumptions, ref, by, now } = input;
   if (typeof id !== "string") bad("item must be an item id", 'e.g. "item": "CART-12"');
-  getItem(state, id);
+  const item = getItem(state, id);
   const data = { revision, assumptions } as unknown as Record<string, unknown>;
   const issue = snapshotIssue(data);
   if (issue)
@@ -158,6 +179,17 @@ export function recordContextSnapshot<N extends string>(
   if (!nonEmpty(ref))
     bad("ref must be a non-empty string", 'name the snapshot artifact, e.g. "ctx/CART-12.json"');
   if (!nonEmpty(by)) bad("by must name who recorded it", 'e.g. "by": "scout"');
+  const who = recorderIssue(state, by, workersOf(state, item));
+  if (who)
+    bad(
+      `${who} and may not record its context`,
+      "record as human or a registered role that did not work on the item",
+    );
+  if (!sourced(data as unknown as ContextSnapshotData))
+    bad(
+      "a snapshot needs at least one assumption with a source (nothing was verified)",
+      'cite what was checked, e.g. "source": { "path": "src/cart.ts", "hash": "…" }',
+    );
   if (now !== undefined && typeof now !== "string")
     bad("now must be an ISO timestamp string", "omit now to use the clock");
   // validated plain data, copied so no reference to the caller's arrays is kept
