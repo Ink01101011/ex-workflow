@@ -158,3 +158,33 @@ test("refuses an assessor without verify and the item's author or assigned role"
     (e) => e instanceof WorkflowError && /did the work/.test(e.message),
   );
 });
+
+test("G1-1: refuses a worker of an earlier stage, not only the last author", () => {
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: ["dev", "test", "review"].map((id) => ({
+      id,
+      name: id,
+      entryPolicy: [],
+      exitPolicy: [],
+    })),
+    roles: [...roles, r("tester", ["verify"]), r("rev", ["verify"])],
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  for (const [stage, by] of [
+    ["dev", "dev"],
+    ["test", "tester"],
+    ["review", "rev"],
+  ] as const)
+    s = moveItem(s, "A", { stage, status: "in_progress" }, by, T0);
+  for (const by of ["dev", "tester", "rev"])
+    assert.throws(
+      () => recordRiskAssessment(s, m(), input({ by, level: "low" })),
+      (e) =>
+        e instanceof WorkflowError && e.code === "invalid-input" && /did the work/.test(e.message),
+      by,
+    );
+  assert.equal(recordRiskAssessment(s, m(), input()).state.items["A"]!.evidence.length, 1);
+});

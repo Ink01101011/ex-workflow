@@ -206,3 +206,34 @@ test("property: the resolved level is the strictest valid assessment, monotone a
     assert.deepEqual(resolve(structuredClone(s)), x);
   }
 });
+
+test("G1-1: an earlier stage's worker may not assess when another stage sits between it and the gate", () => {
+  // dev -> test -> review (gate code-review): dev built, tester tested, rev reviews
+  const three: Stage[] = [
+    { id: "dev", name: "Dev", entryPolicy: [], exitPolicy: [] },
+    { id: "test", name: "Test", entryPolicy: [], exitPolicy: [] },
+    { id: "review", name: "Review", entryPolicy: [], exitPolicy: [], gate },
+  ];
+  let s = createState({
+    methodology: "kanban",
+    config: {},
+    stages: three,
+    roles: [...roles, r("tester", ["verify"])],
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  for (const [stage, by] of [
+    ["dev", "dev"],
+    ["test", "tester"],
+    ["review", "rev"],
+  ] as const)
+    s = moveItem(s, "A", { stage, status: "in_progress" }, by, T0);
+  s = { ...s, items: { ...s.items, A: { ...getItem(s, "A"), role: "rev" } } };
+  for (const by of ["dev", "tester", "rev"])
+    assert.equal(assessorIssue(s, getItem(s, "A"), by), "not-independent", by);
+  assert.equal(assessorIssue(s, getItem(s, "A"), "risk"), undefined);
+  // dev's own low assessment is rejected at gate time: critical, a human is required
+  const own = resolve(assess(s, "dev", lv("low")));
+  assert.deepEqual(own.requires, ["human"]);
+  assert.deepEqual([own.reason["level"], own.reason["why"]], ["critical", "not-independent"]);
+});

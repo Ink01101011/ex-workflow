@@ -1,8 +1,8 @@
 // The context-grounded entry policy (design spec section 27, #36): an item may enter a stage only
 // with a fresh, verified context snapshot that someone other than its worker recorded.
-import { authorOf } from "../../core/gates.ts";
 import type { Violation, WorkItem, WorkflowState } from "../../core/types.ts";
 import { independenceConflicts } from "../independence.ts";
+import { workersOf } from "../workers.ts";
 import { contextOf } from "./snapshot.ts";
 
 const RULE = "policy:custom:context-grounded";
@@ -43,8 +43,7 @@ export function contextGroundedViolations(
       `${of} has unverified required assumption(s): ${unverified.join(" | ")}`,
       `cite a source { path, hash } for each and ${RECORD}`,
     );
-  const workers = [authorOf(state, item), item.role].filter((x): x is string => x !== undefined);
-  if (required.length && independenceConflicts(ctx.by, workers).length)
+  if (required.length && independenceConflicts(ctx.by, workersOf(state, item)).length)
     v(
       `${of} with required assumptions was recorded by "${ctx.by}", who works on the item`,
       `have an independent role or a human verify the context and ${RECORD}`,

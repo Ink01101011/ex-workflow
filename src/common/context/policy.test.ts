@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { appendEvent, createState } from "../../core/state.ts";
 import { addItem } from "../../core/items/record.ts";
 import { moveItem } from "../../core/items/move.ts";
-import type { ContextAssumption, WorkflowState } from "../../core/types.ts";
+import type { ContextAssumption, Role, WorkflowState } from "../../core/types.ts";
 import { kanban } from "../../methodologies/kanban/index.ts";
 import { recordContextSnapshot } from "./snapshot.ts";
 import { contextGroundedViolations } from "./policy.ts";
@@ -90,4 +90,35 @@ test("several problems are reported together, and the answer is deterministic", 
   const v = check(s);
   assert.equal(v.length, 3);
   assert.deepEqual(check(structuredClone(s)), v);
+});
+
+test("G1-1: a worker of an earlier stage may not ground the item, not only the last author", () => {
+  const role = (id: string): Role => ({
+    id,
+    name: id,
+    modelTier: "small",
+    capabilities: ["deliver"],
+    canApprove: [],
+    inputs: [],
+    outputs: [],
+    do_not: [],
+  });
+  let s = createState({
+    methodology: "kanban",
+    config: m.validateConfig({}),
+    stages: ["dev", "test", "review"].map((id) => ({
+      id,
+      name: id,
+      entryPolicy: [],
+      exitPolicy: [],
+    })),
+    roles: ["dev", "tester", "scout"].map(role),
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "dev", T0);
+  s = moveItem(s, "A", { stage: "test", status: "in_progress" }, "tester", T0);
+  s = moveItem(s, "A", { stage: "review", status: "todo" }, "tester", T0);
+  for (const by of ["dev", "tester"]) assert.notDeepEqual(check(snap(s, [sourced], by)), [], by);
+  assert.deepEqual(check(snap(s, [sourced], "scout")), []);
 });

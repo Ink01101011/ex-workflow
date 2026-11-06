@@ -1,7 +1,6 @@
 // Risk-adaptive gate (design spec section 27, #35): the level of the strictest fresh, valid and
 // independent `risk-assessment` evidence picks a row of a table of what the gate additionally needs.
 import { canDo } from "../../core/roles/guards.ts";
-import { authorOf } from "../../core/gates.ts";
 import { freshEvidence } from "../../core/items/evidence.ts";
 import type {
   Evidence,
@@ -13,6 +12,7 @@ import type {
 } from "../../core/types.ts";
 import { deepFreeze } from "../deep-freeze.ts";
 import { independenceConflicts } from "../independence.ts";
+import { workersOf } from "../workers.ts";
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 /** `data` of a `risk-assessment` evidence entry. */
@@ -64,15 +64,17 @@ export function isRiskData(data: unknown): data is RiskAssessmentData {
 
 /**
  * Why `by` may not assess `item`: `invalid` when it is neither `human` nor a role with capability
- * `verify`, `not-independent` when it is the item's author or assigned role; `undefined` when it may.
+ * `verify`, `not-independent` when it worked on the item (`workersOf`: every role that dispatched
+ * it since its last rework, its assigned role, its author); `undefined` when it may. `workers`
+ * defaults to `workersOf(state, item)`; pass it to check several assessors against one state.
  */
 export function assessorIssue(
   state: WorkflowState<string>,
   item: WorkItem,
   by: string,
+  workers: readonly string[] = workersOf(state, item),
 ): "invalid" | "not-independent" | undefined {
   if (!canDo(state, by, "verify")) return "invalid";
-  const workers = [authorOf(state, item), item.role].filter((x): x is string => x !== undefined);
   return independenceConflicts(by, workers).length ? "not-independent" : undefined;
 }
 
@@ -94,9 +96,12 @@ export function riskEscalation(
   let level: RiskLevel | undefined;
   let why = "missing";
   let pick: Evidence | undefined;
+  let workers: string[] | undefined;
   for (const e of freshEvidence(state, item)) {
     if (e.kind !== "risk-assessment") continue;
-    const issue = isRiskData(e.data) ? assessorIssue(state, item, e.by) : "invalid";
+    const issue = isRiskData(e.data)
+      ? assessorIssue(state, item, e.by, (workers ??= workersOf(state, item)))
+      : "invalid";
     if (issue) {
       if (!level) {
         why = issue;
