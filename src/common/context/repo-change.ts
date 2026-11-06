@@ -63,16 +63,19 @@ export function recordRepoChange<N extends string>(
   const warnings: Violation[] = [];
   for (const item of Object.values(res.state.items)) {
     if (!IN_FLIGHT.includes(item.status)) continue;
-    // only paths this change made stale: a path already stale before it does not warn again
-    const ctx = contextOf(res.state, item);
-    const was = contextOf(state, item)?.stale ?? [];
-    const hit = ctx ? ctx.stale.filter((p) => changed.includes(p) && !was.includes(p)) : [];
+    // the new event is the last one, so the paths it made stale are the cited changed paths that
+    // were not stale before it, in its order: one indexed read of the earlier log per item
+    const ctx = contextOf(state, item);
+    if (!ctx) continue;
+    const cited = new Set(ctx.assumptions.map((a) => a.source?.path));
+    const was = new Set(ctx.stale);
+    const hit = changed.filter((p) => cited.has(p) && !was.has(p));
     if (hit.length)
       warnings.push({
         rule: "context-stale",
         severity: "warning",
         item: item.id,
-        message: `context snapshot "${ctx!.snapshot}" of "${item.id}" is stale: ${hit.join(", ")} changed at ${revision}`,
+        message: `context snapshot "${ctx.snapshot}" of "${item.id}" is stale: ${hit.join(", ")} changed at ${revision}`,
         fix: `re-verify and record a fresh snapshot of "${item.id}" with recordContextSnapshot`,
       });
   }

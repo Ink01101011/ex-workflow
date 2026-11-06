@@ -2,7 +2,7 @@
 // before an item is worked, as evidence `context-snapshot`, and whether a later `repo.changed`
 // event made it stale. Event order decides, never timestamps (principle 5); no file is read.
 import { fail } from "../../core/errors.ts";
-import { addEvidence, freshEvidence } from "../../core/items/evidence.ts";
+import { addEvidence } from "../../core/items/evidence.ts";
 import { getItem } from "../../core/items/record.ts";
 import { applyAction } from "../../core/methodology.ts";
 import type {
@@ -14,6 +14,7 @@ import type {
   WorkItem,
   WorkflowState,
 } from "../../core/types.ts";
+import { eventIndex, firstAfter, sinceRework } from "../event-index.ts";
 import { workersOf } from "../workers.ts";
 
 export interface ContextSnapshotInput {
@@ -113,33 +114,36 @@ const sourced = (d: ContextSnapshotData): boolean => d.assumptions.some((a) => a
  * the end as `freshEvidence` does; an entry with no event counts as older than every event.
  */
 export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefContext | undefined {
-  const at: number[] = [];
-  state.events.forEach((ev, i) => {
-    if (ev.type === "item.evidence" && (ev.payload as { id?: unknown } | null)?.id === item.id)
-      at.push(i);
-  });
+  // one indexed pass over the log per state, not per item (F1 G3-2, G3-3, G3-4)
+  const index = eventIndex(state);
+  const at = index.evidence.get(item.id) ?? [];
   const all = item.evidence;
-  const fresh = freshEvidence(state, item).length;
-  const workers = workersOf(state, item);
+  const after = sinceRework(index, item.id, at);
+  const fresh = after === undefined ? all.length : Math.min(after, all.length);
+  let workers: string[] | undefined;
   for (let k = all.length - 1; k >= all.length - fresh; k--) {
     const e = all[k]!;
     if (e.kind !== "context-snapshot" || snapshotIssue(e.data) !== undefined) continue;
     const data = e.data as unknown as ContextSnapshotData;
     // a snapshot that does not qualify is ignored, so it cannot supersede one that does (G2-1)
-    if (!sourced(data) || recorderIssue(state, e.by, workers)) continue;
-    const cited = data.assumptions.map((a) => a.source?.path);
-    const stale: string[] = [];
-    for (const ev of state.events.slice((at[k + at.length - all.length] ?? -1) + 1)) {
-      const paths = ev.type === "repo.changed" && (ev.payload as { paths?: unknown })?.paths;
-      if (Array.isArray(paths))
-        for (const p of paths) if (cited.includes(p) && !stale.includes(p)) stale.push(p);
+    if (!sourced(data) || recorderIssue(state, e.by, (workers ??= workersOf(state, item))))
+      continue;
+    // each cited path's first repo.changed after the snapshot's own event, in event order
+    const pos = at[k + at.length - all.length] ?? -1;
+    const hits: [number, number, string][] = [];
+    for (const path of new Set(data.assumptions.map((a) => a.source?.path))) {
+      const list = path === undefined ? undefined : index.changed.get(path);
+      const f = list ? firstAfter(list, pos, (x) => x[0]) : 0;
+      if (list && f < list.length) hits.push([list[f]![0], list[f]![1], path!]);
     }
+    // oxlint-disable-next-line unicorn/no-array-sort -- a fresh local array; toSorted needs Node 20
+    hits.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     return {
       revision: data.revision,
       assumptions: data.assumptions,
       snapshot: e.ref,
       by: e.by,
-      stale,
+      stale: hits.map((h) => h[2]),
       unverified: data.assumptions.filter((a) => !a.source).map((a) => a.claim),
     };
   }

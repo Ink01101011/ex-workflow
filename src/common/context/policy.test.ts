@@ -111,17 +111,18 @@ test("several problems are reported together, and the answer is deterministic", 
   assert.deepEqual(check(structuredClone(s)), v);
 });
 
+const role = (id: string): Role => ({
+  id,
+  name: id,
+  modelTier: "small",
+  capabilities: ["deliver"],
+  canApprove: [],
+  inputs: [],
+  outputs: [],
+  do_not: [],
+});
+
 test("G1-1: a worker of an earlier stage may not ground the item, not only the last author", () => {
-  const role = (id: string): Role => ({
-    id,
-    name: id,
-    modelTier: "small",
-    capabilities: ["deliver"],
-    canApprove: [],
-    inputs: [],
-    outputs: [],
-    do_not: [],
-  });
   let s = createState({
     methodology: "kanban",
     config: m.validateConfig({}),

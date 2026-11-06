@@ -129,3 +129,43 @@ test("recordRepoChange refuses malformed input with invalid-input", () => {
   invalid({ ...good, by: "" }, /by/);
   invalid({ ...good, now: 1 }, /now/);
 });
+
+test("G3-3, G2-6: recordRepoChange reads the log a fixed number of times, not once per in-flight item", () => {
+  const config = m.validateConfig({});
+  let s = createState({
+    methodology: "kanban",
+    config,
+    stages: m.defaultStages(config),
+    roles: m.defaultRoles(config),
+    now: T0,
+  });
+  const N = 200;
+  for (let i = 0; i < N; i++) {
+    const id = `I${i}`;
+    s = addItem(s, { id, title: id }, srm, T0);
+    s = recordContextSnapshot(s, m, {
+      item: id,
+      revision: "r1",
+      assumptions: [{ claim: "c", source: { path: `src/${i % 7}.ts`, hash: "h" } }],
+      ref: `ctx/${id}`,
+      by: "human",
+      now: T0,
+    }).state;
+    s = moveItem(s, id, { stage: "dev", status: "in_progress" }, "worker", T0);
+  }
+  let reads = 0;
+  const events = new Proxy(s.events, {
+    get(target, key, receiver) {
+      if (typeof key === "string" && /^[0-9]+$/.test(key)) reads++;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const res = recordRepoChange({ ...s, events }, m, {
+    revision: "r2",
+    paths: ["src/0.ts", "src/1.ts"],
+    by: "ci",
+  });
+  assert.equal(res.warnings.length, Math.ceil(N / 7) + Math.ceil((N - 1) / 7));
+  // before the index: two full scans per in-flight item (about 2 * N * E reads)
+  assert.ok(reads < 10 * s.events.length, `${reads} reads of a ${s.events.length}-event log`);
+});
