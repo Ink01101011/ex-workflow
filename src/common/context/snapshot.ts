@@ -134,14 +134,26 @@ function recorderIssue(
   return workers.includes(by) ? `"${by}" worked on the item` : undefined;
 }
 const sourced = (d: ContextSnapshotData): boolean => d.assumptions.some((a) => a.source);
+/** A copy of a validated assumption (closed object: claim, required, source { path, lines, hash }). */
+const copyOf = ({ source, ...rest }: ContextAssumption): ContextAssumption =>
+  source
+    ? {
+        ...rest,
+        source: {
+          ...source,
+          ...(source.lines ? { lines: [...source.lines] as [number, number] } : {}),
+        },
+      }
+    : rest;
 
 /**
  * The item's current context (design spec section 27, #36): its latest fresh (post-rework)
  * qualifying `context-snapshot` evidence (valid data with at least one sourced assumption,
- * recorded by `human` or a registered role that did not work on the item, `workersOf`), with `stale` the cited source paths a later `repo.changed` event
- * listed (exact match, in event order) and `unverified` the claims with no source; `undefined`
- * when there is none. Each evidence entry is located at its own `item.evidence` event, matched from
- * the end as `freshEvidence` does; an entry with no event counts as older than every event.
+ * recorded by `human` or a registered role that did not work on the item, `workersOf`), with
+ * `stale` the cited source paths a later `repo.changed` event listed (exact match, in event order)
+ * and `unverified` the claims with no source; `undefined` when there is none. The answer is a
+ * copy. Each evidence entry is located at its own `item.evidence` event, matched from the end as
+ * `freshEvidence` does; an entry with no event counts as older than every event.
  */
 export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefContext | undefined {
   // one indexed pass over the log per state, not per item (F1 G3-2, G3-3, G3-4)
@@ -170,7 +182,8 @@ export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefCo
     hits.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     return {
       revision: data.revision,
-      assumptions: data.assumptions,
+      // copies: a caller (a brief, a host) changing the answer must not change the state (G2-9)
+      assumptions: data.assumptions.map(copyOf),
       snapshot: e.ref,
       by: e.by,
       stale: hits.map((h) => h[2]),

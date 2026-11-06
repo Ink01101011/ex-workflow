@@ -289,6 +289,20 @@ test("G2-8, G4-4: paths must be NFC, free of control and bidi characters and out
   );
 });
 
+test("G2-9: contextOf returns copies; changing the answer does not change the state", () => {
+  const s = snap(base());
+  const before = JSON.stringify(s);
+  const ctx = contextOf(s, s.items["A"]!)!;
+  ctx.assumptions[0]!.claim = "changed";
+  ctx.assumptions[0]!.source!.lines![0] = 99;
+  ctx.assumptions[0]!.source!.path = "x.ts";
+  ctx.assumptions.push({ claim: "added" });
+  ctx.stale.push("y.ts");
+  ctx.unverified.push("z");
+  assert.equal(JSON.stringify(s), before);
+  assert.deepEqual(contextOf(s, s.items["A"]!)!.assumptions, [cart, tax, loose]);
+});
+
 // A seeded linear congruential generator: deterministic, no Math.random (principle rule 1).
 const lcg = (seed: number) => () => (seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32;
 const PATHS = ["a.ts", "b.ts", "c/d.ts", "e.md"];
