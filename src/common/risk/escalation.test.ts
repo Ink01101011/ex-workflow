@@ -4,6 +4,7 @@ import { appendEvent, createState } from "../../core/state.ts";
 import { addEvidence } from "../../core/items/evidence.ts";
 import { addItem, getItem } from "../../core/items/record.ts";
 import { moveItem } from "../../core/items/move.ts";
+import { WorkflowError } from "../../core/errors.ts";
 import type { Gate, Role, Stage, WorkflowState } from "../../core/types.ts";
 import {
   DEFAULT_RISK_TABLE,
@@ -12,6 +13,7 @@ import {
   isRiskData,
   riskEscalation,
   type RiskLevel,
+  type RiskTable,
 } from "./escalation.ts";
 
 const T0 = "2026-11-06T00:00:00.000Z";
@@ -143,9 +145,11 @@ test("rework makes an assessment stale: the gate resolves critical with reason m
 });
 
 test("a custom table adds its row; the default table is deeply frozen", () => {
-  const table = {
-    ...DEFAULT_RISK_TABLE,
+  const table: RiskTable = {
+    low: { requires: [] },
     medium: { requires: [{ capability: "security-review" }], evidence: ["sbom"] },
+    high: { requires: [{ capability: "security-review" }, "human"], evidence: ["sbom"] },
+    critical: { requires: [{ capability: "security-review" }, "human"], evidence: ["sbom"] },
   };
   const s = assess(base(), "risk", lv("medium"));
   const x = riskEscalation(s, getItem(s, "A"), gate, { gates: ["code-review"], table })!;
@@ -236,4 +240,22 @@ test("G1-1: an earlier stage's worker may not assess when another stage sits bet
   const own = resolve(assess(s, "dev", lv("low")));
   assert.deepEqual(own.requires, ["human"]);
   assert.deepEqual([own.reason["level"], own.reason["why"]], ["critical", "not-independent"]);
+});
+
+test("G1-6: riskEscalation validates its options like withRiskGate: invalid-input, never a TypeError", () => {
+  const s = assess(base(), "risk", lv("low"));
+  const bad = (options: unknown, re: RegExp) =>
+    assert.throws(
+      () => riskEscalation(s, getItem(s, "A"), gate, options as never),
+      (e) => e instanceof WorkflowError && e.code === "invalid-input" && re.test(e.message),
+      JSON.stringify(options),
+    );
+  bad({}, /riskEscalation options: gates must be an array/);
+  bad(null, /must be an object/);
+  const { critical: _drop, ...partial } = DEFAULT_RISK_TABLE;
+  bad({ gates: ["code-review"], table: partial }, /missing level "critical"/);
+  bad(
+    { gates: ["code-review"], table: { ...DEFAULT_RISK_TABLE, low: { requires: ["human"] } } },
+    /table\.medium must include/,
+  );
 });

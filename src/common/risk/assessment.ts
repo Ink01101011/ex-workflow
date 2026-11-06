@@ -4,7 +4,8 @@ import { getItem } from "../../core/items/record.ts";
 import { applyAction } from "../../core/methodology.ts";
 import { rolesWith } from "../../core/roles/lookup.ts";
 import type { ApplyResult, Methodology, WorkflowState } from "../../core/types.ts";
-import { RISK_LEVELS, assessorIssue, type RiskLevel } from "./escalation.ts";
+import { assessorIssue, type RiskLevel } from "./escalation.ts";
+import { RISK_LEVELS } from "./options.ts";
 
 export interface RiskAssessmentInput {
   item: string;

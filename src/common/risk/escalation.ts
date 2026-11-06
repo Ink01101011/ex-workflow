@@ -13,6 +13,7 @@ import type {
 import { deepFreeze } from "../deep-freeze.ts";
 import { independenceConflicts } from "../independence.ts";
 import { workersOf } from "../workers.ts";
+import { RISK_LEVELS, riskOptions } from "./options.ts";
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 /** `data` of a `risk-assessment` evidence entry. */
@@ -32,13 +33,7 @@ export interface RiskGateOptions {
   table?: RiskTable;
 }
 
-/** The levels, least strict first. */
-export const RISK_LEVELS: readonly RiskLevel[] = /* @__PURE__ */ deepFreeze([
-  "low",
-  "medium",
-  "high",
-  "critical",
-]);
+export { RISK_LEVELS };
 
 /** `low` and `medium` add nothing; `high` and `critical` add a human approval. Deeply frozen. */
 export const DEFAULT_RISK_TABLE: RiskTable = /* @__PURE__ */ deepFreeze({
@@ -84,7 +79,8 @@ export function assessorIssue(
  * level. The resolved level is the strictest fresh (post-rework) valid assessment, so a later,
  * lower assessment never relaxes an earlier one; with none it is `critical`, and `reason.why` says
  * whether assessments were `missing`, `invalid` or `not-independent` (the latest rejected one).
- * Pure: no clock, no randomness; the same state gives the same answer.
+ * Invalid options fail `invalid-input` as in `withRiskGate`, never a `TypeError`. Pure: no clock,
+ * no randomness; the same state gives the same answer.
  */
 export function riskEscalation(
   state: WorkflowState<string>,
@@ -92,7 +88,9 @@ export function riskEscalation(
   gate: Gate,
   options: RiskGateOptions,
 ): GateEscalation | undefined {
-  if (!options.gates.includes(gate.id)) return undefined;
+  // validated here unless these are the frozen options withRiskGate validated (G1-6)
+  const opts = riskOptions(options, "riskEscalation");
+  if (!opts.gates.includes(gate.id)) return undefined;
   let level: RiskLevel | undefined;
   let why = "missing";
   let pick: Evidence | undefined;
@@ -117,7 +115,7 @@ export function riskEscalation(
     }
   }
   const resolved = level ?? "critical";
-  const row = (options.table ?? DEFAULT_RISK_TABLE)[resolved];
+  const row = (opts.table ?? DEFAULT_RISK_TABLE)[resolved];
   return {
     requires: row.requires.map((q) => (q === "human" ? q : { capability: q.capability })),
     evidence: [...(row.evidence ?? [])],

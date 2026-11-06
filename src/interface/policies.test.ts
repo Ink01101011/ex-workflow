@@ -100,6 +100,41 @@ test("options are validated once and copied", () => {
     { gates: ["g"], table: { ...DEFAULT_RISK_TABLE, low: { requires: {} } } },
     /table\.low\.requires must be an array/,
   );
+  // G1-4, G2-10: each level must include what the level below it adds
+  invalid(
+    {
+      gates: ["g"],
+      table: { ...DEFAULT_RISK_TABLE, low: { requires: ["human"] }, critical: { requires: [] } },
+    },
+    /table\.medium must include .*"human"/,
+  );
+  invalid(
+    { gates: ["g"], table: { ...DEFAULT_RISK_TABLE, low: { requires: [], evidence: ["sbom"] } } },
+    /table\.medium must include .*"sbom"/,
+  );
+  invalid(
+    {
+      gates: ["g"],
+      table: {
+        ...DEFAULT_RISK_TABLE,
+        high: { requires: ["human", { capability: "security-review" }] },
+      },
+    },
+    /table\.critical must include .*security-review/,
+  );
+  // a superset in another order, or with more, is fine
+  withRiskGate(kanban(), {
+    gates: ["g"],
+    table: {
+      low: { requires: [] },
+      medium: { requires: [{ capability: "security-review" }], evidence: ["sbom"] },
+      high: { requires: ["human", { capability: "security-review" }], evidence: ["sbom"] },
+      critical: {
+        requires: [{ capability: "security-review" }, "human"],
+        evidence: ["sbom", "pentest"],
+      },
+    },
+  });
   const table = structuredClone({ ...DEFAULT_RISK_TABLE }) as unknown as Record<
     string,
     { requires: unknown[] }
