@@ -20,17 +20,18 @@
 6. [Standalone investigation and experimentation](#standalone-investigation-and-experimentation)
 7. [Persisting state](#persisting-state)
 8. [Custom methodologies and extension state](#custom-methodologies-and-extension-state)
-9. [CLI reference (`exwf`)](#cli-reference-exwf)
-10. [Configuration](#configuration)
-11. [Ceremonies](#ceremonies)
-12. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
-13. [Errors](#errors)
-14. [JSON Schema](#json-schema)
-15. [Package entry points](#package-entry-points)
-16. [Compatibility and versioning](#compatibility-and-versioning)
-17. [Known limitations](#known-limitations)
-18. [Contributing](#contributing)
-19. [License](#license)
+9. [Composable policies](#composable-policies)
+10. [CLI reference (`exwf`)](#cli-reference-exwf)
+11. [Configuration](#configuration)
+12. [Ceremonies](#ceremonies)
+13. [Items, briefs, handoffs, accounting](#items-briefs-handoffs-accounting)
+14. [Errors](#errors)
+15. [JSON Schema](#json-schema)
+16. [Package entry points](#package-entry-points)
+17. [Compatibility and versioning](#compatibility-and-versioning)
+18. [Known limitations](#known-limitations)
+19. [Contributing](#contributing)
+20. [License](#license)
 
 ## Pick a methodology
 
@@ -243,6 +244,51 @@ state = writeExt(state, "triage", [...queue, "T-1"]); // returns a new state; un
 
 Investigation and Experimentation store their record under `ext.investigation` / `ext.experimentation` and mirror it to the deprecated top-level `state.investigation` / `state.experimentation` in memory, so SDK code that reads those fields keeps working. On disk only `ext` is stored: `saveState` leaves the mirror out and `loadState` sets it back to the same record (if a hand-edited `state.json` carries both, `ext` wins). The mirrors are read-only: once `ext.<name>` exists the engine reads only it, and a write to the legacy field is ignored; write through `writeExt`. `readExt(state, "investigation")` (or `"experimentation"`) is typed, and on a state written before 1.2, which has no `ext`, it reads the legacy field.
 
+## Composable policies
+
+`ex-workflow/policies` holds policies you opt into per run by wrapping a methodology. A wrapped methodology keeps every other member, its `name` included, so it runs on the same core and its state persists through the file adapter like the plain one's. The policies are SDK-only: `exwf` runs the plain built-in factory (see [Known limitations](#known-limitations)).
+
+### Risk-adaptive gates
+
+A gate's requirements are static: the same approval for a typo fix and a production change. `withRiskGate` lets the item's recorded risk add to them, never take away:
+
+```ts
+import { addItem, complete, decide, init, next } from "ex-workflow";
+import { kanban } from "ex-workflow/kanban";
+import { recordRiskAssessment, withRiskGate } from "ex-workflow/policies";
+
+const m = withRiskGate(kanban(), { gates: ["code-review"] }); // only these gate ids escalate
+// ... init with a review stage carrying gate { id: "code-review", requires: [{ capability: "review" }], ... }
+
+// after the work, an independent role with capability verify (or "human") assesses the item
+state = recordRiskAssessment(state, m, {
+  item: "CART-12",
+  level: "high", // "low" | "medium" | "high" | "critical"
+  factors: ["prod-infra", "secrets"], // free strings
+  ref: "risk/CART-12.md", // the host's assessment artifact
+  subject: "3f2c1e0", // optional: the SHA or ref assessed
+  by: "risk-reviewer",
+}).state;
+
+// the reviewer completes as usual: low passes on the static gate, high raises a human pending
+const done = complete(state, m, handoff, accounting);
+```
+
+- **The assessment** is evidence `risk-assessment` with `data: { level, factors, subject? }`, recorded through `applyAction` (action `risk.assess`, so your rules see it). `recordRiskAssessment` refuses `invalid-input` for an unknown key or level, a non-string factor, an empty `ref`, an assessor that is neither `human` nor a role with capability `verify`, and an assessor that is the item's author or assigned role.
+- **Which assessment counts:** only fresh ones (recorded after the item's last rework), with well-formed `data`, by a qualified and independent assessor (re-checked when the gate is resolved). The strictest one wins, so a later, lower assessment does not relax an earlier one; only rework does. With none, the level is `critical`.
+- **The table** says what each level adds to the static gate. `DEFAULT_RISK_TABLE`:
+
+  | Level | Adds |
+  |---|---|
+  | `low`, `medium` | nothing |
+  | `high`, `critical` | `"human"` |
+
+  Pass your own as `withRiskGate(m, { gates, table })`: every level needs a row `{ requires: GateRequirement[]; evidence?: string[] }`, e.g. `medium: { requires: [{ capability: "security-review" }], evidence: ["sbom"] }`. Invalid options fail `invalid-input` when you wrap.
+- **`gate.resolved`**: on a gated completion, `complete()` appends `gate.resolved { item, gate, requires, evidence, reason }` before `gate.passed` or `pending.raised`, with the requirements actually checked and `reason: { level, why, assessment, by }` (`why` is `assessed`, `missing`, `invalid` or `not-independent`). A gate the policy does not name records the static gate with `reason: {}`.
+- **`decide`** judges a pending gate against the last `gate.resolved` of that item and gate, so a role cannot approve an escalation to a human, also through `exwf decide`.
+- **Any methodology** may implement the hook itself: `Methodology.escalateGate(state, item, gate)` returns `{ requires, evidence, reason }` or `undefined`. Core only appends what it returns to the static gate, so a hook can tighten a gate but never loosen it. `withRiskGate` keeps an existing hook and widens with both.
+- `riskEscalation(state, item, gate, options)` is the resolver on its own, for hosts that want the answer without wrapping.
+
 ## CLI reference (`exwf`)
 
 Run from the directory that holds `.workflow/`. Every command prints JSON on stdout. Exit 0 = ok, exit 1 = `{ ok: false, error }`, exit 2 = usage. `--by` defaults to `human`. Flags take `--flag value` (not `--flag=value`); a value that starts with `--` must come through a JSON input file.
@@ -436,6 +482,7 @@ The CLI validates state, role manifests, items, patches and handoffs with these 
 | `ex-workflow/investigation` | `investigation()`, `validateInvestigationConfig`; types `InvestigationConfig`, `InvestigationState`, `InvestigationRound`, `InvestigationConclusion`, `Hypothesis`, `Experiment`, `Observation`, `BeliefUpdate` |
 | `ex-workflow/experimentation` | `experimentation()`, `validateExperimentationConfig`, `experimentationCeremonies`, `experimentationMetrics`, `experimentationReport`, `experimentationRoles`, `experimentationRules`, `experimentationStages`; types `ExperimentationConfig`, `ExperimentationState`, `ExperimentCandidate` |
 | `ex-workflow/registry` | `registerMethodology`, `methodologyFactory`, `registeredMethodologies` (five built-ins pre-registered); types `MethodologyFactory`, `MethodologyRegistry` |
+| `ex-workflow/policies` | `withRiskGate`, `recordRiskAssessment`, `riskEscalation`, `DEFAULT_RISK_TABLE`; types `RiskLevel`, `RiskTable`, `RiskAssessmentData`, `RiskAssessmentInput`, `RiskGateOptions` |
 | `ex-workflow/adapters` | `loadState`, `saveState`, `saveBrief`, `saveHandoff`, `withStateLock`, `WORKFLOW_DIR` |
 | `ex-workflow/schema` | the ten schema documents, `validate`, `assertValid` |
 | `ex-workflow/cli` | `runCommand`, `parseArgs`, `USAGE`: the `exwf` command as a library |
@@ -445,7 +492,7 @@ Each entry ships ESM, CommonJS and `.d.ts`. Core plus one methodology is about 5
 
 ## Compatibility and versioning
 
-- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 69 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
+- Semver from 1.0.0. The public surface (exports of every entry point, the CLI commands, the ten schema documents, the 70 event kinds) is frozen by test: a removal is a major version, an addition a minor one.
 - A `.workflow/state.json` written by any earlier release loads unchanged; the test suite replays state files from every published pre-release.
 - **Deprecated in 1.2:** the top-level `state.investigation` and `state.experimentation` fields. They are still set in memory and for SDK readers, as read-only mirrors of `ext.investigation` / `ext.experimentation` (on disk only `ext` is written; `loadState` restores the mirror), so SDK code reading `state.investigation` / `state.experimentation` sees the same record; once `ext.<name>` exists a write to the legacy field is ignored. Read with `readExt` and write with `writeExt` instead. The mirrors do not make a 1.2 state loadable by 1.1.x (see [Known limitations](#known-limitations)). 2.0 removes the mirrors.
 - Behaviour changes are listed per release in [CHANGELOG.md](CHANGELOG.md).
@@ -456,6 +503,9 @@ Deliberate, documented, and stable within 1.x.
 
 - **A custom methodology's state cannot go through the file adapter or the CLI.** The state schema accepts only the five built-in names in `methodology`, so `saveState`, `loadState` and every `exwf` command refuse it. Keep such a state through the SDK and persist it yourself.
 - **No downgrade for Investigation and Experimentation.** 1.1.x cannot load a state that 1.2 wrote for those two methodologies: the 1.1 state schema rejects the `ext` field, and the legacy mirrors do not change that. Keep a run on 1.2 once 1.2 has saved it.
+- **No downgrade for a state with evidence `data`.** 1.2.x cannot load a state carrying `Evidence.data` (a risk assessment recorded by `ex-workflow/policies`): its schema closes `Evidence`. Keep such a run on 1.3.
+- **Policies are SDK-only.** `exwf` runs the plain built-in methodology, so `exwf complete` checks a gate's static requirements only. `exwf decide` does honour an escalation the SDK recorded (`gate.resolved`). Run completions of a risk-gated run through the SDK.
+- **`checkGate` alone sees the static gate.** The risk escalation is applied by `complete()` and `decide()`; a host calling `checkGate` directly gets the 1.2 answer.
 
 - **Stale lock takeover** narrows the race to the gap between the stat and the unlink; no portable call closes it. On file systems without inodes (FAT, exFAT, some shares) only the mtime is compared. If a stale lock cannot be unlinked (read-only directory, EPERM), the command gives up after its retries with `invalid-input` naming the lock file; delete it by hand.
 - **Item ids that differ only in letter case cannot both get a brief file.** On macOS and Windows `briefs/A.json` and `briefs/a.json` are one file, so `exwf next` checks every brief name of the batch first and, when an item's id differs from another item's (in the same batch, or with an existing brief) only in case, refuses the whole dispatch with `invalid-input` naming both: no brief is written and the state is unchanged. `saveBrief` refuses such an id the same way. Give ids that differ by more than case (re-add one item under a new id).
