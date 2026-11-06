@@ -1,17 +1,19 @@
 import type { Gate, GateEscalation, WorkflowState } from "./types.ts";
 
+const str = (x: unknown): string | false => typeof x === "string" && x;
+
 /**
  * `base` followed by the entries of `extra` not yet present. The identity of a requirement
- * (`req`) is 1 for "human", else the capability it names; of an evidence kind, the string itself.
- * A malformed entry has no identity and is skipped.
+ * (`req`) is 1 for "human", else the capability it names when that is a non-empty string; of an
+ * evidence kind, the non-empty string itself. A malformed entry has no identity and is skipped.
  */
 function add<T>(base: readonly T[], extra: unknown, req?: 1): T[] {
   const key = (q: unknown): unknown =>
     req
       ? q === "human"
         ? 1
-        : (q as { capability?: unknown } | null | undefined)?.capability
-      : typeof q === "string" && q;
+        : str((q as { capability?: unknown } | null | undefined)?.capability)
+      : str(q);
   const out = [...base];
   // a non-array counts as one entry
   for (const x of [extra].flat()) {

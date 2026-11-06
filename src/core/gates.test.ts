@@ -216,3 +216,23 @@ test("decide judges an escalated pending against the recorded gate.resolved (spe
   t = raisePending(t, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
   assert.equal(getItem(decide(t, "p1", "approve", "qa", "", T0), "A").status, "done");
 });
+
+test("decide on a crafted gate.resolved with a non-string capability answers, never a TypeError (G2-4)", () => {
+  let s = addEvidence(base(), "A", { kind: "test-report", ref: "r", by: "dev" }, T0);
+  s = appendEvent(
+    s,
+    "gate.resolved",
+    "qa",
+    {
+      item: "A",
+      gate: "qa-gate",
+      requires: [{ capability: "approve-gate" }, { capability: { toString: 1 } }],
+      evidence: [],
+      reason: {},
+    },
+    T0,
+  );
+  s = raisePending(s, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
+  // the malformed entry has no identity and is skipped; the static gate lets qa approve
+  assert.equal(getItem(decide(s, "p1", "approve", "qa", "", T0), "A").status, "done");
+});

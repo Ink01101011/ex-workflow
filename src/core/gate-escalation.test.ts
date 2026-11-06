@@ -92,6 +92,22 @@ test("widenGate ignores malformed hook output instead of applying it as given", 
   });
 });
 
+test("widenGate gives a requirement identity only for a non-empty string capability (G1-7, G2-4)", () => {
+  const open: Gate = { id: "g", requires: [], evidence: [], onFail: { action: "block" } };
+  // a truthy non-string capability no longer collides with "human" and is skipped
+  const x = {
+    requires: [{ capability: 1 }, "human", { capability: { toString: 1 } }],
+    evidence: [],
+  };
+  assert.deepEqual(widenGate(open, x as never).requires, ["human"]);
+  const human: Gate = { ...open, requires: ["human"] };
+  assert.deepEqual(widenGate(human, x as never).requires, ["human"]);
+  assert.deepEqual(
+    widenGate(open, { requires: [{ capability: "" }], evidence: [] } as never),
+    open,
+  );
+});
+
 test("property: a widened gate never answers pass where the static gate does not (500 seeded cases)", () => {
   const rnd = lcg(35);
   for (let n = 0; n < 500; n++) {
