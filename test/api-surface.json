@@ -238,6 +238,7 @@
     "experimentation.validated",
     "gate.failed",
     "gate.passed",
+    "gate.resolved",
     "increment",
     "investigation.belief-updated",
     "investigation.conclusion",

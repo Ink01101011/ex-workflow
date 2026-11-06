@@ -7,7 +7,15 @@ import { next, openQuestions, synthesizeBrief } from "./brief.ts";
 import { complete } from "./complete.ts";
 import { authorOf, decide } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
-import type { Accounting, Handoff, Methodology, Role, Stage, WorkflowState } from "./types.ts";
+import type {
+  Accounting,
+  GateEscalation,
+  Handoff,
+  Methodology,
+  Role,
+  Stage,
+  WorkflowState,
+} from "./types.ts";
 
 const T0 = "2026-10-19T00:00:00.000Z";
 const synthesizeBriefFor = (s: WorkflowState, id: string) => synthesizeBrief(s, m(), s.items[id]!);
@@ -699,4 +707,70 @@ test("B10 end to end: the reviewer's rework evidence does not satisfy the dev ex
   );
   const ok = complete(s, m(), handoff({ produced: [{ kind: "code", ref: "v2" }] }), acc(), T0);
   assert.notEqual(getItem(ok.state, "A").stage, "todo");
+});
+
+// ---- #35 gate escalation (design spec section 27) ---------------------
+const escalating = (x: GateEscalation | undefined): Methodology => ({
+  ...m(),
+  escalateGate: () => x,
+});
+const atGate = () => {
+  const s = complete(gated([]), m(), handoff({ produced: [] }), acc(), T0).state;
+  return next(s, m(), { now: T0 }).state;
+};
+const qaDone = (s: WorkflowState, meth: Methodology) =>
+  complete(s, meth, handoff({ role: "qa", produced: [] }), acc({ role: "qa" }), T0);
+
+test("an escalation hook that adds nothing still records gate.resolved before gate.passed", () => {
+  const s = qaDone(atGate(), escalating(undefined)).state;
+  assert.equal(getItem(s, "A").status, "done");
+  const kinds = s.events.map((e) => e.type);
+  const at = kinds.indexOf("gate.resolved");
+  assert.ok(at >= 0 && at < kinds.indexOf("gate.passed"));
+  assert.deepEqual(s.events[at]!.payload, {
+    item: "A",
+    gate: "qa",
+    requires: [{ capability: "approve-gate" }],
+    evidence: [],
+    reason: {},
+  });
+});
+
+test("without the hook complete records no gate.resolved (the 1.2 behaviour)", () => {
+  const s = qaDone(atGate(), m()).state;
+  assert.ok(!s.events.some((e) => e.type === "gate.resolved"));
+});
+
+test("an escalation to human raises a pending although the static gate would pass", () => {
+  const x: GateEscalation = { requires: ["human"], evidence: [], reason: { level: "high" } };
+  const s = qaDone(atGate(), escalating(x)).state;
+  assert.equal(getItem(s, "A").status, "awaiting_human");
+  const kinds = s.events.map((e) => e.type);
+  assert.ok(kinds.indexOf("gate.resolved") < kinds.indexOf("pending.raised"));
+  assert.ok(!kinds.includes("gate.passed"));
+  const resolved = s.events.find((e) => e.type === "gate.resolved")!.payload;
+  assert.deepEqual(resolved, {
+    item: "A",
+    gate: "qa",
+    requires: [{ capability: "approve-gate" }, "human"],
+    evidence: [],
+    reason: { level: "high" },
+  });
+  // the qualifying role that would have passed the static gate may not approve the escalation
+  assert.throws(
+    () => decide(s, "p1", "approve", "qa", "", T0),
+    (e) => code(e) === "gate-unmet",
+  );
+  assert.equal(getItem(decide(s, "p1", "approve", "human", "", T0), "A").status, "done");
+});
+
+test("an escalated gate that fails throws gate-unmet and records nothing", () => {
+  const s = atGate();
+  const before = structuredClone(s);
+  const x: GateEscalation = { requires: [], evidence: ["sbom"], reason: {} };
+  assert.throws(
+    () => qaDone(s, escalating(x)),
+    (e) => code(e) === "gate-unmet" && /sbom/.test((e as Error).message),
+  );
+  assert.deepEqual(s, before);
 });

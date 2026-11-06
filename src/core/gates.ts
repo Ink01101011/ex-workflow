@@ -1,4 +1,5 @@
 import { fail } from "./errors.ts";
+import { resolvedGate } from "./gate-escalation.ts";
 import { advanceItem, clearRole, moveItem } from "./items/move.ts";
 import { freshEvidence } from "./items/evidence.ts";
 import { getItem } from "./items/record.ts";
@@ -189,10 +190,12 @@ export function decide<N extends string>(
       `open decisions: ${state.pending.map((p) => p.id).join(", ") || "(none)"}`,
     );
   const item0 = entry.kind === "gate" && entry.item ? getItem(state, entry.item) : undefined;
-  const gate =
+  const gate0 =
     item0 &&
     (state.stages.find((s) => entry.gate !== undefined && s.gate?.id === entry.gate)?.gate ??
       state.stages.find((s) => s.id === item0.stage)?.gate);
+  // judged against the gate as complete() resolved it: an escalation recorded as gate.resolved (spec 27, #35)
+  const gate = gate0 && resolvedGate(state, item0.id, gate0);
   if (item0 && gate && by !== "human") {
     const res = gate.requires.includes("human") ? undefined : checkGate(state, item0, gate, by);
     if (res?.outcome !== "pass")

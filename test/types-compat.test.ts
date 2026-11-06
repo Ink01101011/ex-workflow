@@ -417,3 +417,14 @@ test("generic name: a custom Methodology<Cfg, 'triage'> initialises and runs nex
   assert.equal(done.state.items["t1"]!.stage, "done");
   assert.deepEqual(m.metrics(done.state), { tickets: 1 });
 });
+
+// 1.3 (design spec section 27, #35): the escalation hook and Evidence.data are optional, so a 1.2
+// Methodology literal without the hook (triage() above declares none) and 1.2 evidence still compile.
+expectType<Equal<undefined extends Methodology["escalateGate"] ? true : false, true>>(true);
+expectType<Equal<undefined extends Evidence["data"] ? true : false, true>>(true);
+test("1.3: a 1.2 methodology without escalateGate still type-checks and has no hook", () => {
+  const m12: Methodology<TriageConfig, "triage"> = triage();
+  assert.equal(m12.escalateGate, undefined);
+  const e12: Evidence = { kind: "k", ref: "r", by: "b", at: "2026-11-06T00:00:00.000Z" };
+  assert.equal(e12.data, undefined);
+});

@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createState } from "../core/state.ts";
 import { addItem } from "../core/items/record.ts";
+import { addEvidence } from "../core/items/evidence.ts";
 import { WorkflowError } from "../core/errors.ts";
 import { loadState, saveBrief, saveHandoff, saveState, statePath, withStateLock } from "./file.ts";
 import type { Role, WorkflowState } from "../core/types.ts";
@@ -486,4 +487,34 @@ test("loadState loads 1.1 role manifest ids, merges by own property and skips __
   assert.equal(Object.getPrototypeOf(s2.roles), Object.prototype);
   assert.equal(Object.hasOwn(s2.roles, "__proto__"), false);
   assert.equal(({} as Record<string, unknown>)["capabilities"], undefined);
+});
+
+test("evidence carrying data round-trips through saveState and loadState (spec 27, #35)", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "exwf-"));
+  let s = addItem(fresh(), { id: "A", title: "a" }, "pm", T0);
+  s = addEvidence(
+    s,
+    "A",
+    {
+      kind: "risk-assessment",
+      ref: "risk/A.md",
+      by: "human",
+      data: { level: "high", factors: ["ci-cd"], subject: "abc123" },
+    },
+    T0,
+  );
+  await saveState(root, s);
+  const loaded = await loadState(root);
+  assert.deepEqual(loaded, s);
+  assert.deepEqual(loaded.items["A"]!.evidence[0]!.data, {
+    level: "high",
+    factors: ["ci-cd"],
+    subject: "abc123",
+  });
+  // the item.evidence payload stays { id, kind, ref }
+  assert.deepEqual(loaded.events.at(-1)!.payload, {
+    id: "A",
+    kind: "risk-assessment",
+    ref: "risk/A.md",
+  });
 });

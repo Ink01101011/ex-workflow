@@ -115,3 +115,10 @@ A `.workflow/state.json` written by any earlier release loads unchanged; every s
 
 - Enforced by: `scripts/check-layers.mjs` (in `pnpm run ci` and the pre-commit hook).
 - Test: `test/check-layers.test.ts` "a runtime import to a higher layer fails and names both layers" and "a type-only import to a higher layer also fails".
+
+## 17. Gate escalation only tightens
+
+A methodology's `escalateGate` hook (for example the risk-adaptive gate of `ex-workflow/policies`) can add requirements and evidence kinds to a static gate, never remove or replace one. `complete()` records the gate it checked as `gate.resolved`, and `decide()` judges the pending against that recorded gate, so an escalation to a human cannot be approved by a role.
+
+- Enforced by: `src/core/gate-escalation.ts` (`widenGate` appends only, skipping malformed entries; `resolvedGate` reads the last `gate.resolved`), `src/core/complete.ts`, `src/core/gates.ts` (`decide`).
+- Test: `src/core/gate-escalation.test.ts` "property: a widened gate never answers pass where the static gate does not (500 seeded cases)"; `src/common/risk/escalation.test.ts` (the resolved level is monotone in the evidence); `src/core/gates.test.ts` "decide judges an escalated pending against the recorded gate.resolved (spec 27, #35)".

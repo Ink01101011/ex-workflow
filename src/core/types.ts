@@ -25,6 +25,8 @@ export interface Evidence {
   ref: string;
   by: string;
   at: string;
+  /** Structured content a policy reads (e.g. a risk level); the policy that owns the kind validates it. */
+  data?: Record<string, unknown>;
 }
 export interface Blocker {
   id: string;
@@ -104,6 +106,17 @@ export interface Gate {
   requires: GateRequirement[];
   evidence: string[];
   onFail: { action: "block" } | { action: "return-to"; stage: string };
+}
+
+/**
+ * What a methodology's `escalateGate` hook adds to a static gate (design spec section 27, #35).
+ * Core only appends these to the gate (`widenGate`); it never removes or replaces a requirement.
+ */
+export interface GateEscalation {
+  requires: GateRequirement[];
+  evidence: string[];
+  /** Why the gate was widened; recorded in the `gate.resolved` event (e.g. the risk level and its assessment). */
+  reason: Record<string, string | null>;
 }
 
 export interface Stage {
@@ -458,6 +471,11 @@ export interface Methodology<C = unknown, N extends string = MethodologyName> {
     note: string,
     now: string,
   ): WorkflowState<N>;
+  /**
+   * Called by complete() before a gated completion is checked; what it returns is appended to the
+   * static gate (escalation only) and the widened gate is recorded as `gate.resolved`.
+   */
+  escalateGate?(state: WorkflowState<N>, item: WorkItem, gate: Gate): GateEscalation | undefined;
 }
 
 // ---- errors ----------------------------------------------------------

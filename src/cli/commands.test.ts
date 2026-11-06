@@ -6,6 +6,13 @@ import { mkdtemp, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runCommand, parseArgs, USAGE } from "./commands.ts";
+import { saveState } from "../adapters/file.ts";
+import { appendEvent } from "../core/state.ts";
+import { addItem } from "../core/items/record.ts";
+import { moveItem } from "../core/items/move.ts";
+import { raisePending } from "../core/gates.ts";
+import { init } from "../core/methodology.ts";
+import { kanban } from "../methodologies/kanban/index.ts";
 
 async function project() {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-cli-"));
@@ -1196,4 +1203,61 @@ test("next checks every brief name first: a case clash in one batch writes no br
   const briefs = await readdir(path.join(root, ".workflow", "briefs")).catch(() => []);
   assert.deepEqual(briefs, []);
   assert.equal(await readFile(path.join(root, ".workflow", "state.json"), "utf8"), before);
+});
+
+test("decide honours an escalation the SDK recorded: a non-human decider is refused (spec 27, #35)", async () => {
+  const { root } = await project();
+  const T = "2026-11-06T00:00:00.000Z";
+  const m = kanban();
+  const config = m.validateConfig({});
+  const stages = m.defaultStages(config).map((st) =>
+    st.id === "review"
+      ? {
+          ...st,
+          gate: {
+            id: "code-review",
+            requires: [{ capability: "review" }],
+            evidence: [],
+            onFail: { action: "block" as const },
+          },
+        }
+      : st,
+  );
+  const roles = [
+    ...m.defaultRoles(config),
+    {
+      id: "reviewer",
+      name: "Reviewer",
+      modelTier: "small" as const,
+      capabilities: ["review" as const],
+      canApprove: ["code-review"],
+      inputs: [],
+      outputs: [],
+      do_not: [],
+    },
+  ];
+  let s = init({ methodology: m, config: {}, stages, roles, now: T }).state;
+  s = addItem(s, { id: "A", title: "a", acceptance: ["ok"] }, "service-request-manager", T);
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "worker", T);
+  s = moveItem(s, "A", { stage: "review", status: "review" }, "worker", T);
+  s = appendEvent(
+    s,
+    "gate.resolved",
+    "reviewer",
+    {
+      item: "A",
+      gate: "code-review",
+      requires: [{ capability: "review" }, "human"],
+      evidence: [],
+      reason: { level: "high", why: "assessed", assessment: "risk/A.md", by: "human" },
+    },
+    T,
+  );
+  s = raisePending(s, { kind: "gate", item: "A", gate: "code-review", question: "?" }, T);
+  await saveState(root, s);
+  const refused = await runCommand(["decide", "p1", "approve", "--by", "reviewer"], root);
+  assert.equal(refused.exit, 1);
+  assert.equal(errOf(refused).code, "gate-unmet");
+  const ok = await runCommand(["decide", "p1", "approve", "--by", "human"], root);
+  assert.equal(ok.exit, 0);
 });
