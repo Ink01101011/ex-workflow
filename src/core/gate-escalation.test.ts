@@ -141,46 +141,41 @@ test("property: a widened gate never answers pass where the static gate does not
   }
 });
 
-test("resolvedGate widens by the last gate.resolved event of that item and gate", () => {
+test("resolvedGate widens by the gate.resolved recorded with the pending only (G2-5)", () => {
   const gate: Gate = {
     id: "g",
     requires: [{ capability: "review" }],
     evidence: [],
     onFail: { action: "block" },
   };
-  let s = base([]);
-  assert.deepEqual(resolvedGate(s, "A", gate), gate);
-  s = appendEvent(
-    s,
-    "gate.resolved",
-    "qa",
-    { item: "B", gate: "g", requires: ["human"], evidence: [], reason: {} },
-    T0,
-  );
-  s = appendEvent(
-    s,
-    "gate.resolved",
-    "qa",
-    { item: "A", gate: "other", requires: ["human"], evidence: [], reason: {} },
-    T0,
-  );
-  assert.deepEqual(resolvedGate(s, "A", gate), gate);
-  s = appendEvent(
-    s,
-    "gate.resolved",
-    "qa",
-    { item: "A", gate: "g", requires: ["human"], evidence: ["sbom"], reason: { level: "high" } },
-    T0,
-  );
-  assert.deepEqual(resolvedGate(s, "A", gate).requires, [{ capability: "review" }, "human"]);
-  assert.deepEqual(resolvedGate(s, "A", gate).evidence, ["sbom"]);
-  // a recorded payload can never remove a static requirement
-  s = appendEvent(
-    s,
-    "gate.resolved",
-    "qa",
-    { item: "A", gate: "g", requires: [], evidence: [], reason: {} },
-    T0,
-  );
-  assert.deepEqual(resolvedGate(s, "A", gate).requires, [{ capability: "review" }]);
+  const pend = (s: ReturnType<typeof base>) => appendEvent(s, "pending.raised", "system", {}, T0);
+  const at = (s: ReturnType<typeof base>) => s.events.length - 1;
+  const res = (item: string, g: string, requires: unknown[], evidence: string[] = []) => ({
+    item,
+    gate: g,
+    requires,
+    evidence,
+    reason: {},
+  });
+  let s = pend(base([]));
+  assert.deepEqual(resolvedGate(s, "A", gate, at(s)), gate);
+  assert.deepEqual(resolvedGate(s, "A", gate, -1), gate);
+  // another item's or gate's resolution does not apply
+  for (const x of [res("B", "g", ["human"]), res("A", "other", ["human"])]) {
+    s = pend(appendEvent(base([]), "gate.resolved", "qa", x, T0));
+    assert.deepEqual(resolvedGate(s, "A", gate, at(s)), gate);
+  }
+  // the one just before the pending (the item's own transitions may sit in between) applies
+  s = appendEvent(base([]), "gate.resolved", "qa", res("A", "g", ["human"], ["sbom"]), T0);
+  s = pend(moveItem(s, "A", { status: "awaiting_human" }, "system", T0));
+  assert.deepEqual(resolvedGate(s, "A", gate, at(s)).requires, [{ capability: "review" }, "human"]);
+  assert.deepEqual(resolvedGate(s, "A", gate, at(s)).evidence, ["sbom"]);
+  // a later one does not, and a recorded payload can never remove a static requirement
+  const later = appendEvent(s, "gate.resolved", "qa", res("A", "g", []), T0);
+  assert.deepEqual(resolvedGate(later, "A", gate, at(s)).requires, [
+    { capability: "review" },
+    "human",
+  ]);
+  s = pend(appendEvent(base([]), "gate.resolved", "qa", res("A", "g", []), T0));
+  assert.deepEqual(resolvedGate(s, "A", gate, at(s)).requires, [{ capability: "review" }]);
 });

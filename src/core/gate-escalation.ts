@@ -39,13 +39,25 @@ export function widenGate(
   };
 }
 
-/** `gate` widened by the last `gate.resolved` event recorded for item `id` and this gate id. */
-export function resolvedGate(state: WorkflowState<string>, id: string, gate: Gate): Gate {
-  let last: GateEscalation | undefined;
-  for (const e of state.events) {
-    const p = e.payload as { item?: unknown; gate?: unknown } | null;
-    if (e.type === "gate.resolved" && p?.item === id && p.gate === gate.id)
-      last = p as GateEscalation;
-  }
-  return widenGate(gate, last);
+/**
+ * `gate` widened by the `gate.resolved` event recorded with the pending whose `pending.raised`
+ * event is `state.events[at]`: `complete()` appends it just before that event, with only the item's
+ * own `item.transition` (to `awaiting_human`) in between. Anything else, a later resolution
+ * included, does not apply; `at < 0` (no such event) gives the static gate.
+ */
+export function resolvedGate(
+  state: WorkflowState<string>,
+  id: string,
+  gate: Gate,
+  at: number,
+): Gate {
+  const p = (i: number) => state.events[i]?.payload as { id?: unknown; item?: unknown } | null;
+  let i = at - 1;
+  while (i >= 0 && state.events[i]!.type === "item.transition" && p(i)?.id === id) i--;
+  const e = state.events[i];
+  const x = e?.type === "gate.resolved" && p(i) ? (p(i) as { gate?: unknown }) : undefined;
+  return widenGate(
+    gate,
+    x?.gate === gate.id && p(i)?.item === id ? (x as GateEscalation) : undefined,
+  );
 }

@@ -194,8 +194,25 @@ export function decide<N extends string>(
     item0 &&
     (state.stages.find((s) => entry.gate !== undefined && s.gate?.id === entry.gate)?.gate ??
       state.stages.find((s) => s.id === item0.stage)?.gate);
-  // judged against the gate as complete() resolved it: an escalation recorded as gate.resolved (spec 27, #35)
-  const gate = gate0 && resolvedGate(state, item0.id, gate0);
+  // one backward scan: the item's last item.completed (does it want review?) and the pending's own
+  // pending.raised, whose gate.resolved is the escalation complete() recorded (spec 27, #35, G3-1)
+  let wantsReview = false;
+  let done = false;
+  let raised = -1;
+  if (item0 && (by !== "human" || decision === "approve"))
+    for (
+      let i = state.events.length - 1;
+      i >= 0 && (!done || (raised < 0 && by !== "human"));
+      i--
+    ) {
+      const e = state.events[i]!;
+      const p = e.payload as { id?: string; verdict?: string } | null;
+      if (!done && e.type === "item.completed" && p?.id === item0.id) {
+        done = true;
+        wantsReview = p.verdict === "needs-review";
+      } else if (raised < 0 && e.type === "pending.raised" && p?.id === pendingId) raised = i;
+    }
+  const gate = gate0 && resolvedGate(state, item0.id, gate0, raised);
   if (item0 && gate && by !== "human") {
     const res = gate.requires.includes("human") ? undefined : checkGate(state, item0, gate, by);
     if (res?.outcome !== "pass")
@@ -225,13 +242,6 @@ export function decide<N extends string>(
     const id = item0.id;
     const gateId = entry.gate ?? gate?.id ?? null;
     if (decision === "approve") {
-      let wantsReview = false;
-      for (let i = state.events.length - 1; i >= 0; i--) {
-        const e = state.events[i]!;
-        if (e.type !== "item.completed" || (e.payload as { id?: string }).id !== id) continue;
-        wantsReview = (e.payload as { verdict?: string }).verdict === "needs-review";
-        break;
-      }
       next = advanceItem(next, id, by, wantsReview, at);
       next = appendEvent(next, "gate.passed", by, { item: id, gate: gateId }, at);
     } else {
