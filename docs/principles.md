@@ -1,6 +1,6 @@
 # Engine principles
 
-**Status:** current for ex-workflow 1.2.0 (2026-11-03). Every rule below names the file that enforces it and the test that pins it. A change to one of these files that changes the rule updates this page in the same pull request; a new invariant gets a new number. The decisions behind the rules are in the [design spec](superpowers/specs/2026-10-19-ex-workflow-design.md); the layer and file conventions are in [CONTRIBUTING.md](../CONTRIBUTING.md), section 9.
+**Status:** current for ex-workflow 1.3.0 (2026-11-06). Every rule below names the file that enforces it and the test that pins it. A change to one of these files that changes the rule updates this page in the same pull request; a new invariant gets a new number. The decisions behind the rules are in the [design spec](superpowers/specs/2026-10-19-ex-workflow-design.md); the layer and file conventions are in [CONTRIBUTING.md](../CONTRIBUTING.md), section 9.
 
 Paths are relative to the repository root. "Test" names the file and the test title.
 
