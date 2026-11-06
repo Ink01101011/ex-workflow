@@ -414,3 +414,25 @@ test("prototype-polluted ids cannot reach the result through inherited keys", ()
   assert.equal(Object.getPrototypeOf(r.variants[0]!), Object.prototype);
   assert.equal(r.winner, "V1");
 });
+
+test("G1-3: passRate is the mean of each scenario's pass fraction, so extra runs of an easy scenario do not buy a win", () => {
+  const runs = [
+    run("V0", "easy", true),
+    run("V0", "hard", true),
+    run("V0", "hard", false),
+    run("V0", "hard", false),
+    ...[1, 2, 3, 4, 5].map(() => run("V1", "easy", true, { tokens: 10 })),
+    run("V1", "hard", false, { tokens: 10 }),
+  ];
+  const r = compareRuns(runs, { baseline: "V0" });
+  const rate = Object.fromEntries(r.variants.map((v) => [v.variant, v.passRate]));
+  assert.deepEqual(rate, { V0: (1 + 1 / 3) / 2, V1: 0.5 });
+  assert.equal(r.winner, null);
+  assert.deepEqual(
+    r.variants.map((v) => [v.variant, v.runs, v.passed]),
+    [
+      ["V0", 4, 2],
+      ["V1", 6, 5],
+    ],
+  );
+});

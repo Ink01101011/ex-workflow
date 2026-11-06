@@ -361,6 +361,7 @@ result.variants; // ranked VariantResult[]: { variant, runs, passed, passRate, m
 ```
 
 - **`passed`** is your scorer's verdict for that run. The engine derives the rest from the state: `mean` holds, per variant, the mean of `tokens` (accounting `tokensIn + tokensOut`, after corrections), `durationMs`, `turns` (accounting lines), `humanInterventions` (`pending.raised` plus `blocker.cleared` events), `reworks`, `escalations` and `itemsDone`.
+- **`passRate`** weighs each scenario once: the mean over the scenarios the variant ran of the share of that scenario's runs that passed, so more runs of an easy scenario do not raise it; `runs` and `passed` count runs.
 - **Eligible** means no `mustPass` scenario has a failing run (`regressions`) and the variant ran every scenario the baseline ran and every `mustPass` one (`missing`).
 - **Ranking**: eligible first, then `passRate` descending, then mean tokens, mean duration and mean human interventions ascending, then the variant id in code-unit order. The input order of `runs` never changes the result.
 - **Winner**: the first ranked eligible variant other than the baseline whose `passRate` is at least the baseline's minus `passTolerance` and that is better, by a `passRate` above the baseline's plus `passTolerance` or by mean tokens below the baseline's times `1 - costTolerance`. Tolerances are fractions in `[0, 1]`, default `0`.

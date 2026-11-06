@@ -159,7 +159,8 @@ const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 /**
  * Compares finished runs (design spec section 27, #34). Pure: reads only its arguments and
  * returns fresh objects. Each variant gets a metric vector (the mean over its runs of tokens,
- * duration, turns, human interventions, reworks, escalations and done items), a pass rate and an
+ * duration, turns, human interventions, reworks, escalations and done items), a pass rate (the
+ * mean over its scenarios of each scenario's passing share, so every scenario weighs the same) and an
  * eligibility (no must-pass regression, nothing missing). The winner is the first ranked eligible
  * non-baseline variant that is not worse than the baseline on pass rate and better on pass rate
  * or tokens, beyond the tolerances; otherwise `null` with the reason. Refuses `invalid-input`
@@ -190,7 +191,8 @@ export function compareRuns(
   interface Acc {
     metrics: RunMetrics[];
     passed: number;
-    ran: Set<string>;
+    /** scenario -> [passing runs, runs] */
+    ran: Map<string, [number, number]>;
     failed: Set<string>;
   }
   const groups = new Map<string, Acc>();
@@ -212,19 +214,23 @@ export function compareRuns(
     const metrics = metricsOf(r["state"], where);
     let g = groups.get(variant);
     if (!g)
-      groups.set(variant, (g = { metrics: [], passed: 0, ran: new Set(), failed: new Set() }));
+      groups.set(variant, (g = { metrics: [], passed: 0, ran: new Map(), failed: new Set() }));
     g.metrics.push(metrics);
-    g.ran.add(scenario);
+    const tally = g.ran.get(scenario) ?? [0, 0];
+    g.ran.set(scenario, tally);
+    tally[1]++;
     named.add(scenario);
-    if (r["passed"]) g.passed++;
-    else g.failed.add(scenario);
+    if (r["passed"]) {
+      g.passed++;
+      tally[0]++;
+    } else g.failed.add(scenario);
   });
   const base = groups.get(baseline);
   if (!base) bad(`baseline "${baseline}" has no run`, "name a variant that appears in runs");
   for (const s of mustPass)
     if (!named.has(s))
       bad(`mustPass scenario "${s}" has no run`, "name a scenario that appears in runs");
-  const required = [...new Set([...base!.ran, ...mustPass])].sort(byId);
+  const required = [...new Set([...base!.ran.keys(), ...mustPass])].sort(byId);
 
   const results: VariantResult[] = [...groups].map(([variant, g]) => {
     const n = g.metrics.length;
@@ -236,7 +242,8 @@ export function compareRuns(
       variant,
       runs: n,
       passed: g.passed,
-      passRate: g.passed / n,
+      // scenario-weighted: each scenario counts once, whatever its number of runs (G1-3)
+      passRate: meanOf([...g.ran.values()].map(([p, k]) => p / k)),
       mean,
       regressions,
       missing,
