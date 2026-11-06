@@ -122,6 +122,15 @@ test("options are validated once and copied", () => {
     },
     /table\.critical must include .*security-review/,
   );
+  // G5-4: requirements and evidence kinds are separate sets: evidence "human" is not requirement "human"
+  for (const [lo, hi] of [
+    [{ requires: ["human"] }, { requires: [], evidence: ["human"] }],
+    [{ requires: [], evidence: ["human"] }, { requires: ["human"] }],
+  ])
+    invalid(
+      { gates: ["g"], table: { low: lo, medium: hi, high: hi, critical: hi } },
+      /table\.medium must include .*"human"/,
+    );
   // a superset in another order, or with more, is fine
   withRiskGate(kanban(), {
     gates: ["g"],

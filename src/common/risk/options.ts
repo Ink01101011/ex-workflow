@@ -91,8 +91,12 @@ export function riskOptions(options: unknown, who: string): Required<RiskGateOpt
         requirement(q, `table.${level}.requires[${i}]`),
       );
       const evidence = ev === undefined ? undefined : [...(ev as string[])];
-      // each level includes everything the level below it adds (requirements and evidence kinds)
-      const here = [...requires, ...(evidence ?? [])].map((x) => JSON.stringify(x));
+      // each level includes everything the level below it adds; requirements and evidence kinds
+      // are separate sets (G5-4: evidence "human" is not the requirement "human")
+      const here = [
+        ...requires.map((x) => JSON.stringify(x)),
+        ...(evidence ?? []).map((k) => `evidence ${JSON.stringify(k)}`),
+      ];
       const missing = below.filter((x) => !here.includes(x));
       if (missing.length)
         bad(
