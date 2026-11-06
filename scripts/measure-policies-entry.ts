@@ -1,2 +1,2 @@
 export * from "../src/index.ts";
-export * from "../src/policies.ts";
+export * from "../src/policies/index.ts";

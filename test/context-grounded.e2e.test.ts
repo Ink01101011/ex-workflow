@@ -12,7 +12,7 @@ import {
   recordRepoChange,
   withContextGrounding,
   withRiskGate,
-} from "../src/policies.ts";
+} from "../src/policies/index.ts";
 import type { Accounting, ContextAssumption, Handoff, Role, WorkflowState } from "../src/index.ts";
 
 const MIN = 60_000;

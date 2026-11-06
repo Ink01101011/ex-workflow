@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { assertValid, workflowStateSchema } from "../src/schema/index.ts";
 import { addItem, complete, decide, getItem, init, next } from "../src/index.ts";
 import { kanban } from "../src/methodologies/kanban/index.ts";
-import { recordRiskAssessment, withRiskGate } from "../src/policies.ts";
+import { recordRiskAssessment, withRiskGate } from "../src/policies/index.ts";
 import type { Accounting, Handoff, Role, WorkflowError, WorkflowState } from "../src/index.ts";
 
 const MIN = 60_000;
