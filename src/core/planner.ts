@@ -66,8 +66,9 @@ export function assignRole(
     // a reviewer that did none of the work the gate guards (spec 28, #48)
     const authors = authorsOf(state, item);
     const reviewers = rolesWith(state, "review");
-    const other = reviewers.find((r) => !authors.includes(r.id));
-    const r = other ?? (reviewers.length === 1 ? reviewers[0] : undefined);
+    // with none, the first reviewer: the gate then refuses it (conflict-of-interest) and names
+    // human, rather than the planner failing the whole batch (spec 28, #48 G2 finding 1)
+    const r = reviewers.find((x) => !authors.includes(x.id)) ?? reviewers[0];
     if (!r)
       fail(
         "missing-capability",

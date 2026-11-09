@@ -385,3 +385,17 @@ test("change-needs-impact-analysis also runs at add and edit of a change-request
   assert.match(edit({ impactAnalysis: undefined })[0]!.message, /no impact analysis/);
   assert.deepEqual(edit({ impactAnalysis: { summary: "s", reopen: [], weight: 0 } }), []);
 });
+
+test("approver-not-author counts every author of the phase's items, not only the last (spec 28, #48)", () => {
+  let s = base();
+  s = setStatus(s, "requirements", "open");
+  s = moveItem(s, "R1", { status: "in_progress" }, "business-analyst", T0);
+  s = moveItem(s, "R1", { status: "todo" }, "business-analyst", T0);
+  s = moveItem(s, "R1", { status: "in_progress" }, "project-manager", T0);
+  s = moveItem(s, "R1", { stage: "done", status: "done" }, "project-manager", T0);
+  const r = rules["approver-not-author"]!;
+  const v = r.check(s, ceremony("gateReview", "business-analyst", { phase: "requirements" }));
+  assert.match(v[0]!.message, /"business-analyst" authored R1/);
+  assert.doesNotMatch(v[0]!.fix, /project-manager/);
+  assert.deepEqual(r.check(s, ceremony("gateReview", "human", { phase: "requirements" })), []);
+});

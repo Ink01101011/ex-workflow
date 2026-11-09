@@ -42,7 +42,10 @@ export function authorOf(state: WorkflowState<string>, item: WorkItem): string |
  * Every role that did the work a gate on the item's current stage guards (design spec section 28,
  * #48): the `by` of each dispatch (a transition into `in_progress`) since the item's last
  * `item.rework` event whose `from.stage` comes strictly before the current stage in `state.stages`
- * order, in order, then `authorOf`, each once. A reviewer dispatched into the gated stage is not
+ * order, in order, then `authorOf`, each once. A dispatch before that rework still counts when it
+ * came from a stage before every stage the item has been in since (the rework did not send that
+ * work back); a dispatch from a stage `state.stages` does not list, or any dispatch when the current
+ * stage is unlisted, counts. A reviewer dispatched into the gated stage is not
  * one, nor is the assigned `role`. The rework boundary is found as `workersOf` finds it: when the
  * events that appended transitions are not exactly as many as `item.transitions`, every
  * transition counts (fail closed: more authors, never fewer).
@@ -55,12 +58,19 @@ export function authorsOf(state: WorkflowState<string>, item: WorkItem): string[
   const all = item.transitions;
   const after = sinceRework(index, item.id, at);
   const ts = after === undefined || at.length !== all.length ? all : all.slice(all.length - after);
+  const pre = all.slice(0, all.length - ts.length);
+  const rank = (stage: string) => order.get(stage) ?? Infinity;
+  // work before the rework that the rework did not send back is not redone: a pre-rework dispatch
+  // from a stage before the earliest one the item reached since counts (spec 28, gate G1-2)
+  let landing = pre.length ? rank(pre.at(-1)!.to.stage) : -Infinity;
+  for (const t of ts) landing = Math.min(landing, rank(t.from.stage), rank(t.to.stage));
   const out = new Set<string>();
-  if (here !== undefined)
-    for (const t of ts) {
-      const from = order.get(t.from.stage);
-      if (t.to.status === "in_progress" && from !== undefined && from < here) out.add(t.by);
-    }
+  const limit = here ?? Infinity;
+  // a dispatch from a stage state.stages does not list counts (fail closed, gate G1-5)
+  const from = (t: Transition) => order.get(t.from.stage) ?? -Infinity;
+  for (const t of pre)
+    if (t.to.status === "in_progress" && from(t) < Math.min(limit, landing)) out.add(t.by);
+  for (const t of ts) if (t.to.status === "in_progress" && from(t) < limit) out.add(t.by);
   const author = authorOf(state, item);
   if (author !== undefined) out.add(author);
   return [...out];

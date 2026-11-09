@@ -68,13 +68,15 @@ export function checkGate(
       continue;
     }
     if ((authors ??= authorsOf(state, item)).includes(by)) {
-      const others = approverIds(state, gate.id, req.capability, by);
+      const others = approverIds(state, gate.id, req.capability).filter(
+        (r) => !authors!.includes(r),
+      );
       violations.push({
         rule: "conflict-of-interest",
         severity: "error",
         item: item.id,
         message: `role "${by}" did the work on "${item.id}" and may not approve it`,
-        fix: `approve as a different role: ${others.join(", ") || "(register another approver)"}`,
+        fix: `approve as a role that did none of the work, or as human through decide: ${[...others, "human"].join(", ")}`,
       });
     }
   }
@@ -183,6 +185,7 @@ export function decide<N extends string>(
         `"${by}" may not decide gate "${gate.id}" on "${item0.id}"`,
         `decide as one of: human${gate.requires
           .flatMap((q) => (q === "human" ? [] : approverIds(state, gate.id, q.capability)))
+          .filter((r) => !authorsOf(state, item0).includes(r))
           .map((r) => `, ${r}`)
           .join("")}`,
         { items: [item0.id], rule: "gate" },

@@ -578,3 +578,19 @@ test("#48: assignRole gives a review to a reviewer that did none of the earlier-
   s = moveItem(s, "A", { stage: "review", status: "review" }, "qarev", T0);
   assert.equal(assignRole(s, getItem(s, "A")).id, "rev");
 });
+
+test("#48: when every reviewer is an author, assignRole picks the first; it never fails the batch", () => {
+  const three: Stage[] = ["dev", "test", "review"].map((id) => ({
+    id,
+    name: id,
+    entryPolicy: [],
+    exitPolicy: [],
+  }));
+  const roles = [r("dev", ["deliver", "review"]), r("qa", ["deliver", "review"])];
+  let s = createState({ methodology: "kanban", config: {}, stages: three, roles, now: T0 });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "dev", T0);
+  s = moveItem(s, "A", { stage: "test", status: "in_progress" }, "qa", T0);
+  s = moveItem(s, "A", { stage: "review", status: "review" }, "qa", T0);
+  assert.equal(assignRole(s, getItem(s, "A")).id, "dev");
+});
