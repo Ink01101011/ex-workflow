@@ -83,13 +83,12 @@ export function withContextGrounding<C, N extends string>(
     if (k !== "entry" && k !== "exit") badGrounding(`unknown key "${k}"`, "use only: entry, exit");
   const entry = stageIds(o, "entry");
   const exit = stageIds(o, "exit");
-  const { customPolicy, briefContext } = methodology;
   const add = (list: Policy[], on: boolean): Policy[] =>
     on && !list.some((p) => p.kind === "custom" && p.id === GROUNDED)
       ? [...list, groundedPolicy]
       : list;
   return {
-    ...methodology,
+    ...withGroundingHooks(methodology),
     defaultStages(config) {
       const stages = methodology.defaultStages(config);
       for (const id of [...entry, ...exit])
@@ -105,6 +104,22 @@ export function withContextGrounding<C, N extends string>(
         exitPolicy: add(st.exitPolicy, exit.includes(st.id)),
       }));
     },
+  };
+}
+
+/**
+ * `methodology` with the hooks that answer the custom policy `context-grounded` (spec 28, #47):
+ * `customPolicy` with `contextGroundedViolations`, `briefContext` with `contextOf`; hooks the
+ * methodology already has answer every other policy id and a brief with no snapshot. Stages are
+ * untouched. `withContextGrounding` builds on it, and the CLI wraps every methodology with it so a
+ * state the SDK grounded is judged by its snapshots there too. Not exported from an entry point.
+ */
+export function withGroundingHooks<C, N extends string>(
+  methodology: Methodology<C, N>,
+): Methodology<C, N> {
+  const { customPolicy, briefContext } = methodology;
+  return {
+    ...methodology,
     customPolicy(state, item, policy) {
       return policy.id === GROUNDED
         ? contextGroundedViolations(state, item)

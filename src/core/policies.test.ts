@@ -164,18 +164,33 @@ test("#36: a methodology's customPolicy answers a custom policy instead of the e
   assert.deepEqual(none, []);
 });
 
-test("#36: without a hook, or when it returns undefined, the 1.2 evidence check applies", () => {
+test("#36: without a hook, or when it returns undefined, another custom policy keeps the 1.2 evidence check", () => {
+  const lint: Policy = { kind: "custom", id: "lint", description: "lint clean" };
   let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
   const rules = (m?: ReturnType<typeof hooked>) =>
-    evaluatePolicies(s, s.items["A"]!, [grounded], m).map((v) => v.rule);
-  assert.deepEqual(rules(), ["policy:custom:context-grounded"]);
-  assert.deepEqual(rules(hooked(undefined)), ["policy:custom:context-grounded"]);
-  assert.deepEqual(rules({} as ReturnType<typeof hooked>), ["policy:custom:context-grounded"]);
-  // the 3-argument call (the CLI and ceremony path) keeps the 1.2 behaviour
-  assert.equal(evaluatePolicies(s, s.items["A"]!, [grounded]).length, 1);
-  s = addEvidence(s, "A", { kind: "policy:context-grounded", ref: "x", by: "dev" }, T0);
+    evaluatePolicies(s, s.items["A"]!, [lint], m).map((v) => v.rule);
+  assert.deepEqual(rules(), ["policy:custom:lint"]);
+  assert.deepEqual(rules(hooked(undefined)), ["policy:custom:lint"]);
+  assert.deepEqual(rules({} as ReturnType<typeof hooked>), ["policy:custom:lint"]);
+  s = addEvidence(s, "A", { kind: "policy:lint", ref: "x", by: "dev" }, T0);
   assert.deepEqual(rules(), []);
   assert.deepEqual(rules(hooked(undefined)), []);
+});
+
+test("#47: the reserved context-grounded policy fails closed without a hook; its evidence never satisfies it", () => {
+  let s = addItem(base(), { id: "A", title: "a" }, "po", T0);
+  s = addEvidence(s, "A", { kind: "policy:context-grounded", ref: "x", by: "dev" }, T0);
+  for (const m of [undefined, hooked(undefined), {} as ReturnType<typeof hooked>]) {
+    const out: Violation[] = evaluatePolicies(s, s.items["A"]!, [grounded], m);
+    assert.deepEqual(
+      out.map((v) => v.rule),
+      ["policy:custom:context-grounded"],
+    );
+    assert.match(out[0]!.message, /context-grounding hook/);
+    assert.match(out[0]!.fix, /withContextGrounding/);
+  }
+  // a hook still answers it
+  assert.deepEqual(evaluatePolicies(s, s.items["A"]!, [grounded], hooked([])), []);
 });
 
 test("#36: assertPolicies takes the methodology as an optional trailing argument", () => {

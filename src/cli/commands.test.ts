@@ -13,6 +13,9 @@ import { moveItem } from "../core/items/move.ts";
 import { raisePending } from "../core/gates.ts";
 import { init } from "../core/methodology.ts";
 import { kanban } from "../methodologies/kanban/index.ts";
+import { addEvidence } from "../core/items/evidence.ts";
+import { recordContextSnapshot } from "../common/context/snapshot.ts";
+import { withContextGrounding } from "../interface/policies.ts";
 
 async function project() {
   const root = await mkdtemp(path.join(tmpdir(), "exwf-cli-"));
@@ -1260,4 +1263,54 @@ test("decide honours an escalation the SDK recorded: a non-human decider is refu
   assert.equal(errOf(refused).code, "gate-unmet");
   const ok = await runCommand(["decide", "p1", "approve", "--by", "human"], root);
   assert.equal(ok.exit, 0);
+});
+
+test("next judges the reserved context-grounded policy by the SDK's snapshot, never by evidence (spec 28, #47)", async () => {
+  const { root } = await project();
+  const T = "2026-11-09T00:00:00.000Z";
+  const m = withContextGrounding(kanban(), { entry: ["dev"] });
+  const config = m.validateConfig({});
+  const roles = [
+    ...m.defaultRoles(config),
+    {
+      id: "scout",
+      name: "Scout",
+      modelTier: "small" as const,
+      capabilities: ["verify" as const],
+      canApprove: [],
+      inputs: [],
+      outputs: [],
+      do_not: [],
+    },
+  ];
+  let s = init({ methodology: m, config: {}, roles, now: T }).state;
+  for (const id of ["A", "B"])
+    s = addItem(s, { id, title: id, acceptance: ["ok"] }, "service-request-manager", T);
+  s = m.ceremonies["replenishment"]!(s, {
+    by: "service-request-manager",
+    now: T,
+    items: ["A", "B"],
+  }).state;
+  s = recordContextSnapshot(s, m, {
+    item: "A",
+    revision: "r1",
+    assumptions: [{ claim: "c", required: true, source: { path: "src/a.ts", hash: "h" } }],
+    ref: "ctx/A.json",
+    by: "scout",
+    now: T,
+  }).state;
+  s = addEvidence(s, "B", { kind: "policy:context-grounded", ref: "self", by: "worker" }, T);
+  await saveState(root, s);
+  const r = await runCommand(["next"], root);
+  assert.equal(r.exit, 0, JSON.stringify(r.out));
+  const o = out<{
+    briefs: { item: { id: string }; context?: { snapshot: string } }[];
+    skipped: { id: string }[];
+  }>(r);
+  assert.deepEqual(
+    o.briefs.map((b) => b.item.id),
+    ["A"],
+  );
+  assert.equal(o.briefs[0]!.context?.snapshot, "ctx/A.json");
+  assert.ok(o.skipped.some((x) => x.id === "B"));
 });

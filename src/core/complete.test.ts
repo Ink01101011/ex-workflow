@@ -786,10 +786,10 @@ test("#36: complete() evaluates a custom exit policy through the methodology's c
     ),
   });
   const s = withExit(started());
-  // the plain methodology falls back to the 1.2 evidence check and refuses
+  // the plain methodology has no hook: the reserved policy fails closed (spec 28, #47)
   assert.throws(
     () => complete(s, m(), handoff(), acc(), T0),
-    (e) => code(e) === "policy-unmet" && /policy:context-grounded/.test((e as WorkflowError).fix),
+    (e) => code(e) === "policy-unmet" && /withContextGrounding/.test((e as WorkflowError).fix),
   );
   const seen: string[] = [];
   const pass: Methodology = {
