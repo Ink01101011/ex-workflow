@@ -198,13 +198,15 @@ test("kanban: only grounded cards are dispatched; repo.changed stales snapshots;
   assert.ok(loaded.events.some((e) => e.type === "repo.changed"));
 });
 
-test("the plain methodology (as exwf runs it) falls back to the evidence check and dispatches nothing ungrounded", () => {
+test("#47: the plain methodology fails closed on the reserved policy, even with policy:context-grounded evidence", () => {
   let s = board();
   s = snapshot(s, "A", [{ claim: "c", required: true, source: src("src/a.ts") }]);
+  s = addEvidence(s, "B", { kind: "policy:context-grounded", ref: "self", by: "worker" }, tick());
   const r = next(s, plain, { now: tick() });
   assert.deepEqual(r.briefs, []);
   assert.ok(skippedIds(r).includes("A"));
-  assert.match(r.skipped.find((x) => x.id === "A")!.detail!, /grounded in a fresh, verified/);
+  assert.ok(skippedIds(r).includes("B"));
+  assert.match(r.skipped.find((x) => x.id === "B")!.detail!, /context-grounding hook/);
 });
 
 test("context grounding composes with the risk gate", () => {
@@ -219,4 +221,21 @@ test("context grounding composes with the risk gate", () => {
     next(s, both, { now: tick() }).briefs.map((b) => b.item.id),
     ["A"],
   );
+});
+
+test("#49: a future worker's weaker snapshot cannot supersede a stale independent one", () => {
+  let s = board();
+  s = snapshot(s, "A", [{ claim: "totals are cents", required: true, source: src("src/a.ts") }]);
+  s = recordRepoChange(s, m, {
+    revision: "r2",
+    paths: ["src/a.ts"],
+    by: "human",
+    now: tick(),
+  }).state;
+  // "worker" has not worked on A yet, so its snapshot qualifies, but it drops the required claim
+  s = snapshot(s, "A", [{ claim: "tax once", source: src("src/tax.ts") }], "worker");
+  const r = next(s, m, { now: tick() });
+  assert.ok(!r.briefs.some((b) => b.item.id === "A"));
+  assert.ok(skippedIds(r).includes("A"));
+  assert.match(r.skipped.find((x) => x.id === "A")!.detail!, /unverified required/);
 });

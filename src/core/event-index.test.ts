@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Event, WorkflowState } from "../core/types.ts";
+import type { Event, WorkflowState } from "./types.ts";
 import { eventIndex, firstAfter, sinceRework } from "./event-index.ts";
 
 const ev = (type: string, payload: unknown): Event =>

@@ -1,6 +1,6 @@
 # Engine principles
 
-**Status:** current for ex-workflow 1.3.0 (2026-11-06). Every rule below names the file that enforces it and the test that pins it. A change to one of these files that changes the rule updates this page in the same pull request; a new invariant gets a new number. The decisions behind the rules are in the [design spec](superpowers/specs/2026-10-19-ex-workflow-design.md); the layer and file conventions are in [CONTRIBUTING.md](../CONTRIBUTING.md), section 9.
+**Status:** current for ex-workflow 1.4.0 (2026-11-09). Every rule below names the file that enforces it and the test that pins it. A change to one of these files that changes the rule updates this page in the same pull request; a new invariant gets a new number. The decisions behind the rules are in the [design spec](superpowers/specs/2026-10-19-ex-workflow-design.md); the layer and file conventions are in [CONTRIBUTING.md](../CONTRIBUTING.md), section 9.
 
 Paths are relative to the repository root. "Test" names the file and the test title.
 
@@ -41,10 +41,10 @@ An item leaves a stage only when the stage's exit policies hold, and passes a ga
 
 ## 6. The author does not approve its own work
 
-A capability gate refuses an approval by the role that did the work (`conflict-of-interest`); the author is the role of the last dispatch from a stage before the gated one, so a reviewer dispatched into the gated stage is not the author. The planner gives a review to a reviewer other than the author when one exists.
+A capability gate refuses an approval by a role that did the work (`conflict-of-interest`); the authors are the roles of every dispatch from a stage before the gated one since the item's last rework (1.4, spec 28), so neither the developer nor the tester approves a review gate, and a reviewer dispatched into the gated stage is not an author. The planner gives a review to a reviewer that is not an author when one exists.
 
-- Enforced by: `src/core/gates.ts` (`checkGate` refuses with `conflict-of-interest`, judging the author with `authorOf`), which `complete()` runs on every gated completion; `src/core/planner.ts` (`assignRole`). The `conflict-of-interest` entry in `src/core/rules.ts` matches action type `complete`, which the engine never dispatches (completions reach the rules as `item.complete`), so it applies only to an action of type `complete` passed to `validateAction` directly.
-- Test: `src/core/gates.test.ts` "checkGate reports conflict of interest when author approves own work" and "a reviewer dispatched into the gated stage is not the author; the earlier-stage worker is"; `src/core/planner.test.ts` "assignRole prefers the item's role, else deliver/review by status, never the author for review".
+- Enforced by: `src/core/gates.ts` (`checkGate` refuses with `conflict-of-interest`, judging the authors with `authorsOf` in `src/core/authors.ts`), which `complete()` runs on every gated completion; `src/core/planner.ts` (`assignRole`). The `conflict-of-interest` entry in `src/core/rules.ts` matches action type `complete`, which the engine never dispatches (completions reach the rules as `item.complete`), so it applies only to an action of type `complete` passed to `validateAction` directly.
+- Test: `src/core/gates.test.ts` "checkGate reports conflict of interest when author approves own work" and "a reviewer dispatched into the gated stage is not the author; the earlier-stage worker is" and "#48: an earlier-stage worker that is not the last author may not approve the gate"; `src/core/authors.test.ts`; `src/core/planner.test.ts` "assignRole prefers the item's role, else deliver/review by status, never the author for review".
 
 ## 7. Roles are data; capabilities decide
 

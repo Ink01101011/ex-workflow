@@ -1,6 +1,7 @@
 import { addSpent } from "./budget.ts";
 import { fail } from "./errors.ts";
-import { checkGate, lastDispatchBefore, raisePending } from "./gates.ts";
+import { lastDispatchBefore } from "./authors.ts";
+import { checkGate, raisePending } from "./gates.ts";
 import { widenGate } from "./gate-escalation.ts";
 import { addEvidence } from "./items/evidence.ts";
 import { addItem, getItem, patchItem } from "./items/record.ts";

@@ -83,13 +83,12 @@ export function withContextGrounding<C, N extends string>(
     if (k !== "entry" && k !== "exit") badGrounding(`unknown key "${k}"`, "use only: entry, exit");
   const entry = stageIds(o, "entry");
   const exit = stageIds(o, "exit");
-  const { customPolicy, briefContext } = methodology;
   const add = (list: Policy[], on: boolean): Policy[] =>
     on && !list.some((p) => p.kind === "custom" && p.id === GROUNDED)
       ? [...list, groundedPolicy]
       : list;
   return {
-    ...methodology,
+    ...withGroundingHooks(methodology),
     defaultStages(config) {
       const stages = methodology.defaultStages(config);
       for (const id of [...entry, ...exit])
@@ -99,12 +98,53 @@ export function withContextGrounding<C, N extends string>(
             `withContextGrounding: unknown stage "${id}"`,
             `stages: ${stages.map((st) => st.id).join(", ")}`,
           );
+      // a built-in ceremony checks these policies without the hook, so the policy could never pass
+      // there (spec 28, G2 finding 2): refuse them here, once
+      const checked = ceremonyChecked(methodology.name, stages);
+      for (const [key, ids] of [
+        ["entry", entry],
+        ["exit", exit],
+      ] as const)
+        for (const id of ids)
+          if (checked[key].includes(id))
+            fail(
+              "invalid-input",
+              `withContextGrounding: the ${methodology.name} ceremony that moves items ${key === "entry" ? "into" : "out of"} "${id}" checks its ${key} policies without the grounding hook`,
+              `ground a later stage instead, e.g. ${key} ["${stages.find((st) => !checked.entry.includes(st.id) && !checked.exit.includes(st.id) && st.id !== stages[0]!.id)?.id ?? "dev"}"]`,
+            );
       return stages.map((st) => ({
         ...st,
         entryPolicy: add(st.entryPolicy, entry.includes(st.id)),
         exitPolicy: add(st.exitPolicy, exit.includes(st.id)),
       }));
     },
+  };
+}
+
+/** Stage policies a built-in methodology's ceremonies check with `assertPolicies` (spec 28). */
+function ceremonyChecked(
+  name: string,
+  stages: readonly { id: string }[],
+): { entry: string[]; exit: string[] } {
+  if (name === "kanban") return { entry: [], exit: stages[0] ? [stages[0].id] : [] };
+  if (name === "scrum") return { entry: [], exit: ["backlog"] };
+  if (name === "experimentation") return { entry: ["building"], exit: [] };
+  return { entry: [], exit: [] };
+}
+
+/**
+ * `methodology` with the hooks that answer the custom policy `context-grounded` (spec 28, #47):
+ * `customPolicy` with `contextGroundedViolations`, `briefContext` with `contextOf`; hooks the
+ * methodology already has answer every other policy id and a brief with no snapshot. Stages are
+ * untouched. `withContextGrounding` builds on it, and the CLI wraps every methodology with it so a
+ * state the SDK grounded is judged by its snapshots there too. Not exported from an entry point.
+ */
+export function withGroundingHooks<C, N extends string>(
+  methodology: Methodology<C, N>,
+): Methodology<C, N> {
+  const { customPolicy, briefContext } = methodology;
+  return {
+    ...methodology,
     customPolicy(state, item, policy) {
       return policy.id === GROUNDED
         ? contextGroundedViolations(state, item)

@@ -14,7 +14,7 @@ import type {
   WorkItem,
   WorkflowState,
 } from "../../core/types.ts";
-import { eventIndex, firstAfter, sinceRework } from "../event-index.ts";
+import { eventIndex, firstAfter, sinceRework } from "../../core/event-index.ts";
 import { workersOf } from "../workers.ts";
 
 export interface ContextSnapshotInput {
@@ -151,7 +151,10 @@ const copyOf = ({ source, ...rest }: ContextAssumption): ContextAssumption =>
  * qualifying `context-snapshot` evidence (valid data with at least one sourced assumption,
  * recorded by `human` or a registered role that did not work on the item, `workersOf`), with
  * `stale` the cited source paths a later `repo.changed` event listed (exact match, in event order)
- * and `unverified` the claims with no source; `undefined` when there is none. The answer is a
+ * and `unverified` the claims with no source; `undefined` when there is none. The `required`
+ * claims of every other valid fresh snapshot (earlier or later, whoever recorded it) carry (spec 28, #49): reported
+ * `required: true` when the latest has the claim, appended as `{ claim, required: true }` (no
+ * source, so unverified) when it lacks it; claims compare by exact text. The answer is a
  * copy. Each evidence entry is located at its own `item.evidence` event, matched from the end as
  * `freshEvidence` does; an entry with no event counts as older than every event.
  */
@@ -163,13 +166,37 @@ export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefCo
   const after = sinceRework(index, item.id, at);
   const fresh = after === undefined ? all.length : Math.min(after, all.length);
   let workers: string[] | undefined;
+  // the data of entry k when it is a qualifying snapshot; one that does not qualify is ignored, so
+  // it cannot supersede one that does (G2-1)
+  const qualifying = (k: number): ContextSnapshotData | undefined => {
+    const e = all[k]!;
+    if (e.kind !== "context-snapshot" || snapshotIssue(e.data) !== undefined) return undefined;
+    const data = e.data as unknown as ContextSnapshotData;
+    return !sourced(data) || recorderIssue(state, e.by, (workers ??= workersOf(state, item)))
+      ? undefined
+      : data;
+  };
   for (let k = all.length - 1; k >= all.length - fresh; k--) {
     const e = all[k]!;
-    if (e.kind !== "context-snapshot" || snapshotIssue(e.data) !== undefined) continue;
-    const data = e.data as unknown as ContextSnapshotData;
-    // a snapshot that does not qualify is ignored, so it cannot supersede one that does (G2-1)
-    if (!sourced(data) || recorderIssue(state, e.by, (workers ??= workersOf(state, item))))
-      continue;
+    const data = qualifying(k);
+    if (!data) continue;
+    // the required claims of every other valid fresh snapshot (earlier or later) carry, whoever recorded
+    // it: independence decides who may verify a claim, not which claims are required (spec 28,
+    // #49, gate G1-3)
+    const carried = new Set<string>();
+    for (let j = all.length - 1; j >= all.length - fresh; j--) {
+      const d = all[j]!;
+      if (j === k) continue;
+      if (d.kind === "context-snapshot" && snapshotIssue(d.data) === undefined)
+        for (const a of (d.data as unknown as ContextSnapshotData).assumptions)
+          if (a.required) carried.add(a.claim);
+    }
+    const assumptions = data.assumptions.map((a) =>
+      carried.has(a.claim) ? { ...copyOf(a), required: true } : copyOf(a),
+    );
+    for (const claim of carried)
+      if (!data.assumptions.some((a) => a.claim === claim))
+        assumptions.push({ claim, required: true });
     // each cited path's first repo.changed after the snapshot's own event, in event order
     const pos = at[k + at.length - all.length] ?? -1;
     const hits: [number, number, string][] = [];
@@ -183,11 +210,11 @@ export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefCo
     return {
       revision: data.revision,
       // copies: a caller (a brief, a host) changing the answer must not change the state (G2-9)
-      assumptions: data.assumptions.map(copyOf),
+      assumptions,
       snapshot: e.ref,
       by: e.by,
       stale: hits.map((h) => h[2]),
-      unverified: data.assumptions.filter((a) => !a.source).map((a) => a.claim),
+      unverified: assumptions.filter((a) => !a.source).map((a) => a.claim),
     };
   }
   return undefined;

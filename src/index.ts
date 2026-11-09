@@ -1,4 +1,4 @@
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
 export * from "./core/types.ts";
 export { WorkflowError, fail } from "./core/errors.ts";
 export { createState, appendEvent, lastEvent, nowOf } from "./core/state.ts";
@@ -14,7 +14,8 @@ export { raiseBlocker, clearBlocker } from "./core/items/blockers.ts";
 export type { ItemPatch } from "./core/types.ts";
 export { applyAgreement, retireAgreement } from "./core/agreements.ts";
 export { evaluatePolicies, assertPolicies } from "./core/policies.ts";
-export { checkGate, authorOf, lastDispatchBefore, raisePending, decide } from "./core/gates.ts";
+export { checkGate, raisePending, decide } from "./core/gates.ts";
+export { authorOf, lastDispatchBefore } from "./core/authors.ts";
 export type { GateResult } from "./core/gates.ts";
 export { ZERO_SPENT, addSpent, remaining, isExhausted, estimateTokens } from "./core/budget.ts";
 export type { EstimateMode } from "./core/budget.ts";

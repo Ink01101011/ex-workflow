@@ -1,4 +1,4 @@
-import { authorOf } from "./gates.ts";
+import { authorOf } from "./authors.ts";
 import { approverIds } from "./roles/lookup.ts";
 import { separationLost } from "./roles/guards.ts";
 import type { Action, Handoff, Methodology, MethodologyName, Rule, Violation } from "./types.ts";

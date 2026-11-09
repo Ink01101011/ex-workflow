@@ -28,6 +28,7 @@ import {
   roleSchema,
 } from "../schema/index.ts";
 import { lastEvent } from "../core/state.ts";
+import { withGroundingHooks } from "../interface/policies.ts";
 import { methodologyFactory, registeredMethodologies } from "../registry.ts";
 import type {
   Accounting,
@@ -107,7 +108,8 @@ function methodologyOf(state: WorkflowState): Methodology {
       `methodology "${state.methodology}" is not available in this build`,
       `available: ${registeredMethodologies().join(", ")}`,
     );
-  return f();
+  // the reserved context-grounded policy is judged by the SDK's snapshots here too (spec 28, #47)
+  return withGroundingHooks(f());
 }
 
 function num(flags: Record<string, string>, key: string): number {

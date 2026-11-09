@@ -1,4 +1,4 @@
-import { authorOf } from "../../core/gates.ts";
+import { authorsOf } from "../../core/authors.ts";
 import { approverIds, rolesWith } from "../../core/roles/lookup.ts";
 import type { Action, NewItem, Phase, Rule, Violation, WorkflowState } from "../../core/types.ts";
 import { configOf } from "./config.ts";
@@ -383,10 +383,12 @@ export function waterfallRules(): Rule[] {
         const p = id === undefined ? undefined : phaseById(s, id);
         if (!p) return [];
         const mine = itemsInPhase(s, p.id)
-          .filter((i) => authorOf(s, i) === a.by)
+          .filter((i) => authorsOf(s, i).includes(a.by))
           .map((i) => i.id);
         if (mine.length === 0) return [];
-        const others = approverIds(s, p.gate.id, "approve-gate", a.by);
+        const others = approverIds(s, p.gate.id, "approve-gate").filter(
+          (r) => !itemsInPhase(s, p.id).some((i) => authorsOf(s, i).includes(r)),
+        );
         return [
           v(
             "approver-not-author",

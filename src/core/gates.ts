@@ -4,13 +4,13 @@ import { advanceItem, clearRole, moveItem } from "./items/move.ts";
 import { freshEvidence } from "./items/evidence.ts";
 import { getItem } from "./items/record.ts";
 import { raiseBlocker } from "./items/blockers.ts";
+import { authorsOf } from "./authors.ts";
 import { approverIds } from "./roles/lookup.ts";
 import { appendEvent, nowOf } from "./state.ts";
 import type {
   Gate,
   Methodology,
   PendingHuman,
-  Transition,
   Violation,
   WorkItem,
   WorkflowState,
@@ -20,40 +20,6 @@ export type GateResult =
   | { outcome: "pass" }
   | { outcome: "human" }
   | { outcome: "fail"; violations: Violation[] };
-
-/** Last in_progress dispatch made from a stage that comes STRICTLY BEFORE the item's current stage in `state.stages` order (unknown stage ids count as not-before). */
-export function lastDispatchBefore(
-  state: WorkflowState<string>,
-  item: WorkItem,
-): Transition | undefined;
-export function lastDispatchBefore(state: WorkflowState, item: WorkItem): Transition | undefined;
-export function lastDispatchBefore(
-  state: WorkflowState<string>,
-  item: WorkItem,
-): Transition | undefined {
-  const order = new Map(state.stages.map((s, i) => [s.id, i] as const));
-  const here = order.get(item.stage);
-  if (here === undefined) return undefined;
-  for (let i = item.transitions.length - 1; i >= 0; i--) {
-    const t = item.transitions[i]!;
-    const from = order.get(t.from.stage);
-    if (t.to.status === "in_progress" && from !== undefined && from < here) return t;
-  }
-  return undefined;
-}
-
-/** Role that did the work the gate guards: the last dispatch made from a stage strictly before the current one (so a reviewer dispatched into the gated stage is not its author); else the last dispatch of any stage; undefined if never dispatched. */
-export function authorOf(state: WorkflowState<string>, item: WorkItem): string | undefined;
-export function authorOf(state: WorkflowState, item: WorkItem): string | undefined;
-export function authorOf(state: WorkflowState<string>, item: WorkItem): string | undefined {
-  const before = lastDispatchBefore(state, item);
-  if (before) return before.by;
-  for (let i = item.transitions.length - 1; i >= 0; i--) {
-    const t = item.transitions[i]!;
-    if (t.to.status === "in_progress") return t.by;
-  }
-  return undefined;
-}
 
 export function checkGate(
   state: WorkflowState<string>,
@@ -84,6 +50,7 @@ export function checkGate(
   if (violations.length) return { outcome: "fail", violations };
 
   let needsHuman = false;
+  let authors: string[] | undefined;
   for (const req of gate.requires) {
     if (req === "human") {
       if (by !== "human") needsHuman = true;
@@ -100,15 +67,18 @@ export function checkGate(
       });
       continue;
     }
-    const author = authorOf(state, item);
-    if (author !== undefined && author === by) {
-      const others = approverIds(state, gate.id, req.capability, by);
+    if ((authors ??= authorsOf(state, item)).includes(by)) {
+      const others = approverIds(state, gate.id, req.capability).filter(
+        (r) => !authors!.includes(r),
+      );
       violations.push({
         rule: "conflict-of-interest",
         severity: "error",
         item: item.id,
         message: `role "${by}" did the work on "${item.id}" and may not approve it`,
-        fix: `approve as a different role: ${others.join(", ") || "(register another approver)"}`,
+        fix: others.length
+          ? `approve as a role that did none of the work: ${others.join(", ")}`
+          : `register a role that did none of the work with capability "${req.capability}" and canApprove "${gate.id}"`,
       });
     }
   }
@@ -217,6 +187,7 @@ export function decide<N extends string>(
         `"${by}" may not decide gate "${gate.id}" on "${item0.id}"`,
         `decide as one of: human${gate.requires
           .flatMap((q) => (q === "human" ? [] : approverIds(state, gate.id, q.capability)))
+          .filter((r) => !authorsOf(state, item0).includes(r))
           .map((r) => `, ${r}`)
           .join("")}`,
         { items: [item0.id], rule: "gate" },

@@ -255,3 +255,39 @@ test("withContextGrounding options are validated once and copied", () => {
   const review = m.defaultStages(config).find((st) => st.id === "review")!;
   assert.equal(custom(review.entryPolicy), 0);
 });
+
+test("withContextGrounding refuses a stage whose policies a built-in ceremony checks (spec 28)", async () => {
+  const { scrum } = await import("../methodologies/scrum/index.ts");
+  const { experimentation } = await import("../methodologies/experimentation/index.ts");
+  const refused = (fn: () => unknown, re: RegExp) =>
+    assert.throws(
+      fn,
+      (e) => e instanceof WorkflowError && e.code === "invalid-input" && re.test(e.message),
+    );
+  const k = kanban();
+  refused(
+    () =>
+      withContextGrounding(k, { entry: [], exit: ["options"] }).defaultStages(k.validateConfig({})),
+    /kanban ceremony .* out of "options"/,
+  );
+  const sc = scrum();
+  const cfg = sc.validateConfig({
+    sprintBudget: { tokens: 1 },
+    productGoal: "g",
+    definitionOfDone: [],
+  });
+  refused(
+    () => withContextGrounding(sc, { entry: [], exit: ["backlog"] }).defaultStages(cfg),
+    /scrum ceremony/,
+  );
+  const ex = experimentation();
+  const ecfg = ex.validateConfig({ objective: "o" });
+  refused(
+    () => withContextGrounding(ex, { entry: ["building"] }).defaultStages(ecfg),
+    /experimentation ceremony .* into "building"/,
+  );
+  // a stage no ceremony checks is fine
+  assert.ok(
+    withContextGrounding(k, { entry: ["dev"] }).defaultStages(k.validateConfig({})).length > 0,
+  );
+});

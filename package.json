@@ -1,6 +1,6 @@
 {
   "name": "ex-workflow",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Methodology engine for AI teams: Scrum, Kanban, Waterfall, Investigation and Experimentation as data-driven state machines on top of ex-flow",
   "license": "MIT",
   "type": "module",

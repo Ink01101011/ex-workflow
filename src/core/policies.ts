@@ -2,6 +2,9 @@ import { fail } from "./errors.ts";
 import { freshEvidence } from "./items/evidence.ts";
 import type { Methodology, Policy, Violation, WorkItem, WorkflowState } from "./types.ts";
 
+/** The custom policy id reserved for the context-grounded policy (spec 28, #47). */
+const GROUNDED = "context-grounded";
+
 /** The part of a methodology policy evaluation reads: its `customPolicy` hook (spec 27, #36). */
 type PolicyHook<N extends string> = Pick<Methodology<unknown, N>, "customPolicy">;
 
@@ -78,6 +81,13 @@ export function evaluatePolicies(
         // a methodology's hook answers when it returns an array; otherwise the 1.2 evidence check
         const own = methodology?.customPolicy?.(state, item, p);
         if (Array.isArray(own)) out.push(...own);
+        // the reserved id fails closed: its evidence is attestable by a worker (spec 28, #47)
+        else if (p.id === GROUNDED)
+          v(
+            `policy:custom:${GROUNDED}`,
+            `item "${item.id}" cannot be checked for "${GROUNDED}" without the context-grounding hook (evidence "policy:${GROUNDED}" does not satisfy it)`,
+            `plan and complete through a methodology wrapped with withContextGrounding (ex-workflow/policies) and record a snapshot with recordContextSnapshot; a ceremony that checks stage policies does not consult the hook`,
+          );
         else if (!fresh.some((e) => e.kind === `policy:${p.id}`))
           v(
             `policy:custom:${p.id}`,

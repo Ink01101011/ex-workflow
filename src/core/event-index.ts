@@ -1,9 +1,10 @@
-// A per-log index of the events the 1.3 policies read (design spec section 27, F1 G3-2..G3-5):
+// A per-log index of the events the 1.3 policies and the 1.4 conflict-of-interest check read (design
+// spec section 27, F1 G3-2..G3-5; section 28, #48; moved from src/common so core can use it):
 // built in one pass over `state.events` and cached per events array, so reading the context or the
 // workers of many items of one state costs one pass, not one per item. Pure and deterministic: the
 // cache only avoids recomputing what the same array gives; an array changed in place (its length or
 // its last event differs) is indexed again.
-import type { WorkflowState } from "../core/types.ts";
+import type { WorkflowState } from "./types.ts";
 
 export interface EventIndex {
   /** Item id -> positions of its `item.evidence` events, ascending. */
