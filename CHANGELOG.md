@@ -11,7 +11,7 @@ Owner follow-ups of 1.3.0: three independence holes closed, each failing closed 
 - Planner (#48): a review goes to a reviewer that did none of the work when one exists, else to the first reviewer (whom the gate then refuses until a non-author approver is registered). One item can no longer fail the whole `next`.
 - Context snapshots (#49): `contextOf` carries the `required` claims of every other valid fresh snapshot of the item (earlier or later), whoever recorded it. A carried claim the latest snapshot lacks is reported unverified, so `context-grounded` fails. Only an `item.rework` clears carried claims.
 - Internal: `authorOf` and `lastDispatchBefore` move from `src/core/gates.ts` to `src/core/authors.ts` (still exported from the root entry), and the event index moves from `src/common` to `src/core`.
-- Size: owner approved 2026-11-09 (spec 28), measured. `core+scrum` 61884 → 63939 B; every `core+<methodology>` and `core+registry` grows about +2055 B. `core+policies` 56597 → 58711 B, `dist/index.mjs` 1364 → 1398 B, `dist/{waterfall,registry}/index.mjs` +30 B each. `dist/policies/index.mjs` ratchets down 19820 → 9115 B. The version bump changed no size.
+- Size: owner approved 2026-11-09 (spec 28), measured. `core+scrum` 61884 → 63954 B; every `core+<methodology>` and `core+registry` grows about +2070 B. `core+policies` 56597 → 58726 B, `dist/index.mjs` 1364 → 1398 B, `dist/{waterfall,registry}/index.mjs` +30 B each. `dist/policies/index.mjs` ratchets down 19820 → 9115 B. The version bump changed no size.
 
 **Behaviour changes and migration.**
 
