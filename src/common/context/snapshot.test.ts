@@ -377,3 +377,23 @@ test("#49: a superseding snapshot keeps the required claims of the ones it super
   const fresh = by(s, [tax], "ctx/after-rework");
   assert.deepEqual(contextOf(fresh, fresh.items["A"]!)!.unverified, []);
 });
+
+test("#49 (gate G1-3): a carried claim survives its recorder becoming a worker; only rework clears it", () => {
+  // a scout ("worker", not yet working on A) records the cart claim, then a human snapshot omits it
+  let s = recordContextSnapshot(base(), m, {
+    ...good,
+    assumptions: [cart],
+    ref: "ctx/scout",
+    by: "worker",
+  }).state;
+  s = recordContextSnapshot(s, m, {
+    ...good,
+    assumptions: [tax],
+    ref: "ctx/h2",
+    by: "human",
+  }).state;
+  assert.deepEqual(contextOf(s, s.items["A"]!)!.unverified, [cart.claim]);
+  // the scout ("worker") is dispatched: its snapshot stops qualifying, its required claim stays
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  assert.deepEqual(contextOf(s, s.items["A"]!)!.unverified, [cart.claim]);
+});

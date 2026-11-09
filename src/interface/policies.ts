@@ -98,6 +98,20 @@ export function withContextGrounding<C, N extends string>(
             `withContextGrounding: unknown stage "${id}"`,
             `stages: ${stages.map((st) => st.id).join(", ")}`,
           );
+      // a built-in ceremony checks these policies without the hook, so the policy could never pass
+      // there (spec 28, G2 finding 2): refuse them here, once
+      const checked = ceremonyChecked(methodology.name, stages);
+      for (const [key, ids] of [
+        ["entry", entry],
+        ["exit", exit],
+      ] as const)
+        for (const id of ids)
+          if (checked[key].includes(id))
+            fail(
+              "invalid-input",
+              `withContextGrounding: the ${methodology.name} ceremony that moves items ${key === "entry" ? "into" : "out of"} "${id}" checks its ${key} policies without the grounding hook`,
+              `ground a later stage instead, e.g. ${key} ["${stages.find((st) => !checked.entry.includes(st.id) && !checked.exit.includes(st.id) && st.id !== stages[0]!.id)?.id ?? "dev"}"]`,
+            );
       return stages.map((st) => ({
         ...st,
         entryPolicy: add(st.entryPolicy, entry.includes(st.id)),
@@ -105,6 +119,17 @@ export function withContextGrounding<C, N extends string>(
       }));
     },
   };
+}
+
+/** Stage policies a built-in methodology's ceremonies check with `assertPolicies` (spec 28). */
+function ceremonyChecked(
+  name: string,
+  stages: readonly { id: string }[],
+): { entry: string[]; exit: string[] } {
+  if (name === "kanban") return { entry: [], exit: stages[0] ? [stages[0].id] : [] };
+  if (name === "scrum") return { entry: [], exit: ["backlog"] };
+  if (name === "experimentation") return { entry: ["building"], exit: [] };
+  return { entry: [], exit: [] };
 }
 
 /**

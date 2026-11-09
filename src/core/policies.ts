@@ -86,7 +86,7 @@ export function evaluatePolicies(
           v(
             `policy:custom:${GROUNDED}`,
             `item "${item.id}" cannot be checked for "${GROUNDED}" without the context-grounding hook (evidence "policy:${GROUNDED}" does not satisfy it)`,
-            `wrap the methodology with withContextGrounding (ex-workflow/policies) and record a snapshot with recordContextSnapshot`,
+            `plan and complete through a methodology wrapped with withContextGrounding (ex-workflow/policies) and record a snapshot with recordContextSnapshot; a ceremony that checks stage policies does not consult the hook`,
           );
         else if (!fresh.some((e) => e.kind === `policy:${p.id}`))
           v(
