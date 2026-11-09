@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.4.0 (2026-11-09)
+
+Owner follow-ups of 1.3.0: three independence holes closed, each failing closed (a check that passed in 1.3 may refuse in 1.4, never the reverse): a worker self-attesting `context-grounded` (#47), a gate approved by an earlier author (#48), and a later snapshot dropping a required claim (#49). The decisions, the reproductions and the release-gate rows are in the design spec, section 28. The owner chose a minor release for these tightenings; the migration for each is below.
+
+- Reserved policy `context-grounded` (#47): `evaluatePolicies` no longer accepts evidence `policy:context-grounded` for it. When no `customPolicy` hook answers it, the policy fails `policy:custom:context-grounded`, and the fix names `withContextGrounding` and `recordContextSnapshot`. A worker can therefore no longer attest the policy through `handoff.produced`. Every other custom policy keeps the 1.2 evidence check.
+- CLI and context grounding (#47): every `exwf` command runs the registry methodology with the grounding hooks added (internal `withGroundingHooks`, which `withContextGrounding` now builds on). `exwf next`, `complete` and `brief` judge a `context-grounded` stage by the snapshots an SDK host recorded. No command or flag changes.
+- Ceremonies (#47, gate): `withContextGrounding` refuses, with `invalid-input`, a stage whose policies a built-in ceremony checks without the hook: the Kanban first column's exit (`replenishment`), the Scrum `backlog` exit (Sprint Planning) and the Experimentation `building` entry. A policy there could never pass.
+- Conflict of interest (#48): `checkGate`, `decide` and the Waterfall rule `approver-not-author` refuse an approval by any author of the item, not only the last one. The authors are every role dispatched from a stage before the gated one since the last rework, plus earlier work the rework did not send back, plus `authorOf`. A dispatch from a stage not in `state.stages` counts. A reviewer dispatched into the gated stage is still not an author. The fix names only non-authors, then `human`.
+- Planner (#48): a review goes to a reviewer that did none of the work when one exists, else to the first reviewer (whom the gate then refuses). One item can no longer fail the whole `next`.
+- Context snapshots (#49): `contextOf` carries forward the `required` claims of every earlier valid fresh snapshot, whoever recorded it. A carried claim the latest snapshot lacks is reported unverified, so `context-grounded` fails. Only an `item.rework` clears carried claims.
+- Internal: `authorOf` and `lastDispatchBefore` move from `src/core/gates.ts` to `src/core/authors.ts` (still exported from the root entry), and the event index moves from `src/common` to `src/core`.
+- Size: owner approved 2026-11-09 (spec 28), measured. `core+scrum` 61884 → 63854 B; every `core+<methodology>` and `core+registry` grows about +1970 B. `core+policies` 56597 → 58612 B, `dist/index.mjs` 1364 → 1398 B, `dist/{waterfall,registry}/index.mjs` +30 B each. `dist/policies/index.mjs` ratchets down 19820 → 9115 B. The version bump changed no size.
+
+**Behaviour changes and migration.**
+
+- **`context-grounded`:** without the hook, an item that passed on `policy:context-grounded` evidence is now skipped by `next` (reason `entry-policy`) and refused by `complete` (`policy-unmet`). Plan and complete through `withContextGrounding(m, { entry })` (or `exwf`), and record a qualifying snapshot with `recordContextSnapshot` (by `human` or a registered role that did not work on the item). If one of your own custom policies is named `context-grounded`, rename it.
+- **Conflict of interest:** a role that worked on an item in any earlier stage (for example the developer or the tester before a `code-review` gate) may no longer approve its gate. Register another role with the gate's capability and `canApprove`, or decide as `human`.
+- **Snapshots:** a later snapshot that drops a required claim no longer grounds the item. Repeat the claim with a source, or rework the item.
+
+Compatibility: `state.json` unchanged (no new field), and a `.workflow/state.json` written by any earlier release loads unchanged (`test/compat.test.ts` replays the fixtures through 1.3.0). Schema documents: unchanged (ten). Event kinds: unchanged (71). Exports: unchanged (`test/api-surface.json` has no diff; `authorOf` and `lastDispatchBefore` keep their root export). CLI: unchanged (`USAGE`, commands, flags). Error codes: unchanged. Runtime dependencies: unchanged (`ex-flow`, `exsorted`). The deliberate behaviour changes are the three above; there is none for a run where no author approves its own item, no `context-grounded` policy rests on evidence, and snapshots repeat their required claims. `VERSION` is `"1.4.0"`.
+
 ## 1.3.0 (2026-11-06)
 
 Composable policies: three opt-in policies a host adds to any methodology by wrapping it, risk-adaptive gates (#35), context-grounded entry (#36) and run comparison (#34), shipped from the new entry `ex-workflow/policies`; core gains only optional hooks that do nothing when unused. The decisions are in the design spec, section 27. Every change is additive.
