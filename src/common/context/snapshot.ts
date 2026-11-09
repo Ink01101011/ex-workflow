@@ -14,7 +14,7 @@ import type {
   WorkItem,
   WorkflowState,
 } from "../../core/types.ts";
-import { eventIndex, firstAfter, sinceRework } from "../event-index.ts";
+import { eventIndex, firstAfter, sinceRework } from "../../core/event-index.ts";
 import { workersOf } from "../workers.ts";
 
 export interface ContextSnapshotInput {

@@ -4,7 +4,8 @@ import { appendEvent, createState } from "./state.ts";
 import { addEvidence } from "./items/evidence.ts";
 import { addItem, getItem } from "./items/record.ts";
 import { moveItem } from "./items/move.ts";
-import { authorOf, checkGate, decide, raisePending } from "./gates.ts";
+import { authorOf } from "./authors.ts";
+import { checkGate, decide, raisePending } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
 import type { Gate, Methodology, PendingHuman, Role, Stage, WorkflowState } from "./types.ts";
 
@@ -255,4 +256,66 @@ test("decide uses the gate.resolved recorded with the pending, not a later one (
   t = addEvidence(t, "A", { kind: "note", ref: "n", by: "dev" }, T0);
   t = raisePending(t, { kind: "gate", item: "A", gate: "qa-gate", question: "?" }, T0);
   assert.equal(getItem(decide(t, "p1", "approve", "qa", "", T0), "A").status, "done");
+});
+
+// spec 28, #48: conflict of interest counts every author since the last rework, not the last one
+const stages3: Stage[] = [
+  { id: "doing", name: "Doing", entryPolicy: [], exitPolicy: [] },
+  { id: "test", name: "Test", entryPolicy: [], exitPolicy: [] },
+  { id: "verify", name: "Verify", entryPolicy: [], exitPolicy: [], gate },
+  { id: "done", name: "Done", entryPolicy: [], exitPolicy: [] },
+];
+const roles3 = [...roles, r("tester", ["approve-gate"], ["qa-gate"])];
+const threeStage = () => {
+  let s = createState({
+    methodology: "waterfall",
+    config: {},
+    stages: stages3,
+    roles: roles3,
+    now: T0,
+  });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  s = moveItem(s, "A", { stage: "doing", status: "in_progress" }, "devqa", T0);
+  s = moveItem(s, "A", { stage: "test", status: "todo" }, "devqa", T0);
+  s = moveItem(s, "A", { stage: "test", status: "in_progress" }, "tester", T0);
+  s = moveItem(s, "A", { stage: "verify", status: "review" }, "tester", T0);
+  return addEvidence(s, "A", { kind: "test-report", ref: "r1", by: "tester" }, T0);
+};
+const coi = (res: ReturnType<typeof checkGate>) =>
+  res.outcome === "fail" && res.violations.some((v) => v.rule === "conflict-of-interest");
+
+test("#48: an earlier-stage worker that is not the last author may not approve the gate", () => {
+  const s = threeStage();
+  assert.equal(authorOf(s, getItem(s, "A")), "tester");
+  assert.ok(coi(checkGate(s, getItem(s, "A"), gate, "devqa")));
+  assert.ok(coi(checkGate(s, getItem(s, "A"), gate, "tester")));
+  assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "qa"), { outcome: "pass" });
+});
+
+test("#48: a reviewer dispatched into the gated stage is still not an author", () => {
+  let s = threeStage();
+  s = moveItem(s, "A", { stage: "verify", status: "in_progress" }, "qa", T0);
+  assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "qa"), { outcome: "pass" });
+});
+
+test("#48: dispatches before the item's last rework are not authors", () => {
+  const T1 = "2026-10-19T01:00:00.000Z";
+  let s = threeStage();
+  s = moveItem(s, "A", { stage: "doing", status: "todo" }, "qa", T1);
+  s = appendEvent(s, "item.rework", "qa", { id: "A", by: "qa", notes: "n" }, T1);
+  s = moveItem(s, "A", { stage: "doing", status: "in_progress" }, "dev", T1);
+  s = moveItem(s, "A", { stage: "verify", status: "review" }, "dev", T1);
+  s = addEvidence(s, "A", { kind: "test-report", ref: "r2", by: "dev" }, T1);
+  assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "devqa"), { outcome: "pass" });
+  assert.deepEqual(checkGate(s, getItem(s, "A"), gate, "tester"), { outcome: "pass" });
+});
+
+test("#48: decide refuses a pending approval by an earlier-stage worker", () => {
+  let s = threeStage();
+  s = raisePending(s, { kind: "gate", item: "A", gate: "qa-gate", question: "approve?" }, T0);
+  assert.throws(
+    () => decide(s, "p1", "approve", "devqa", ""),
+    (e: unknown) => e instanceof WorkflowError && e.code === "gate-unmet",
+  );
+  assert.equal(getItem(decide(s, "p1", "approve", "qa", ""), "A").stage, "done");
 });

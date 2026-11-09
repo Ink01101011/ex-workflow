@@ -5,7 +5,8 @@ import { addItem, getItem } from "./items/record.ts";
 import { clearBlocker } from "./items/blockers.ts";
 import { next, openQuestions, synthesizeBrief } from "./brief.ts";
 import { complete } from "./complete.ts";
-import { authorOf, decide } from "./gates.ts";
+import { authorOf } from "./authors.ts";
+import { decide } from "./gates.ts";
 import { WorkflowError } from "./errors.ts";
 import type {
   Accounting,

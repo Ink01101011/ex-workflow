@@ -1,7 +1,7 @@
 import { ExFlow, ExFlowRuntimeError, type ExFlowOptions, type ExNode } from "ex-flow";
 import { estimateTokens, remaining } from "./budget.ts";
 import { fail } from "./errors.ts";
-import { authorOf } from "./gates.ts";
+import { authorsOf } from "./authors.ts";
 import { moveItem } from "./items/move.ts";
 import { stageOf } from "./items/stage.ts";
 import { evaluatePolicies } from "./policies.ts";
@@ -63,9 +63,10 @@ export function assignRole(
     return r;
   }
   if (item.status === "review") {
-    const author = authorOf(state, item);
+    // a reviewer that did none of the work the gate guards (spec 28, #48)
+    const authors = authorsOf(state, item);
     const reviewers = rolesWith(state, "review");
-    const other = reviewers.find((r) => r.id !== author);
+    const other = reviewers.find((r) => !authors.includes(r.id));
     const r = other ?? (reviewers.length === 1 ? reviewers[0] : undefined);
     if (!r)
       fail(

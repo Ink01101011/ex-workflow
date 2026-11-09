@@ -1,9 +1,9 @@
 // Who worked on an item (design spec section 27, F1 G1-1): the independence checks of the
 // risk-adaptive gate and the context-grounded policy compare an assessor or a snapshot's recorder
 // against every one of them, not only the last author.
-import { authorOf } from "../core/gates.ts";
+import { authorOf } from "../core/authors.ts";
 import type { WorkItem, WorkflowState } from "../core/types.ts";
-import { eventIndex, sinceRework } from "./event-index.ts";
+import { eventIndex, sinceRework } from "../core/event-index.ts";
 
 /**
  * The roles that worked on `item`: the `by` of each dispatch (a transition into `in_progress`)

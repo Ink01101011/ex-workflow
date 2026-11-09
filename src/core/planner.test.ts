@@ -563,3 +563,18 @@ test("planner subtracts methodology-reserved tokens before dispatch", () => {
   });
   assert.equal(plan(s, ordinary).dispatched.length, 2);
 });
+
+test("#48: assignRole gives a review to a reviewer that did none of the earlier-stage work", () => {
+  const three: Stage[] = [
+    { id: "dev", name: "Dev", entryPolicy: [], exitPolicy: [] },
+    { id: "test", name: "Test", entryPolicy: [], exitPolicy: [] },
+    { id: "review", name: "Review", entryPolicy: [], exitPolicy: [] },
+  ];
+  const roles = [r("devrev", ["deliver", "review"]), r("qarev", ["review"]), r("rev", ["review"])];
+  let s = createState({ methodology: "kanban", config: {}, stages: three, roles, now: T0 });
+  s = addItem(s, { id: "A", title: "a" }, "pm", T0);
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "devrev", T0);
+  s = moveItem(s, "A", { stage: "test", status: "in_progress" }, "qarev", T0);
+  s = moveItem(s, "A", { stage: "review", status: "review" }, "qarev", T0);
+  assert.equal(assignRole(s, getItem(s, "A")).id, "rev");
+});

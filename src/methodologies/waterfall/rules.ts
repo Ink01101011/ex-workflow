@@ -1,4 +1,4 @@
-import { authorOf } from "../../core/gates.ts";
+import { authorOf } from "../../core/authors.ts";
 import { approverIds, rolesWith } from "../../core/roles/lookup.ts";
 import type { Action, NewItem, Phase, Rule, Violation, WorkflowState } from "../../core/types.ts";
 import { configOf } from "./config.ts";
