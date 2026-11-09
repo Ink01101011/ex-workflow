@@ -65,8 +65,9 @@ test("authorsOf fails closed on unlisted stages: every dispatch counts", () => {
 });
 
 test("authorsOf (gate G3-4): an unlisted current stage counts every pre-rework dispatch", () => {
-  let s = appendEvent(base(), "item.rework", "rev", { id: "A", by: "rev", notes: "n" }, T0);
-  s = moveItem(s, "A", { stage: "test", status: "todo" }, "rev", T0);
+  // complete() order: the rework move first, then the item.rework event
+  let s = moveItem(base(), "A", { stage: "test", status: "todo" }, "rev", T0);
+  s = appendEvent(s, "item.rework", "rev", { id: "A", by: "rev", notes: "n" }, T0);
   s = moveItem(s, "A", { stage: "test", status: "in_progress" }, "qa2", T0);
   const odd = { ...getItem(s, "A"), stage: "nowhere" };
   assert.deepEqual(authorsOf(s, odd), ["dev", "qa", "qa2"]);
