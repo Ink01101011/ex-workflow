@@ -345,3 +345,35 @@ test("property: staleness follows event order and is deterministic (300 seeded r
     assert.deepEqual(contextOf(structuredClone(s), s.items["A"]!), got, `run ${run} deterministic`);
   }
 });
+
+test("#49: a superseding snapshot keeps the required claims of the ones it supersedes", () => {
+  // an independent snapshot requires the cart claim and goes stale
+  let s = change(snap(base(), "A", [cart], "ctx/scout"), ["src/cart.ts"]);
+  const by = (t: WorkflowState, assumptions: ContextAssumption[], ref: string) =>
+    recordContextSnapshot(t, m, { ...good, assumptions, ref, by: "worker" }).state;
+  // the future worker drops it: the claim is carried as required and unverified
+  const dropped = by(s, [tax], "ctx/weaker");
+  const ctx = contextOf(dropped, dropped.items["A"]!)!;
+  assert.equal(ctx.snapshot, "ctx/weaker");
+  assert.deepEqual(ctx.assumptions, [tax, { claim: cart.claim, required: true }]);
+  assert.deepEqual(ctx.unverified, [cart.claim]);
+  // keeping the claim with a source, even without marking it required, reports it required
+  const kept = by(
+    s,
+    [{ ...cart, required: false, source: { path: "src/cart.ts", hash: "h2" } }],
+    "ctx/k",
+  );
+  assert.deepEqual(contextOf(kept, kept.items["A"]!)!.assumptions, [
+    { ...cart, source: { path: "src/cart.ts", hash: "h2" } },
+  ]);
+  assert.deepEqual(contextOf(kept, kept.items["A"]!)!.unverified, []);
+  // keeping it without a source leaves it unverified
+  const unsourced = by(s, [tax, { claim: cart.claim }], "ctx/u");
+  assert.deepEqual(contextOf(unsourced, unsourced.items["A"]!)!.unverified, [cart.claim]);
+  // carried through a chain of snapshots; only a rework clears it
+  const chain = by(by(s, [cart, tax], "ctx/2"), [tax], "ctx/3");
+  assert.deepEqual(contextOf(chain, chain.items["A"]!)!.unverified, [cart.claim]);
+  s = appendEvent(s, "item.rework", "human", { id: "A", by: "human", notes: "n" }, T0);
+  const fresh = by(s, [tax], "ctx/after-rework");
+  assert.deepEqual(contextOf(fresh, fresh.items["A"]!)!.unverified, []);
+});

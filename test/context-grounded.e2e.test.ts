@@ -222,3 +222,20 @@ test("context grounding composes with the risk gate", () => {
     ["A"],
   );
 });
+
+test("#49: a future worker's weaker snapshot cannot supersede a stale independent one", () => {
+  let s = board();
+  s = snapshot(s, "A", [{ claim: "totals are cents", required: true, source: src("src/a.ts") }]);
+  s = recordRepoChange(s, m, {
+    revision: "r2",
+    paths: ["src/a.ts"],
+    by: "human",
+    now: tick(),
+  }).state;
+  // "worker" has not worked on A yet, so its snapshot qualifies, but it drops the required claim
+  s = snapshot(s, "A", [{ claim: "tax once", source: src("src/tax.ts") }], "worker");
+  const r = next(s, m, { now: tick() });
+  assert.ok(!r.briefs.some((b) => b.item.id === "A"));
+  assert.ok(skippedIds(r).includes("A"));
+  assert.match(r.skipped.find((x) => x.id === "A")!.detail!, /unverified required/);
+});
