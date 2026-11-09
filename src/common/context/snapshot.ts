@@ -152,7 +152,7 @@ const copyOf = ({ source, ...rest }: ContextAssumption): ContextAssumption =>
  * recorded by `human` or a registered role that did not work on the item, `workersOf`), with
  * `stale` the cited source paths a later `repo.changed` event listed (exact match, in event order)
  * and `unverified` the claims with no source; `undefined` when there is none. The `required`
- * claims of every earlier valid fresh snapshot (whoever recorded it) carry forward (spec 28, #49): reported
+ * claims of every other valid fresh snapshot (earlier or later, whoever recorded it) carry (spec 28, #49): reported
  * `required: true` when the latest has the claim, appended as `{ claim, required: true }` (no
  * source, so unverified) when it lacks it; claims compare by exact text. The answer is a
  * copy. Each evidence entry is located at its own `item.evidence` event, matched from the end as
@@ -180,12 +180,13 @@ export function contextOf(state: WorkflowState<string>, item: WorkItem): BriefCo
     const e = all[k]!;
     const data = qualifying(k);
     if (!data) continue;
-    // the required claims of every earlier valid fresh snapshot carry forward, whoever recorded
+    // the required claims of every other valid fresh snapshot (earlier or later) carry, whoever recorded
     // it: independence decides who may verify a claim, not which claims are required (spec 28,
     // #49, gate G1-3)
     const carried = new Set<string>();
-    for (let j = k - 1; j >= all.length - fresh; j--) {
+    for (let j = all.length - 1; j >= all.length - fresh; j--) {
       const d = all[j]!;
+      if (j === k) continue;
       if (d.kind === "context-snapshot" && snapshotIssue(d.data) === undefined)
         for (const a of (d.data as unknown as ContextSnapshotData).assumptions)
           if (a.required) carried.add(a.claim);

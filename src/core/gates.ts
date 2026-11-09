@@ -76,7 +76,9 @@ export function checkGate(
         severity: "error",
         item: item.id,
         message: `role "${by}" did the work on "${item.id}" and may not approve it`,
-        fix: `approve as a role that did none of the work, or as human through decide: ${[...others, "human"].join(", ")}`,
+        fix: others.length
+          ? `approve as a role that did none of the work: ${others.join(", ")}`
+          : `register a role that did none of the work with capability "${req.capability}" and canApprove "${gate.id}"`,
       });
     }
   }

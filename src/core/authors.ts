@@ -63,7 +63,9 @@ export function authorsOf(state: WorkflowState<string>, item: WorkItem): string[
   // work before the rework that the rework did not send back is not redone: a pre-rework dispatch
   // from a stage before the earliest one the item reached since counts (spec 28, gate G1-2)
   let landing = pre.length ? rank(pre.at(-1)!.to.stage) : -Infinity;
-  for (const t of ts) landing = Math.min(landing, rank(t.from.stage), rank(t.to.stage));
+  // with the current stage unlisted, every pre-rework dispatch counts (fail closed, gate G3-4)
+  if (here !== undefined)
+    for (const t of ts) landing = Math.min(landing, rank(t.from.stage), rank(t.to.stage));
   const out = new Set<string>();
   const limit = here ?? Infinity;
   // a dispatch from a stage state.stages does not list counts (fail closed, gate G1-5)

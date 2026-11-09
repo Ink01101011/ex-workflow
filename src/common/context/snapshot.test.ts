@@ -397,3 +397,22 @@ test("#49 (gate G1-3): a carried claim survives its recorder becoming a worker; 
   s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "worker", T0);
   assert.deepEqual(contextOf(s, s.items["A"]!)!.unverified, [cart.claim]);
 });
+
+test("#49 (gate G3-1): a required claim of a later, no longer qualifying snapshot still carries", () => {
+  let s = recordContextSnapshot(base(), m, {
+    ...good,
+    assumptions: [tax],
+    ref: "ctx/h1",
+    by: "human",
+  }).state;
+  s = recordContextSnapshot(s, m, {
+    ...good,
+    assumptions: [cart, tax],
+    ref: "ctx/scout",
+    by: "worker",
+  }).state;
+  s = moveItem(s, "A", { stage: "dev", status: "in_progress" }, "worker", T0);
+  const ctx = contextOf(s, s.items["A"]!)!;
+  assert.equal(ctx.snapshot, "ctx/h1");
+  assert.deepEqual(ctx.unverified, [cart.claim]);
+});

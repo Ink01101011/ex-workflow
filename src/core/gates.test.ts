@@ -320,13 +320,13 @@ test("#48: decide refuses a pending approval by an earlier-stage worker", () => 
   assert.equal(getItem(decide(s, "p1", "approve", "qa", ""), "A").stage, "done");
 });
 
-test("#48: the conflict-of-interest fix names only non-authors, and human", () => {
+test("#48: the conflict-of-interest fix names only non-authors", () => {
   const s = threeStage();
   const res = checkGate(s, getItem(s, "A"), gate, "devqa");
   assert.equal(res.outcome, "fail");
   if (res.outcome === "fail") {
     const fix = res.violations.find((v) => v.rule === "conflict-of-interest")!.fix;
-    assert.match(fix, /qa, human/);
+    assert.match(fix, /: qa$/);
     assert.doesNotMatch(fix, /tester|devqa/);
   }
 });
